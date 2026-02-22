@@ -1,0 +1,273 @@
+# data/knowledge/metric_definitions.yaml
+# Metric definitions for Enterprise Search — formulas, dimensions, baselines, co-movements.
+# This file is the "feature store" for the diagnostic workflow.
+
+metrics:
+  dlctr:
+    full_name: "Discounted Long Click-Through Rate"
+    formula: "sum(long_clicks * log2_discount(rank)) / impressions"
+    description: >
+      Primary click quality metric. Measures whether users find and engage
+      with results. Discounted by position to weight higher-ranked clicks more.
+    components:
+      - click_through_rate
+      - long_click_rate
+      - position_discount
+    decomposition_dimensions:
+      # Enterprise-specific (check these first)
+      - tenant_tier        # standard, premium, enterprise
+      - ai_enablement      # ai_on, ai_off
+      - industry_vertical  # tech, healthcare, finance, retail, other
+      - connector_type     # confluence, slack, gdrive, jira, sharepoint, other
+      # Standard dimensions
+      - query_type         # navigational, informational, action
+      - position_bucket    # 1, 2, 3-5, 6-10, 10+
+    normal_range:
+      mean: 0.280
+      weekly_std: 0.015
+    baseline_by_segment:
+      ai_on:
+        mean: 0.220
+        notes: "Lower DLCTR expected — users get AI answers without clicking. This is GOOD."
+      ai_off:
+        mean: 0.310
+      enterprise_tier:
+        mean: 0.295
+        notes: "More connectors, richer index, better results"
+      premium_tier:
+        mean: 0.280
+      standard_tier:
+        mean: 0.245
+        notes: "Fewer connectors, sparser index"
+    co_movements:
+      - metric: qsr
+        expected_direction: same
+        lag_days: 0
+      - metric: ai_answer_rate
+        expected_direction: inverse
+        lag_days: 0
+        notes: "More AI answers = fewer clicks = EXPECTED (not a regression)"
+      - metric: zero_result_rate
+        expected_direction: inverse
+        lag_days: 0
+      - metric: connector_coverage
+        expected_direction: same
+        lag_days: 0
+    alert_thresholds:
+      p0: 0.05    # >5% movement — critical
+      p1: 0.02    # 2-5% — significant
+      p2: 0.005   # 0.5-2% — minor
+
+  qsr:
+    full_name: "Query Success Rate"
+    formula: "max(qsr_component_click, sain_trigger * sain_success)"
+    description: >
+      Composite metric combining click quality and AI answer quality.
+      A query is "successful" if the user either clicked a good result
+      OR got a satisfying AI answer.
+    components:
+      - qsr_component_click    # equals dlctr
+      - sain_trigger_rate
+      - sain_success_rate
+    decomposition_dimensions:
+      - tenant_tier
+      - ai_enablement
+      - industry_vertical
+      - connector_type
+      - query_type
+    normal_range:
+      mean: 0.378
+      weekly_std: 0.012
+    alert_thresholds:
+      p0: 0.04
+      p1: 0.015
+      p2: 0.005
+
+  sain_trigger_rate:
+    full_name: "SAIN (Search AI Answer) Trigger Rate"
+    formula: "queries_with_ai_answer_triggered / total_queries"
+    description: >
+      How often the AI answer system decides to show an answer.
+      Only applicable to ai_enabled tenants. A drop means the system
+      is showing fewer AI answers (detection problem).
+    decomposition_dimensions:
+      - tenant_tier
+      - industry_vertical
+      - query_type
+    normal_range:
+      mean: 0.220
+      weekly_std: 0.010
+
+  sain_success_rate:
+    full_name: "SAIN (Search AI Answer) Success Rate"
+    formula: "ai_answers_marked_helpful / ai_answers_triggered"
+    description: >
+      Of AI answers shown, how many were helpful. A drop means AI answers
+      are getting worse (quality problem), not that fewer are being shown.
+    decomposition_dimensions:
+      - tenant_tier
+      - industry_vertical
+      - query_type
+    normal_range:
+      mean: 0.620
+      weekly_std: 0.015
+
+  zero_result_rate:
+    full_name: "Zero Result Rate"
+    formula: "queries_with_zero_results / total_queries"
+    description: >
+      How often users get no results at all. Spikes indicate connector
+      outages, index gaps, or permission issues.
+    normal_range:
+      mean: 0.03
+      weekly_std: 0.005
+
+  latency_p50:
+    full_name: "Search Latency (p50)"
+    formula: "percentile(query_latency_ms, 50)"
+    description: >
+      Median search response time. Spikes indicate serving issues,
+      model timeouts, or infrastructure problems.
+    normal_range:
+      mean: 200
+      weekly_std: 20
+
+# ──────────────────────────────────────────────────────────────
+# Co-Movement Diagnostic Table
+# Checked at Step 1 (Intake). The pattern narrows hypothesis space
+# BEFORE running any decomposition.
+# ──────────────────────────────────────────────────────────────
+
+co_movement_diagnostic_table:
+  - pattern:
+      dlctr: down
+      qsr: down
+      sain_trigger: stable
+      sain_success: stable
+      zero_result_rate: stable
+      latency: stable
+    likely_cause: "ranking_relevance_regression"
+    description: "Click quality degraded. Check ranking model, experiment ramps."
+    priority_hypotheses: [algorithm_model, experiment]
+
+  - pattern:
+      dlctr: down
+      qsr: stable_or_up
+      sain_trigger: up
+      sain_success: up
+      zero_result_rate: stable
+      latency: stable
+    likely_cause: "ai_answers_working"
+    description: >
+      AI answers cannibalizing clicks — this is a POSITIVE signal.
+      Users get answers without needing to click. Do NOT treat as regression.
+    priority_hypotheses: [ai_feature_effect]
+    is_positive: true
+
+  - pattern:
+      dlctr: down
+      qsr: down
+      sain_trigger: down
+      sain_success: down
+      zero_result_rate: stable
+      latency: stable
+    likely_cause: "broad_quality_degradation"
+    description: "Both click and AI pathways affected. Check model/experiment/infra."
+    priority_hypotheses: [algorithm_model, experiment, connector]
+
+  - pattern:
+      dlctr: down
+      qsr: down
+      sain_trigger: stable
+      sain_success: down
+      zero_result_rate: stable
+      latency: stable
+    likely_cause: "sain_quality_regression"
+    description: "AI answers triggering normally but failing to satisfy. Check AI model."
+    priority_hypotheses: [ai_feature_effect, algorithm_model]
+
+  - pattern:
+      dlctr: down
+      qsr: down
+      sain_trigger: stable
+      sain_success: stable
+      zero_result_rate: up
+      latency: stable
+    likely_cause: "connector_outage_or_index_gap"
+    description: "Missing content leading to no results for some queries."
+    priority_hypotheses: [connector, instrumentation]
+
+  - pattern:
+      dlctr: down
+      qsr: down
+      sain_trigger: stable
+      sain_success: stable
+      zero_result_rate: stable
+      latency: up
+    likely_cause: "serving_degradation"
+    description: "Latency causing model fallback or user abandonment."
+    priority_hypotheses: [instrumentation, algorithm_model]
+
+  - pattern:
+      dlctr: down
+      qsr: stable
+      sain_trigger: stable
+      sain_success: stable
+      zero_result_rate: stable
+      latency: stable
+    likely_cause: "click_behavior_change"
+    description: "Only click behavior changed. Check UX changes, display changes, mix-shift."
+    priority_hypotheses: [user_behavior, ai_feature_effect]
+
+  - pattern:
+      dlctr: stable
+      qsr: down
+      sain_trigger: down
+      sain_success: stable
+      zero_result_rate: stable
+      latency: stable
+    likely_cause: "sain_trigger_regression"
+    description: "AI answers not surfacing when they should. Check trigger threshold/model."
+    priority_hypotheses: [ai_feature_effect]
+
+  - pattern:
+      dlctr: stable
+      qsr: down
+      sain_trigger: stable
+      sain_success: down
+      zero_result_rate: stable
+      latency: stable
+    likely_cause: "sain_success_regression"
+    description: "AI answers surfacing but wrong. Check answer quality model."
+    priority_hypotheses: [ai_feature_effect, algorithm_model]
+
+# ──────────────────────────────────────────────────────────────
+# Hypothesis Priority Ordering
+# Fixed priority for investigation — instrumentation first, behavior last.
+# ──────────────────────────────────────────────────────────────
+
+hypothesis_priority:
+  - category: instrumentation
+    name: "Instrumentation/Logging anomaly"
+    rationale: "Cheap to verify, expensive to miss"
+    check_always: true
+  - category: connector
+    name: "Connector/data pipeline change"
+    rationale: "Most common root cause in Enterprise Search, under-documented"
+    check_always: true
+  - category: algorithm_model
+    name: "Algorithm/Model change"
+    rationale: "Ranking model, embedding model, retraining"
+  - category: experiment
+    name: "Experiment ramp/de-ramp"
+    rationale: "A/B test exposure changes"
+  - category: ai_feature_effect
+    name: "AI feature effect"
+    rationale: "AI answer adoption, threshold change, model migration"
+  - category: seasonal
+    name: "Seasonal/External pattern"
+    rationale: "Calendar effects, industry cycles"
+  - category: user_behavior
+    name: "User behavior shift"
+    rationale: "Null hypothesis — check LAST, accept only after ruling out engineering causes"
+    check_last: true
