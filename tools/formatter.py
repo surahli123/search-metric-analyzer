@@ -667,12 +667,16 @@ def _build_alternatives(primary_category: str) -> str:
     Returns:
         String listing alternative categories considered.
     """
-    # Standard diagnostic categories
+    # 7 hypothesis categories from metric_definitions.yaml hypothesis_priority.
+    # Must match the design doc's fixed investigation ordering exactly.
     all_categories = {
-        "algorithm_model": "Ranking model or algorithm change",
-        "data_pipeline": "Logging, instrumentation, or data quality issue",
-        "mix_shift": "Traffic composition change",
-        "external": "Seasonality or external behavior shift",
+        "instrumentation": "Instrumentation/Logging anomaly",
+        "connector": "Connector/data pipeline change",
+        "algorithm_model": "Algorithm/Model change (ranking, embedding)",
+        "experiment": "Experiment ramp/de-ramp",
+        "ai_feature_effect": "AI feature effect (adoption, threshold, model)",
+        "seasonal": "Seasonal/External pattern",
+        "user_behavior": "User behavior shift",
     }
 
     alternatives = []
