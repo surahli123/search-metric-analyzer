@@ -462,9 +462,11 @@ def _extract_explained_pct(decomposition: Dict[str, Any]) -> float:
         if segments:
             # Sum absolute contributions of all segments in this dimension.
             # This represents how much of the movement this dimension explains.
-            total_contribution = sum(
+            # Sum absolute contributions. Cap at 100% because opposing-sign
+            # segments (one up, one down) can inflate the sum beyond 100%.
+            total_contribution = min(100.0, sum(
                 abs(s.get("contribution_pct", 0)) for s in segments
-            )
+            ))
             if total_contribution > max_explained:
                 max_explained = total_contribution
 
@@ -620,6 +622,7 @@ def run_diagnosis(
     step_change_result: Optional[Dict[str, Any]] = None,
     cause_date_index: Optional[int] = None,
     metric_change_date_index: Optional[int] = None,
+    has_historical_precedent: bool = False,
 ) -> Dict[str, Any]:
     """Run the full diagnosis pipeline on decomposition output.
 
@@ -644,6 +647,8 @@ def run_diagnosis(
             If None, defaults to 0 (assumes cause is at the start).
         metric_change_date_index: Day index when the metric changed.
             If None, defaults to 0 (no temporal check possible).
+        has_historical_precedent: Whether the diagnosis matches a known
+            past incident pattern. True enables High confidence.
 
     Returns:
         Dict with: aggregate, primary_hypothesis, confidence,
@@ -694,10 +699,6 @@ def run_diagnosis(
     aggregate = decomposition.get("aggregate", {})
     if aggregate.get("severity") in ("P0", "P1", "P2"):
         evidence_lines += 1
-
-    # Historical precedent: currently not tracked in decomposition output.
-    # Default to False. Future enhancement: check against past diagnoses.
-    has_historical_precedent = False
 
     # ── Compute confidence ──
     confidence = compute_confidence(
