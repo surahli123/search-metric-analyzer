@@ -5,11 +5,12 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
-## v1.4 — DS-STAR Learnings (2026-02-21)
+## v1.4 — DS-STAR Learnings + Metric Rename (2026-02-22)
 
 Adapted two patterns from Google's DS-STAR multi-agent paper: a deterministic
 post-diagnosis Verifier and scored (rank-all) archetype matching. Also fixed a
-silent rendering bug in the v1.3 archetype and added structured subagent specs.
+silent rendering bug in the v1.3 archetype, added structured subagent specs,
+and renamed all internal metric names for public repo safety.
 
 ### Bug Fixes
 - **`query_understanding_regression` archetype**: Used `summary_template` + `action`
@@ -32,6 +33,15 @@ silent rendering bug in the v1.3 archetype and added structured subagent specs.
 - **Formatter integration**: Verification warnings surfaced in Slack messages
   (error-level only) and short reports (all levels).
 
+### Refactoring
+- **Internal metric rename** (31 files, 1480+ lines changed): Renamed all internal
+  metric names across the entire codebase for public repo safety.
+  - `dlctr` / `dlctr_value` → `click_quality` / `click_quality_value`
+  - `qsr` / `qsr_value` → `search_quality_success` / `search_quality_success_value`
+  - `sain_trigger` → `ai_trigger`
+  - `sain_success` → `ai_success`
+  - Affected: tools, tests, eval specs, generators, YAML knowledge, skill file, docs
+
 ### Tests
 - 28 new tests: 8 scored matching, 5 archetype validation, 15 verify_diagnosis
 - 2 existing tests updated for scored matching behavior
@@ -40,6 +50,12 @@ silent rendering bug in the v1.3 archetype and added structured subagent specs.
 ### Eval
 - All 5 scenarios remain GREEN, average 91.2/100 (unchanged from v1.3)
 - Zero verification warnings on all existing eval scenarios
+
+### Documentation
+- **DS-STAR Critique** (`docs/plans/DS_STAR_CRITIQUE.md`): IC9-level multi-judge
+  review of Google's DS-STAR paper. 3 judges (Search Systems Architect, Metric
+  Diagnosis Domain Expert, Production Engineering Pragmatist). Includes full raw
+  reviews in appendix.
 
 ---
 
