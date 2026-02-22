@@ -34,7 +34,7 @@ For each scenario below, run the FULL pipeline (decompose -> diagnose -> format)
 | Case | Scenario | Synthetic Data Filter | Expected Root Cause |
 |------|----------|----------------------|-------------------|
 | 1 | S4 | `scenario_id == "S4"` | Ranking regression in Standard tier |
-| 2 | S5 | `scenario_id == "S5"` | AI adoption (DLCTR drop is GOOD) |
+| 2 | S5 | `scenario_id == "S5"` | AI adoption (Click Quality drop is GOOD) |
 | 3 | S7 | `scenario_id == "S7"` | Multiple causes: AI + tenant churn |
 | 4 | S9 | `scenario_id == "S9"` | Mix-shift from tenant portfolio change |
 | 5 | S0 | `scenario_id == "S0"` | No significant movement (false alarm) |
@@ -75,8 +75,8 @@ The 425 tests are mostly structural validation (does the function return the rig
 
 - Enterprise Search ranking: L1 (Retrieval) -> L2 (Reranking) -> L3 (Interleaver)
 - "Ranking model" covers all L1-L3 components
-- QSR = max(click component, sain_trigger * sain_success)
-- AI adoption trap: DLCTR drops when AI answers work — this is POSITIVE
+- Search Quality Success = max(click component, ai_trigger * ai_success)
+- AI adoption trap: Click Quality drops when AI answers work -- this is POSITIVE
 - Mix-shift threshold: >=30% composition change = INVESTIGATE
 - Severity: P0 (>5%), P1 (2-5%), P2 (0.5-2%), normal (<0.5%)
 

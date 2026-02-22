@@ -60,8 +60,8 @@ class TestCoMovementPattern:
 
     def test_matches_ranking_regression(self):
         observed = {
-            "dlctr": "down", "qsr": "down",
-            "sain_trigger": "stable", "sain_success": "stable",
+            "click_quality": "down", "search_quality_success": "down",
+            "ai_trigger": "stable", "ai_success": "stable",
             "zero_result_rate": "stable", "latency": "stable",
         }
         result = match_co_movement_pattern(observed)
@@ -69,8 +69,8 @@ class TestCoMovementPattern:
 
     def test_matches_ai_answers_working(self):
         observed = {
-            "dlctr": "down", "qsr": "stable_or_up",
-            "sain_trigger": "up", "sain_success": "up",
+            "click_quality": "down", "search_quality_success": "stable_or_up",
+            "ai_trigger": "up", "ai_success": "up",
             "zero_result_rate": "stable", "latency": "stable",
         }
         result = match_co_movement_pattern(observed)
@@ -79,12 +79,12 @@ class TestCoMovementPattern:
 
     def test_no_match_returns_unknown(self):
         # v1.4: scored matching returns a 3/4 partial match for "all up" because
-        # ai_answers_working matches on qsr, sain_trigger, sain_success.
+        # ai_answers_working matches on search_quality_success, ai_trigger, ai_success.
         # Use a truly unmatched pattern: up-down-up-down (alternating) gets at
         # most 2/4 on any pattern, which is below the 0.75 threshold.
         observed = {
-            "dlctr": "up", "qsr": "down",
-            "sain_trigger": "up", "sain_success": "down",
+            "click_quality": "up", "search_quality_success": "down",
+            "ai_trigger": "up", "ai_success": "down",
             "zero_result_rate": "up", "latency": "up",
         }
         result = match_co_movement_pattern(observed)
@@ -96,14 +96,14 @@ class TestBaselineComparison:
 
     def test_within_normal_range(self):
         result = check_against_baseline(
-            current_value=0.278, metric_name="dlctr",
+            current_value=0.278, metric_name="click_quality",
             segment=None, baselines={"mean": 0.280, "weekly_std": 0.015}
         )
         assert result["status"] == "normal"
 
     def test_outside_normal_range(self):
         result = check_against_baseline(
-            current_value=0.220, metric_name="dlctr",
+            current_value=0.220, metric_name="click_quality",
             segment=None, baselines={"mean": 0.280, "weekly_std": 0.015}
         )
         assert result["status"] == "anomalous"
@@ -399,8 +399,8 @@ class TestCoMovementEdgeCases:
         """If a required metric is missing from observed, pattern can't match.
         Should fall through to unknown_pattern."""
         observed = {
-            "dlctr": "down",
-            # Missing qsr, sain_trigger, etc.
+            "click_quality": "down",
+            # Missing search_quality_success, ai_trigger, etc.
         }
         result = match_co_movement_pattern(observed)
         assert result["likely_cause"] == "unknown_pattern"
@@ -416,10 +416,10 @@ class TestCoMovementEdgeCases:
     # are available in the pipeline.
 
     def test_click_behavior_change_pattern(self):
-        """Only DLCTR down, everything else stable = click behavior change."""
+        """Only Click Quality down, everything else stable = click behavior change."""
         observed = {
-            "dlctr": "down", "qsr": "stable",
-            "sain_trigger": "stable", "sain_success": "stable",
+            "click_quality": "down", "search_quality_success": "stable",
+            "ai_trigger": "stable", "ai_success": "stable",
         }
         result = match_co_movement_pattern(observed)
         assert result["likely_cause"] == "click_behavior_change"
@@ -427,8 +427,8 @@ class TestCoMovementEdgeCases:
     def test_all_stable_pattern(self):
         """All metrics stable = no significant movement (false alarm detection)."""
         observed = {
-            "dlctr": "stable", "qsr": "stable",
-            "sain_trigger": "stable", "sain_success": "stable",
+            "click_quality": "stable", "search_quality_success": "stable",
+            "ai_trigger": "stable", "ai_success": "stable",
         }
         result = match_co_movement_pattern(observed)
         assert result["likely_cause"] == "no_significant_movement"
@@ -436,7 +436,7 @@ class TestCoMovementEdgeCases:
 
     def test_unknown_pattern_has_empty_hypotheses(self):
         """Unknown pattern should have no priority hypotheses."""
-        result = match_co_movement_pattern({"dlctr": "up"})
+        result = match_co_movement_pattern({"click_quality": "up"})
         assert result["priority_hypotheses"] == []
         assert result["is_positive"] is False
 
@@ -453,7 +453,7 @@ class TestBaselineComparisonEdgeCases:
         """When std is zero and current equals mean, z-score should be 0.0
         (there's no variation, and the value is exactly at the mean)."""
         result = check_against_baseline(
-            current_value=0.280, metric_name="dlctr",
+            current_value=0.280, metric_name="click_quality",
             segment=None, baselines={"mean": 0.280, "weekly_std": 0.0}
         )
         assert result["z_score"] == 0.0
@@ -464,7 +464,7 @@ class TestBaselineComparisonEdgeCases:
         is infinitely anomalous (the metric never varies, so this is
         by definition unusual)."""
         result = check_against_baseline(
-            current_value=0.300, metric_name="dlctr",
+            current_value=0.300, metric_name="click_quality",
             segment=None, baselines={"mean": 0.280, "weekly_std": 0.0}
         )
         assert result["z_score"] == float("inf")
@@ -480,7 +480,7 @@ class TestBaselineComparisonEdgeCases:
         """
         # z = (0.3101 - 0.280) / 0.015 = 2.0067, safely above 2.0
         result = check_against_baseline(
-            current_value=0.3101, metric_name="dlctr",
+            current_value=0.3101, metric_name="click_quality",
             segment=None, baselines={"mean": 0.280, "weekly_std": 0.015}
         )
         assert result["z_score"] >= 2.0
@@ -492,7 +492,7 @@ class TestBaselineComparisonEdgeCases:
         This means 0.310 is classified as 'normal', which is correct behavior
         for the floating-point arithmetic the code uses."""
         result = check_against_baseline(
-            current_value=0.310, metric_name="dlctr",
+            current_value=0.310, metric_name="click_quality",
             segment=None, baselines={"mean": 0.280, "weekly_std": 0.015}
         )
         # The rounded z_score shows 2.0, but the raw value is 1.9999...98
@@ -504,7 +504,7 @@ class TestBaselineComparisonEdgeCases:
         """z-score of 1.99 should be classified as normal."""
         # current = mean + 1.99 * std = 0.280 + 1.99*0.015 = 0.30985
         result = check_against_baseline(
-            current_value=0.30985, metric_name="dlctr",
+            current_value=0.30985, metric_name="click_quality",
             segment=None, baselines={"mean": 0.280, "weekly_std": 0.015}
         )
         assert abs(result["z_score"]) < 2.0
@@ -514,7 +514,7 @@ class TestBaselineComparisonEdgeCases:
         """A value well below mean should have a negative z-score
         and be flagged as anomalous."""
         result = check_against_baseline(
-            current_value=0.230, metric_name="dlctr",
+            current_value=0.230, metric_name="click_quality",
             segment=None, baselines={"mean": 0.280, "weekly_std": 0.015}
         )
         assert result["z_score"] < 0
@@ -524,16 +524,16 @@ class TestBaselineComparisonEdgeCases:
         """The segment parameter should be returned in the output
         for context in multi-segment analysis."""
         result = check_against_baseline(
-            current_value=0.278, metric_name="dlctr",
+            current_value=0.278, metric_name="click_quality",
             segment="ai_on", baselines={"mean": 0.220, "weekly_std": 0.010}
         )
         assert result["segment"] == "ai_on"
-        assert result["metric_name"] == "dlctr"
+        assert result["metric_name"] == "click_quality"
 
     def test_segment_none_is_valid(self):
         """Segment can be None for aggregate-level analysis."""
         result = check_against_baseline(
-            current_value=0.278, metric_name="dlctr",
+            current_value=0.278, metric_name="click_quality",
             segment=None, baselines={"mean": 0.280, "weekly_std": 0.015}
         )
         assert result["segment"] is None
@@ -550,7 +550,7 @@ class TestBaselineComparisonEdgeCases:
     def test_large_positive_z_score(self):
         """A value way above mean should have a large positive z-score."""
         result = check_against_baseline(
-            current_value=0.500, metric_name="dlctr",
+            current_value=0.500, metric_name="click_quality",
             segment=None, baselines={"mean": 0.280, "weekly_std": 0.015}
         )
         assert result["z_score"] > 10
@@ -560,7 +560,7 @@ class TestBaselineComparisonEdgeCases:
         """The output should include the baseline mean and std
         for transparency (so the analyst knows what we compared against)."""
         result = check_against_baseline(
-            current_value=0.278, metric_name="dlctr",
+            current_value=0.278, metric_name="click_quality",
             segment=None, baselines={"mean": 0.280, "weekly_std": 0.015}
         )
         assert result["baseline_mean"] == 0.280
@@ -591,14 +591,14 @@ class TestDecomposeToAnomalyIntegration:
         current = [r for r in sample_metric_rows if r["period"] == "current"]
 
         # Step 1: Get the aggregate delta from decompose
-        agg = compute_aggregate_delta(baseline, current, "dlctr_value")
+        agg = compute_aggregate_delta(baseline, current, "click_quality_value")
         assert agg["error"] is None
 
         # Step 2: Feed the current mean into baseline comparison
-        # Using the known DLCTR baseline from metric_definitions.yaml
+        # Using the known Click Quality baseline from metric_definitions.yaml
         baseline_check = check_against_baseline(
             current_value=agg["current_mean"],
-            metric_name="dlctr",
+            metric_name="click_quality",
             segment=None,
             baselines={"mean": 0.280, "weekly_std": 0.015},
         )
@@ -620,7 +620,7 @@ class TestDecomposeToAnomalyIntegration:
 
         # Step 1: Decompose by tenant_tier
         decomp = decompose_by_dimension(
-            baseline, current, "dlctr_value", "tenant_tier"
+            baseline, current, "click_quality_value", "tenant_tier"
         )
 
         # Step 2: Check standard tier's current mean against its baseline
@@ -629,7 +629,7 @@ class TestDecomposeToAnomalyIntegration:
         )
         standard_check = check_against_baseline(
             current_value=standard["current_mean"],
-            metric_name="dlctr",
+            metric_name="click_quality",
             segment="standard_tier",
             baselines={"mean": 0.245, "weekly_std": 0.010},
         )
@@ -646,7 +646,7 @@ class TestDecomposeToAnomalyIntegration:
 
         # Step 1: Full decomposition
         result = run_decomposition(
-            sample_metric_rows, "dlctr_value", dimensions=["tenant_tier"]
+            sample_metric_rows, "click_quality_value", dimensions=["tenant_tier"]
         )
 
         # Step 2: Extract key signals for anomaly checks
@@ -678,18 +678,18 @@ class TestDecomposeToAnomalyIntegration:
         current = [r for r in sample_mix_shift_rows if r["period"] == "current"]
 
         # Aggregate delta shows a drop
-        agg = compute_aggregate_delta(baseline, current, "dlctr_value")
+        agg = compute_aggregate_delta(baseline, current, "click_quality_value")
         assert agg["direction"] == "down"
 
         # Mix-shift shows it's compositional, not behavioral
-        mix = compute_mix_shift(baseline, current, "dlctr_value", "tenant_tier")
+        mix = compute_mix_shift(baseline, current, "click_quality_value", "tenant_tier")
         assert mix["flag"] == "mix_shift_dominant"
 
         # The baseline check might flag it as anomalous, but the mix-shift
         # result tells us not to panic (it's just composition change)
         baseline_result = check_against_baseline(
             current_value=agg["current_mean"],
-            metric_name="dlctr",
+            metric_name="click_quality",
             segment=None,
             baselines={"mean": 0.270, "weekly_std": 0.015},
         )
@@ -711,9 +711,9 @@ class TestAnomalyCLI:
     def csv_file(self, tmp_path):
         """Create a temporary CSV file with metric data for CLI testing.
         Includes data_completeness, data_freshness_min, metric_ts, and
-        dlctr_value columns needed by different checks."""
+        click_quality_value columns needed by different checks."""
         csv_content = (
-            "metric_ts,dlctr_value,data_completeness,data_freshness_min\n"
+            "metric_ts,click_quality_value,data_completeness,data_freshness_min\n"
             "2026-01-05T00:00:00Z,0.280,0.995,10\n"
             "2026-01-06T00:00:00Z,0.281,0.996,12\n"
             "2026-01-07T00:00:00Z,0.279,0.994,11\n"
@@ -746,7 +746,7 @@ class TestAnomalyCLI:
             [sys.executable, "-m", "tools.anomaly",
              "--input", str(csv_file),
              "--check", "step_change",
-             "--metric", "dlctr_value"],
+             "--metric", "click_quality_value"],
             capture_output=True, text=True,
             cwd=str(Path(__file__).parent.parent),
         )
@@ -761,7 +761,7 @@ class TestAnomalyCLI:
             [sys.executable, "-m", "tools.anomaly",
              "--input", str(csv_file),
              "--check", "baseline",
-             "--metric", "dlctr_value",
+             "--metric", "click_quality_value",
              "--baseline-mean", "0.280",
              "--baseline-std", "0.015"],
             capture_output=True, text=True,
@@ -779,7 +779,7 @@ class TestAnomalyCLI:
             [sys.executable, "-m", "tools.anomaly",
              "--input", str(csv_file),
              "--check", "baseline",
-             "--metric", "dlctr_value"],
+             "--metric", "click_quality_value"],
             capture_output=True, text=True,
             cwd=str(Path(__file__).parent.parent),
         )
@@ -790,8 +790,8 @@ class TestAnomalyCLI:
     def test_cli_co_movement_with_directions(self, csv_file):
         """Co-movement check with valid directions JSON should work."""
         directions = json.dumps({
-            "dlctr": "down", "qsr": "down",
-            "sain_trigger": "stable", "sain_success": "stable",
+            "click_quality": "down", "search_quality_success": "down",
+            "ai_trigger": "stable", "ai_success": "stable",
             "zero_result_rate": "stable", "latency": "stable",
         })
         result = subprocess.run(
@@ -823,15 +823,15 @@ class TestAnomalyCLI:
     def test_cli_all_checks_at_once(self, csv_file):
         """Running all checks (default) should return all result sections."""
         directions = json.dumps({
-            "dlctr": "down", "qsr": "down",
-            "sain_trigger": "stable", "sain_success": "stable",
+            "click_quality": "down", "search_quality_success": "down",
+            "ai_trigger": "stable", "ai_success": "stable",
             "zero_result_rate": "stable", "latency": "stable",
         })
         result = subprocess.run(
             [sys.executable, "-m", "tools.anomaly",
              "--input", str(csv_file),
              "--check", "all",
-             "--metric", "dlctr_value",
+             "--metric", "click_quality_value",
              "--directions", directions,
              "--baseline-mean", "0.280",
              "--baseline-std", "0.015"],
@@ -862,8 +862,8 @@ class TestScoredCoMovement:
     def test_perfect_match_returns_score_1(self):
         """A 4/4 match should return match_score=1.0 (backward compatible)."""
         observed = {
-            "dlctr": "down", "qsr": "down",
-            "sain_trigger": "stable", "sain_success": "stable",
+            "click_quality": "down", "search_quality_success": "down",
+            "ai_trigger": "stable", "ai_success": "stable",
         }
         result = match_co_movement_pattern(observed)
         assert result["likely_cause"] == "ranking_relevance_regression"
@@ -872,8 +872,8 @@ class TestScoredCoMovement:
     def test_perfect_match_has_runner_up(self):
         """A perfect match should include a runner_up if another pattern scores >= 0.75."""
         observed = {
-            "dlctr": "down", "qsr": "down",
-            "sain_trigger": "stable", "sain_success": "stable",
+            "click_quality": "down", "search_quality_success": "down",
+            "ai_trigger": "stable", "ai_success": "stable",
         }
         result = match_co_movement_pattern(observed)
         # Runner-up may or may not exist depending on which patterns score >= 0.75.
@@ -884,15 +884,15 @@ class TestScoredCoMovement:
     def test_partial_match_3_of_4_returns_with_score(self):
         """A 3/4 match (score=0.75) should return the best pattern.
 
-        Example: dlctr down, qsr down, sain_trigger stable, sain_success DOWN.
-        This matches ranking_regression on 3/4 (sain_success is "down" not "stable").
+        Example: click_quality down, search_quality_success down, ai_trigger stable, ai_success DOWN.
+        This matches ranking_regression on 3/4 (ai_success is "down" not "stable").
         """
         observed = {
-            "dlctr": "down", "qsr": "down",
-            "sain_trigger": "stable", "sain_success": "down",
+            "click_quality": "down", "search_quality_success": "down",
+            "ai_trigger": "stable", "ai_success": "down",
         }
         result = match_co_movement_pattern(observed)
-        # sain_quality_regression is dlctr:down, qsr:down, sain_trigger:stable, sain_success:down = 4/4
+        # sain_quality_regression is click_quality:down, search_quality_success:down, ai_trigger:stable, ai_success:down = 4/4
         # So this is actually a perfect match for sain_quality_regression!
         assert result["likely_cause"] == "sain_quality_regression"
         assert result["match_score"] == 1.0
@@ -900,11 +900,11 @@ class TestScoredCoMovement:
     def test_below_threshold_returns_unknown(self):
         """A 2/4 match (score=0.5) should return unknown_pattern."""
         observed = {
-            "dlctr": "up", "qsr": "up",
-            "sain_trigger": "stable", "sain_success": "stable",
+            "click_quality": "up", "search_quality_success": "up",
+            "ai_trigger": "stable", "ai_success": "stable",
         }
         result = match_co_movement_pattern(observed)
-        # No pattern has dlctr:up AND qsr:up. Best partial matches score 2/4 = 0.5.
+        # No pattern has click_quality:up AND search_quality_success:up. Best partial matches score 2/4 = 0.5.
         assert result["likely_cause"] == "unknown_pattern"
         assert result["match_score"] < 0.75
 
@@ -916,8 +916,8 @@ class TestScoredCoMovement:
         # All stable = no_significant_movement (4/4 exact match).
         # This is also checked via the special false alarm rule.
         observed = {
-            "dlctr": "stable", "qsr": "stable",
-            "sain_trigger": "stable", "sain_success": "stable",
+            "click_quality": "stable", "search_quality_success": "stable",
+            "ai_trigger": "stable", "ai_success": "stable",
         }
         result = match_co_movement_pattern(observed)
         assert result["likely_cause"] == "no_significant_movement"
@@ -931,8 +931,8 @@ class TestScoredCoMovement:
         """
         # 3 stable + 1 down = not all stable
         observed = {
-            "dlctr": "down", "qsr": "stable",
-            "sain_trigger": "stable", "sain_success": "stable",
+            "click_quality": "down", "search_quality_success": "stable",
+            "ai_trigger": "stable", "ai_success": "stable",
         }
         result = match_co_movement_pattern(observed)
         # Should NOT be no_significant_movement (only 3/4 match for that).
@@ -945,8 +945,8 @@ class TestScoredCoMovement:
         # Use an alternating pattern that no co-movement entry matches well.
         # up-down-up-down gets at most 2/4 on any pattern (below 0.75 threshold).
         observed = {
-            "dlctr": "up", "qsr": "down",
-            "sain_trigger": "up", "sain_success": "down",
+            "click_quality": "up", "search_quality_success": "down",
+            "ai_trigger": "up", "ai_success": "down",
         }
         result = match_co_movement_pattern(observed)
         assert result["likely_cause"] == "unknown_pattern"
@@ -957,8 +957,8 @@ class TestScoredCoMovement:
         """All existing test patterns should still return the same results."""
         # AI answers working
         observed_ai = {
-            "dlctr": "down", "qsr": "stable_or_up",
-            "sain_trigger": "up", "sain_success": "up",
+            "click_quality": "down", "search_quality_success": "stable_or_up",
+            "ai_trigger": "up", "ai_success": "up",
         }
         result_ai = match_co_movement_pattern(observed_ai)
         assert result_ai["likely_cause"] == "ai_answers_working"
@@ -967,8 +967,8 @@ class TestScoredCoMovement:
 
         # Click behavior change
         observed_click = {
-            "dlctr": "down", "qsr": "stable",
-            "sain_trigger": "stable", "sain_success": "stable",
+            "click_quality": "down", "search_quality_success": "stable",
+            "ai_trigger": "stable", "ai_success": "stable",
         }
         result_click = match_co_movement_pattern(observed_click)
         assert result_click["likely_cause"] == "click_behavior_change"

@@ -7,9 +7,9 @@ Designed for a team of 2 Senior DSs debugging metric movements for Eng Leads.
 ## Domain
 Enterprise Search (like Glean). Key concepts:
 - Tenant tiers (standard/premium/enterprise), AI enablement, connector types
-- Metrics: DLCTR, QSR, SAIN trigger/success, zero-result rate, latency
-- QSR formula: max(click_component, sain_trigger * sain_success)
-- AI answers and DLCTR have INVERSE co-movement (more AI answers = fewer clicks = expected)
+- Metrics: Click Quality, Search Quality Success, AI trigger/success, zero-result rate, latency
+- Search Quality Success formula: max(click_component, ai_trigger * ai_success)
+- AI answers and Click Quality have INVERSE co-movement (more AI answers = fewer clicks = expected)
 
 ## Code Conventions
 - Python 3.10+, stdlib + PyYAML only

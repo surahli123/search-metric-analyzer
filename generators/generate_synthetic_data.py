@@ -27,20 +27,20 @@ from typing import Dict, List, Tuple
 # ---------------------------------------------------------------------------
 
 BASELINE = {
-    "dlctr_mean": 0.280,
-    "sain_trigger_rate": 0.220,
-    "sain_success_rate": 0.620,
+    "click_quality_mean": 0.280,
+    "ai_trigger_rate": 0.220,
+    "ai_success_rate": 0.620,
     "p3_click_share": 0.270,
     "mean_clicked_rank": 2.6,
     "exploratory_share": 0.50,
 }
 
-# Baseline expected QSR from canonical formula using baseline rates.
-# QSR = max(click_component, sain_component)
-# At the population level: QSR ~ DLCTR + (trigger * success) * (1 - DLCTR)
-BASELINE_QSR = BASELINE["dlctr_mean"] + (
-    BASELINE["sain_trigger_rate"] * BASELINE["sain_success_rate"]
-) * (1 - BASELINE["dlctr_mean"])
+# Baseline expected Search Quality Success from canonical formula using baseline rates.
+# Search Quality Success = max(click_component, ai_component)
+# At the population level: Search Quality Success ~ Click Quality + (trigger * success) * (1 - Click Quality)
+BASELINE_QSR = BASELINE["click_quality_mean"] + (
+    BASELINE["ai_trigger_rate"] * BASELINE["ai_success_rate"]
+) * (1 - BASELINE["click_quality_mean"])
 
 # ---------------------------------------------------------------------------
 # Enterprise dimension distributions
@@ -50,17 +50,17 @@ BASELINE_QSR = BASELINE["dlctr_mean"] + (
 
 # tenant_tier: determines quality of search index (more connectors = better results)
 TENANT_TIER_DIST = {
-    "standard":   {"weight": 0.50, "dlctr_baseline": 0.245},
-    "premium":    {"weight": 0.30, "dlctr_baseline": 0.280},
-    "enterprise": {"weight": 0.20, "dlctr_baseline": 0.295},
+    "standard":   {"weight": 0.50, "click_quality_baseline": 0.245},
+    "premium":    {"weight": 0.30, "click_quality_baseline": 0.280},
+    "enterprise": {"weight": 0.20, "click_quality_baseline": 0.295},
 }
 
 # ai_enablement: whether tenant has AI answers turned on
-# ai_on tenants have LOWER DLCTR because users get answers without clicking
+# ai_on tenants have LOWER Click Quality because users get answers without clicking
 # This is GOOD behavior, not a regression (inverse co-movement)
 AI_ENABLEMENT_DIST = {
     "ai_off": {"weight": 0.60},
-    "ai_on":  {"weight": 0.40, "dlctr_baseline": 0.220},
+    "ai_on":  {"weight": 0.40, "click_quality_baseline": 0.220},
 }
 
 # industry_vertical: different industries have different search patterns
@@ -101,13 +101,13 @@ SCENARIOS: Dict[str, Dict] = {
         "exploratory_delta": 0.00,
         "p3_delta": 0.00,
         "rank_delta": 0.00,
-        "sain_trigger_delta": 0.00,
-        "sain_success_delta": 0.00,
-        "expected_dlctr_delta": 0.000,
-        "expected_qsr_delta": 0.000,
+        "ai_trigger_delta": 0.00,
+        "ai_success_delta": 0.00,
+        "expected_click_quality_delta": 0.000,
+        "expected_search_quality_success_delta": 0.000,
         "seasonality": "none",
         "l3_marker": False,
-        "sain_marker": False,
+        "ai_marker": False,
         "enterprise_effect": None,  # No enterprise-specific behavior
     },
     "S1": {
@@ -116,13 +116,13 @@ SCENARIOS: Dict[str, Dict] = {
         "exploratory_delta": 0.04,
         "p3_delta": 0.00,
         "rank_delta": 0.10,
-        "sain_trigger_delta": 0.00,
-        "sain_success_delta": 0.00,
-        "expected_dlctr_delta": 0.000,
-        "expected_qsr_delta": 0.000,
+        "ai_trigger_delta": 0.00,
+        "ai_success_delta": 0.00,
+        "expected_click_quality_delta": 0.000,
+        "expected_search_quality_success_delta": 0.000,
         "seasonality": "weekly_pattern",
         "l3_marker": False,
-        "sain_marker": False,
+        "ai_marker": False,
         "enterprise_effect": None,
     },
     "S2": {
@@ -131,13 +131,13 @@ SCENARIOS: Dict[str, Dict] = {
         "exploratory_delta": 0.12,
         "p3_delta": 0.00,
         "rank_delta": 0.20,
-        "sain_trigger_delta": 0.00,
-        "sain_success_delta": 0.00,
-        "expected_dlctr_delta": -0.015,
-        "expected_qsr_delta": -0.010,
+        "ai_trigger_delta": 0.00,
+        "ai_success_delta": 0.00,
+        "expected_click_quality_delta": -0.015,
+        "expected_search_quality_success_delta": -0.010,
         "seasonality": "holiday_shock",
         "l3_marker": False,
-        "sain_marker": False,
+        "ai_marker": False,
         "enterprise_effect": None,
     },
     "S3": {
@@ -146,13 +146,13 @@ SCENARIOS: Dict[str, Dict] = {
         "exploratory_delta": 0.08,
         "p3_delta": 0.08,
         "rank_delta": 0.20,
-        "sain_trigger_delta": 0.00,
-        "sain_success_delta": 0.00,
-        "expected_dlctr_delta": -0.006,
-        "expected_qsr_delta": 0.004,
+        "ai_trigger_delta": 0.00,
+        "ai_success_delta": 0.00,
+        "expected_click_quality_delta": -0.006,
+        "expected_search_quality_success_delta": 0.004,
         "seasonality": "none",
         "l3_marker": True,
-        "sain_marker": False,
+        "ai_marker": False,
         "enterprise_effect": None,
     },
     "S4": {
@@ -161,43 +161,43 @@ SCENARIOS: Dict[str, Dict] = {
         "exploratory_delta": -0.05,
         "p3_delta": 0.18,
         "rank_delta": 0.80,
-        "sain_trigger_delta": 0.00,
-        "sain_success_delta": 0.00,
-        "expected_dlctr_delta": -0.035,
-        "expected_qsr_delta": -0.022,
+        "ai_trigger_delta": 0.00,
+        "ai_success_delta": 0.00,
+        "expected_click_quality_delta": -0.035,
+        "expected_search_quality_success_delta": -0.022,
         "seasonality": "none",
         "l3_marker": True,
-        "sain_marker": False,
+        "ai_marker": False,
         "enterprise_effect": None,
     },
     "S5": {
-        "name": "SAIN uplift with click cannibalization",
+        "name": "AI Answer uplift with click cannibalization",
         "volume_delta_rel": 0.00,
         "exploratory_delta": 0.00,
         "p3_delta": 0.00,
         "rank_delta": 0.50,
-        "sain_trigger_delta": 0.12,
-        "sain_success_delta": 0.10,
-        "expected_dlctr_delta": -0.020,
-        "expected_qsr_delta": 0.006,
+        "ai_trigger_delta": 0.12,
+        "ai_success_delta": 0.10,
+        "expected_click_quality_delta": -0.020,
+        "expected_search_quality_success_delta": 0.006,
         "seasonality": "none",
         "l3_marker": False,
-        "sain_marker": True,
+        "ai_marker": True,
         "enterprise_effect": None,
     },
     "S6": {
-        "name": "SAIN regression",
+        "name": "AI Answer regression",
         "volume_delta_rel": 0.00,
         "exploratory_delta": 0.00,
         "p3_delta": 0.00,
         "rank_delta": 0.10,
-        "sain_trigger_delta": 0.10,
-        "sain_success_delta": -0.25,
-        "expected_dlctr_delta": 0.000,
-        "expected_qsr_delta": -0.030,
+        "ai_trigger_delta": 0.10,
+        "ai_success_delta": -0.25,
+        "expected_click_quality_delta": 0.000,
+        "expected_search_quality_success_delta": -0.030,
         "seasonality": "none",
         "l3_marker": False,
-        "sain_marker": True,
+        "ai_marker": True,
         "enterprise_effect": None,
     },
     "S7": {
@@ -206,13 +206,13 @@ SCENARIOS: Dict[str, Dict] = {
         "exploratory_delta": 0.07,
         "p3_delta": 0.18,
         "rank_delta": 1.00,
-        "sain_trigger_delta": 0.00,
-        "sain_success_delta": 0.00,
-        "expected_dlctr_delta": -0.045,
-        "expected_qsr_delta": -0.030,
+        "ai_trigger_delta": 0.00,
+        "ai_success_delta": 0.00,
+        "expected_click_quality_delta": -0.045,
+        "expected_search_quality_success_delta": -0.030,
         "seasonality": "holiday_shock",
         "l3_marker": True,
-        "sain_marker": False,
+        "ai_marker": False,
         "enterprise_effect": None,
     },
     "S8": {
@@ -221,13 +221,13 @@ SCENARIOS: Dict[str, Dict] = {
         "exploratory_delta": 0.00,
         "p3_delta": 0.00,
         "rank_delta": 0.00,
-        "sain_trigger_delta": 0.00,
-        "sain_success_delta": 0.00,
-        "expected_dlctr_delta": 0.000,
-        "expected_qsr_delta": 0.000,
+        "ai_trigger_delta": 0.00,
+        "ai_success_delta": 0.00,
+        "expected_click_quality_delta": 0.000,
+        "expected_search_quality_success_delta": 0.000,
         "seasonality": "none",
         "l3_marker": False,
-        "sain_marker": False,
+        "ai_marker": False,
         "enterprise_effect": None,
     },
     # -------------------------------------------------------------------
@@ -240,74 +240,74 @@ SCENARIOS: Dict[str, Dict] = {
         # No per-row metric change — aggregate drops purely from composition shift.
         # Baseline: 50% standard, 30% premium, 20% enterprise
         # Current: 65% standard, 20% premium, 15% enterprise
-        # Standard tier has lower DLCTR baseline (0.245 vs 0.280/0.295),
+        # Standard tier has lower Click Quality baseline (0.245 vs 0.280/0.295),
         # so shifting traffic toward standard lowers the aggregate.
         "volume_delta_rel": 0.00,
         "exploratory_delta": 0.00,
         "p3_delta": 0.00,
         "rank_delta": 0.00,
-        "sain_trigger_delta": 0.00,
-        "sain_success_delta": 0.00,
-        "expected_dlctr_delta": -0.007,  # ~2-3% relative drop from mix-shift
-        "expected_qsr_delta": -0.005,
+        "ai_trigger_delta": 0.00,
+        "ai_success_delta": 0.00,
+        "expected_click_quality_delta": -0.007,  # ~2-3% relative Click Quality drop from mix-shift
+        "expected_search_quality_success_delta": -0.005,
         "seasonality": "none",
         "l3_marker": False,
-        "sain_marker": False,
+        "ai_marker": False,
         "enterprise_effect": "mix_shift",
     },
     "S10": {
         "name": "Connector extraction quality regression (silent)",
         # Confluence connector extraction quality degrades.
         # Only confluence is affected; other connectors are stable.
-        # DLCTR drops 3-4% for confluence, zero-result rate increases slightly.
+        # Click Quality drops 3-4% for confluence, zero-result rate increases slightly.
         "volume_delta_rel": 0.00,
         "exploratory_delta": 0.00,
         "p3_delta": 0.00,
         "rank_delta": 0.00,
-        "sain_trigger_delta": 0.00,
-        "sain_success_delta": 0.00,
-        "expected_dlctr_delta": -0.010,  # aggregate ~1% from 30% confluence share
-        "expected_qsr_delta": -0.008,
+        "ai_trigger_delta": 0.00,
+        "ai_success_delta": 0.00,
+        "expected_click_quality_delta": -0.010,  # aggregate ~1% Click Quality from 30% confluence share
+        "expected_search_quality_success_delta": -0.008,
         "seasonality": "none",
         "l3_marker": False,
-        "sain_marker": False,
+        "ai_marker": False,
         "enterprise_effect": "connector_regression",
     },
     "S11": {
         "name": "Auth credential expiry (silent connector failure)",
         # Sharepoint connector auth expires, documents stop syncing.
-        # Sharepoint zero_result_rate jumps sharply, DLCTR drops.
+        # Sharepoint zero_result_rate jumps sharply, Click Quality drops.
         # Other connectors are completely unaffected.
         "volume_delta_rel": 0.00,
         "exploratory_delta": 0.00,
         "p3_delta": 0.00,
         "rank_delta": 0.00,
-        "sain_trigger_delta": 0.00,
-        "sain_success_delta": 0.00,
-        "expected_dlctr_delta": -0.005,  # small aggregate impact (10% share)
-        "expected_qsr_delta": -0.004,
+        "ai_trigger_delta": 0.00,
+        "ai_success_delta": 0.00,
+        "expected_click_quality_delta": -0.005,  # small aggregate impact (10% share)
+        "expected_search_quality_success_delta": -0.004,
         "seasonality": "none",
         "l3_marker": False,
-        "sain_marker": False,
+        "ai_marker": False,
         "enterprise_effect": "auth_expiry",
     },
     "S12": {
         "name": "LLM provider / model migration",
         # AI answer quality changes after model swap.
-        # sain_success drops ~8% for ai_on tenants.
+        # ai_success drops ~8% for ai_on tenants.
         # AI answer trigger rate may increase slightly (new model more aggressive).
         # ai_off tenants completely unaffected.
         "volume_delta_rel": 0.00,
         "exploratory_delta": 0.00,
         "p3_delta": 0.00,
         "rank_delta": 0.00,
-        "sain_trigger_delta": 0.00,
-        "sain_success_delta": 0.00,
-        "expected_dlctr_delta": 0.000,
-        "expected_qsr_delta": -0.012,  # ~3% relative QSR drop from SAIN degradation
+        "ai_trigger_delta": 0.00,
+        "ai_success_delta": 0.00,
+        "expected_click_quality_delta": 0.000,
+        "expected_search_quality_success_delta": -0.012,  # ~3% relative Search Quality Success drop from AI Answer degradation
         "seasonality": "none",
         "l3_marker": False,
-        "sain_marker": True,
+        "ai_marker": True,
         "enterprise_effect": "llm_migration",
     },
 }
@@ -325,10 +325,10 @@ SESSION_HEADERS = [
     "query_token",
     "query_class",
     "seasonality_tag",
-    "sain_experience_type",
-    "sain_trigger",
-    "sain_success",
-    "sain_engaged",
+    "ai_experience_type",
+    "ai_trigger",
+    "ai_success",
+    "ai_engaged",
     "ranked_results_json",
     "clicked_rank",
     "clicked_doc_token",
@@ -350,15 +350,15 @@ METRIC_HEADERS = [
     "session_id",
     "query_id",
     "metric_ts",
-    "dlctr_value",
+    "click_quality_value",
     "is_long_click",
-    "dlctr_discount_weight",
-    "sain_trigger",
-    "sain_success",
-    "qsr_component_click",
-    "qsr_component_sain",
-    "qsr_value",
-    "qsr_dominant_component",
+    "click_quality_discount_weight",
+    "ai_trigger",
+    "ai_success",
+    "search_quality_success_component_click",
+    "search_quality_success_component_ai",
+    "search_quality_success_value",
+    "search_quality_success_dominant_component",
     "p3_click_share",
     "mean_clicked_rank",
     "clicked_flag",
@@ -414,7 +414,7 @@ def parse_args() -> argparse.Namespace:
 def derive_success_prob(target_dlctr: float, target_qsr: float, trigger_rate: float) -> float:
     if trigger_rate <= 0:
         return 0.0
-    # qsr = dlctr + p_sain * (1 - dlctr), where p_sain = trigger * success
+    # search_quality_success = click_quality + p_ai * (1 - click_quality), where p_ai = trigger * success
     required_p_sain = (target_qsr - target_dlctr) / max(1e-9, (1 - target_dlctr))
     required_p_sain = clamp(required_p_sain, 0.0, 1.0)
     return clamp(required_p_sain / trigger_rate, 0.0, 1.0)
@@ -426,11 +426,11 @@ def scenario_markers(sid: str) -> Tuple[str, str]:
     if sid == "S7":
         return "rel_l3_overlap", "exp_l3_overlap"
     if sid in {"S5", "S6"}:
-        return f"rel_sain_{sid.lower()}", ""
+        return f"rel_ai_{sid.lower()}", ""
     return "", ""
 
 
-def scenario_sain_experience(sid: str, rng: random.Random) -> str:
+def scenario_ai_experience(sid: str, rng: random.Random) -> str:
     if sid in {"S5", "S6"}:
         return rng.choice(["BOOKMARK", "PEOPLE_ENTITY_CARD", "NLQ_ANSWER"])
     if rng.random() < 0.18:
@@ -501,7 +501,7 @@ def apply_s9_mix_shift_dims(period: str, rng: random.Random) -> Dict[str, str]:
     Baseline: 50% standard, 30% premium, 20% enterprise (normal)
     Current: 65% standard, 20% premium, 15% enterprise (more standard onboarded)
 
-    The key insight: per-segment DLCTR stays the SAME. The aggregate drops
+    The key insight: per-segment Click Quality stays the SAME. The aggregate drops
     because the mix shifts toward the lower-performing segment.
     This is a classic Simpson's Paradox scenario.
     """
@@ -524,15 +524,15 @@ def apply_s9_mix_shift_dims(period: str, rng: random.Random) -> Dict[str, str]:
 
 
 def get_s9_click_prob_adjustment(tier: str) -> float:
-    """S9: Return DLCTR multiplier based on tenant tier.
+    """S9: Return Click Quality multiplier based on tenant tier.
 
-    Per-segment DLCTR must stay the same between baseline and current.
-    Standard tier has lower DLCTR than premium/enterprise.
+    Per-segment Click Quality must stay the same between baseline and current.
+    Standard tier has lower Click Quality than premium/enterprise.
     """
     tier_multipliers = {
-        "standard":   0.245 / BASELINE["dlctr_mean"],   # ~0.875
-        "premium":    0.280 / BASELINE["dlctr_mean"],   # 1.0
-        "enterprise": 0.295 / BASELINE["dlctr_mean"],   # ~1.054
+        "standard":   0.245 / BASELINE["click_quality_mean"],   # ~0.875
+        "premium":    0.280 / BASELINE["click_quality_mean"],   # 1.0
+        "enterprise": 0.295 / BASELINE["click_quality_mean"],   # ~1.054
     }
     return tier_multipliers.get(tier, 1.0)
 
@@ -542,10 +542,10 @@ def get_s10_click_prob_adjustment(connector: str, period: str) -> float:
 
     Only confluence connector is affected. Returns a multiplier on click_prob.
     Baseline: all connectors at 1.0x
-    Current: confluence drops to ~0.88x (3-4% DLCTR drop), others stable
+    Current: confluence drops to ~0.88x (3-4% Click Quality drop), others stable
     """
     if period == "current" and connector == "confluence":
-        return 0.88  # ~3-4% DLCTR drop for confluence
+        return 0.88  # ~3-4% Click Quality drop for confluence
     return 1.0
 
 
@@ -563,13 +563,13 @@ def get_s11_zero_result_override(connector: str, period: str, rng: random.Random
 
 
 def get_s11_click_prob_adjustment(connector: str, period: str) -> float:
-    """S11: Sharepoint DLCTR drops in current period (stale/missing results)."""
+    """S11: Sharepoint Click Quality drops in current period (stale/missing results)."""
     if period == "current" and connector == "sharepoint":
         return 0.70  # significant drop for sharepoint
     return 1.0
 
 
-def get_s12_sain_adjustments(ai_enablement: str, period: str) -> Tuple[float, float]:
+def get_s12_ai_adjustments(ai_enablement: str, period: str) -> Tuple[float, float]:
     """S12: LLM model migration affects AI answer quality for ai_on tenants.
 
     Returns (trigger_rate_multiplier, success_rate_multiplier).
@@ -597,20 +597,20 @@ def write_templates(project_root: Path) -> None:
         "exploratory_query_share_delta_abs",
         "p3_click_share_delta_abs",
         "mean_clicked_rank_delta_abs",
-        "sain_trigger_rate_delta_abs",
-        "sain_success_rate_delta_abs",
-        "expected_dlctr_delta_abs",
-        "expected_dlctr_delta_rel",
-        "expected_qsr_delta_abs",
-        "expected_qsr_delta_rel",
+        "ai_trigger_rate_delta_abs",
+        "ai_success_rate_delta_abs",
+        "expected_click_quality_delta_abs",
+        "expected_click_quality_delta_rel",
+        "expected_search_quality_success_delta_abs",
+        "expected_search_quality_success_delta_rel",
     ]
     knobs_path = templates_dir / "scenario_knobs_template.csv"
     with knobs_path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=knobs_headers)
         writer.writeheader()
         for sid, cfg in SCENARIOS.items():
-            rel_dlctr = cfg["expected_dlctr_delta"] / BASELINE["dlctr_mean"] if BASELINE["dlctr_mean"] else 0.0
-            rel_qsr = cfg["expected_qsr_delta"] / BASELINE_QSR if BASELINE_QSR else 0.0
+            rel_dlctr = cfg["expected_click_quality_delta"] / BASELINE["click_quality_mean"] if BASELINE["click_quality_mean"] else 0.0
+            rel_qsr = cfg["expected_search_quality_success_delta"] / BASELINE_QSR if BASELINE_QSR else 0.0
             writer.writerow(
                 {
                     "scenario_id": sid,
@@ -618,12 +618,12 @@ def write_templates(project_root: Path) -> None:
                     "exploratory_query_share_delta_abs": cfg["exploratory_delta"],
                     "p3_click_share_delta_abs": cfg["p3_delta"],
                     "mean_clicked_rank_delta_abs": cfg["rank_delta"],
-                    "sain_trigger_rate_delta_abs": cfg["sain_trigger_delta"],
-                    "sain_success_rate_delta_abs": cfg["sain_success_delta"],
-                    "expected_dlctr_delta_abs": cfg["expected_dlctr_delta"],
-                    "expected_dlctr_delta_rel": f"{rel_dlctr:.4f}",
-                    "expected_qsr_delta_abs": cfg["expected_qsr_delta"],
-                    "expected_qsr_delta_rel": f"{rel_qsr:.4f}",
+                    "ai_trigger_rate_delta_abs": cfg["ai_trigger_delta"],
+                    "ai_success_rate_delta_abs": cfg["ai_success_delta"],
+                    "expected_click_quality_delta_abs": cfg["expected_click_quality_delta"],
+                    "expected_click_quality_delta_rel": f"{rel_dlctr:.4f}",
+                    "expected_search_quality_success_delta_abs": cfg["expected_search_quality_success_delta"],
+                    "expected_search_quality_success_delta_rel": f"{rel_qsr:.4f}",
                 }
             )
 
@@ -640,10 +640,10 @@ def write_templates(project_root: Path) -> None:
                 "query_token": "query_tok_x",
                 "query_class": "exploratory",
                 "seasonality_tag": "none",
-                "sain_experience_type": "NONE",
-                "sain_trigger": 0,
-                "sain_success": 0,
-                "sain_engaged": 0,
+                "ai_experience_type": "NONE",
+                "ai_trigger": 0,
+                "ai_success": 0,
+                "ai_engaged": 0,
                 "ranked_results_json": "[]",
                 "clicked_rank": "",
                 "clicked_doc_token": "",
@@ -670,15 +670,15 @@ def write_templates(project_root: Path) -> None:
                 "session_id": "S0_sess_0",
                 "query_id": "S0_q_0",
                 "metric_ts": "2026-01-05T00:00:00Z",
-                "dlctr_value": "0.000000",
+                "click_quality_value": "0.000000",
                 "is_long_click": 0,
-                "dlctr_discount_weight": "0.000000",
-                "sain_trigger": 0,
-                "sain_success": 0,
-                "qsr_component_click": "0.000000",
-                "qsr_component_sain": "0.000000",
-                "qsr_value": "0.000000",
-                "qsr_dominant_component": "DLCTR",
+                "click_quality_discount_weight": "0.000000",
+                "ai_trigger": 0,
+                "ai_success": 0,
+                "search_quality_success_component_click": "0.000000",
+                "search_quality_success_component_ai": "0.000000",
+                "search_quality_success_value": "0.000000",
+                "search_quality_success_dominant_component": "click_quality",
                 "p3_click_share": "0.000000",
                 "mean_clicked_rank": "",
                 "clicked_flag": 0,
@@ -727,17 +727,17 @@ def generate_scenario_rows(
     # For the "baseline" period, we use the base BASELINE values (no delta).
     # For the "current" period, we apply the scenario's delta.
     if period == "baseline":
-        target_dlctr = BASELINE["dlctr_mean"]
+        target_dlctr = BASELINE["click_quality_mean"]
         target_qsr = BASELINE_QSR
-        trigger_rate = BASELINE["sain_trigger_rate"]
+        trigger_rate = BASELINE["ai_trigger_rate"]
         p3_share = BASELINE["p3_click_share"]
         mean_rank_target = BASELINE["mean_clicked_rank"]
         exploratory_share = BASELINE["exploratory_share"]
     else:
-        target_dlctr = clamp(BASELINE["dlctr_mean"] + float(cfg["expected_dlctr_delta"]), 0.01, 0.95)
-        target_qsr = clamp(BASELINE_QSR + float(cfg["expected_qsr_delta"]), 0.01, 0.99)
+        target_dlctr = clamp(BASELINE["click_quality_mean"] + float(cfg["expected_click_quality_delta"]), 0.01, 0.95)
+        target_qsr = clamp(BASELINE_QSR + float(cfg["expected_search_quality_success_delta"]), 0.01, 0.99)
         trigger_rate = clamp(
-            BASELINE["sain_trigger_rate"] + float(cfg["sain_trigger_delta"]), 0.0, 1.0
+            BASELINE["ai_trigger_rate"] + float(cfg["ai_trigger_delta"]), 0.0, 1.0
         )
         p3_share = clamp(BASELINE["p3_click_share"] + float(cfg["p3_delta"]), 0.02, 0.98)
         mean_rank_target = clamp(BASELINE["mean_clicked_rank"] + float(cfg["rank_delta"]), 1.0, 10.0)
@@ -792,32 +792,32 @@ def generate_scenario_rows(
         if sid == "S4" and rng.random() < 0.15:
             query_class = "navigational"
 
-        # -- SAIN trigger/success --
+        # -- AI trigger/success --
         row_trigger_rate = trigger_rate
         row_success_prob = success_prob
 
-        # S12: LLM migration adjusts SAIN rates for ai_on tenants
+        # S12: LLM migration adjusts AI rates for ai_on tenants
         if enterprise_effect == "llm_migration":
-            trigger_mult, success_mult = get_s12_sain_adjustments(
+            trigger_mult, success_mult = get_s12_ai_adjustments(
                 dims["ai_enablement"], period
             )
             row_trigger_rate = clamp(trigger_rate * trigger_mult, 0.0, 1.0)
             row_success_prob = clamp(success_prob * success_mult, 0.0, 1.0)
 
-        sain_trigger = 1 if rng.random() < row_trigger_rate else 0
-        if sain_trigger:
-            sain_experience_type = rng.choice(["BOOKMARK", "PEOPLE_ENTITY_CARD", "NLQ_ANSWER"])
+        ai_trigger = 1 if rng.random() < row_trigger_rate else 0
+        if ai_trigger:
+            ai_experience_type = rng.choice(["BOOKMARK", "PEOPLE_ENTITY_CARD", "NLQ_ANSWER"])
         else:
-            sain_experience_type = "NONE"
-        sain_success = 1 if (sain_trigger and rng.random() < row_success_prob) else 0
-        sain_engaged = sain_success
+            ai_experience_type = "NONE"
+        ai_success = 1 if (ai_trigger and rng.random() < row_success_prob) else 0
+        ai_engaged = ai_success
 
         # -- Ranked results --
         ranked_results = build_ranked_results(sid, global_idx, p3_share, rng)
 
         # -- Click probability adjustments for enterprise scenarios --
 
-        # S9: Per-segment DLCTR varies by tier but stays constant across periods
+        # S9: Per-segment Click Quality varies by tier but stays constant across periods
         if enterprise_effect == "mix_shift":
             row_click_prob = click_prob_base * get_s9_click_prob_adjustment(dims["tenant_tier"])
 
@@ -868,10 +868,10 @@ def generate_scenario_rows(
                 "query_token": f"qt_{sid.lower()}_{global_idx}",
                 "query_class": query_class,
                 "seasonality_tag": seasonality_tag,
-                "sain_experience_type": sain_experience_type,
-                "sain_trigger": sain_trigger,
-                "sain_success": sain_success,
-                "sain_engaged": sain_engaged,
+                "ai_experience_type": ai_experience_type,
+                "ai_trigger": ai_trigger,
+                "ai_success": ai_success,
+                "ai_engaged": ai_engaged,
                 "ranked_results_json": json.dumps(ranked_results, separators=(",", ":")),
                 "clicked_rank": clicked_rank,
                 "clicked_doc_token": clicked_doc_token,
@@ -958,13 +958,13 @@ def generate_data(project_root: Path, output_dir: Path, rows_per_scenario: int, 
             if is_long_click:
                 dlctr_discount = discount(clicked_rank)
 
-        dlctr_value = dlctr_discount
-        sain_trigger = int(row["sain_trigger"])
-        sain_success = int(row["sain_success"])
-        qsr_component_click = dlctr_value
-        qsr_component_sain = float(sain_success * sain_trigger)
-        qsr_value = max(qsr_component_click, qsr_component_sain)
-        qsr_dominant = "DLCTR" if qsr_component_click >= qsr_component_sain else "SAIN"
+        click_quality_value = dlctr_discount
+        ai_trigger = int(row["ai_trigger"])
+        ai_success = int(row["ai_success"])
+        search_quality_success_component_click = click_quality_value
+        search_quality_success_component_ai = float(ai_success * ai_trigger)
+        search_quality_success_value = max(search_quality_success_component_click, search_quality_success_component_ai)
+        search_quality_success_dominant = "click_quality" if search_quality_success_component_click >= search_quality_success_component_ai else "ai_answer"
 
         sid = str(row["scenario_id"])
         if sid == "S8":
@@ -986,15 +986,15 @@ def generate_data(project_root: Path, output_dir: Path, rows_per_scenario: int, 
                 "session_id": row["session_id"],
                 "query_id": row["query_id"],
                 "metric_ts": row["event_ts"],
-                "dlctr_value": f"{dlctr_value:.6f}",
+                "click_quality_value": f"{click_quality_value:.6f}",
                 "is_long_click": is_long_click,
-                "dlctr_discount_weight": f"{dlctr_discount:.6f}",
-                "sain_trigger": sain_trigger,
-                "sain_success": sain_success,
-                "qsr_component_click": f"{qsr_component_click:.6f}",
-                "qsr_component_sain": f"{qsr_component_sain:.6f}",
-                "qsr_value": f"{qsr_value:.6f}",
-                "qsr_dominant_component": qsr_dominant,
+                "click_quality_discount_weight": f"{dlctr_discount:.6f}",
+                "ai_trigger": ai_trigger,
+                "ai_success": ai_success,
+                "search_quality_success_component_click": f"{search_quality_success_component_click:.6f}",
+                "search_quality_success_component_ai": f"{search_quality_success_component_ai:.6f}",
+                "search_quality_success_value": f"{search_quality_success_value:.6f}",
+                "search_quality_success_dominant_component": search_quality_success_dominant,
                 "p3_click_share": f"{p3_click_share:.6f}",
                 "mean_clicked_rank": mean_clicked_rank,
                 "clicked_flag": clicked_flag,
@@ -1030,7 +1030,7 @@ def generate_data(project_root: Path, output_dir: Path, rows_per_scenario: int, 
         "scenario_count": len(SCENARIOS),
         "session_rows": len(session_rows),
         "metric_rows": len(metric_rows),
-        "baseline_qsr_reference": round(BASELINE_QSR, 6),
+        "baseline_search_quality_success_reference": round(BASELINE_QSR, 6),
     }
     with (output_dir / "generation_summary.json").open("w") as f:
         json.dump(summary, f, indent=2)

@@ -23,7 +23,7 @@ class TestAggregateDelta:
     def test_computes_wow_delta(self, sample_metric_rows):
         baseline = [r for r in sample_metric_rows if r["period"] == "baseline"]
         current = [r for r in sample_metric_rows if r["period"] == "current"]
-        result = compute_aggregate_delta(baseline, current, "dlctr_value")
+        result = compute_aggregate_delta(baseline, current, "click_quality_value")
         assert result["baseline_mean"] == pytest.approx(0.280, abs=0.001)
         assert result["current_mean"] == pytest.approx(0.2625, abs=0.001)
         assert result["absolute_delta"] < 0
@@ -32,11 +32,11 @@ class TestAggregateDelta:
     def test_classifies_severity_p0(self, sample_metric_rows):
         baseline = [r for r in sample_metric_rows if r["period"] == "baseline"]
         current = [r for r in sample_metric_rows if r["period"] == "current"]
-        result = compute_aggregate_delta(baseline, current, "dlctr_value")
+        result = compute_aggregate_delta(baseline, current, "click_quality_value")
         assert result["severity"] == "P0"
 
     def test_empty_input_returns_error(self):
-        result = compute_aggregate_delta([], [], "dlctr_value")
+        result = compute_aggregate_delta([], [], "click_quality_value")
         assert result["error"] is not None
 
 
@@ -46,7 +46,7 @@ class TestDimensionalDecomposition:
     def test_decompose_by_tenant_tier(self, sample_metric_rows):
         baseline = [r for r in sample_metric_rows if r["period"] == "baseline"]
         current = [r for r in sample_metric_rows if r["period"] == "current"]
-        result = decompose_by_dimension(baseline, current, "dlctr_value", "tenant_tier")
+        result = decompose_by_dimension(baseline, current, "click_quality_value", "tenant_tier")
         assert len(result["segments"]) == 2
         standard = next(s for s in result["segments"] if s["segment_value"] == "standard")
         assert standard["delta"] < 0
@@ -56,7 +56,7 @@ class TestDimensionalDecomposition:
     def test_contribution_percentages_sum_to_near_100(self, sample_metric_rows):
         baseline = [r for r in sample_metric_rows if r["period"] == "baseline"]
         current = [r for r in sample_metric_rows if r["period"] == "current"]
-        result = decompose_by_dimension(baseline, current, "dlctr_value", "tenant_tier")
+        result = decompose_by_dimension(baseline, current, "click_quality_value", "tenant_tier")
         total_contribution = sum(s["contribution_pct"] for s in result["segments"])
         assert total_contribution == pytest.approx(100.0, abs=5.0)
 
@@ -67,14 +67,14 @@ class TestMixShift:
     def test_detects_mix_shift(self, sample_mix_shift_rows):
         baseline = [r for r in sample_mix_shift_rows if r["period"] == "baseline"]
         current = [r for r in sample_mix_shift_rows if r["period"] == "current"]
-        result = compute_mix_shift(baseline, current, "dlctr_value", "tenant_tier")
+        result = compute_mix_shift(baseline, current, "click_quality_value", "tenant_tier")
         assert result["mix_shift_contribution_pct"] > 50
         assert result["behavioral_contribution_pct"] < 50
 
     def test_no_mix_shift_when_composition_stable(self, sample_metric_rows):
         baseline = [r for r in sample_metric_rows if r["period"] == "baseline"]
         current = [r for r in sample_metric_rows if r["period"] == "current"]
-        result = compute_mix_shift(baseline, current, "dlctr_value", "tenant_tier")
+        result = compute_mix_shift(baseline, current, "click_quality_value", "tenant_tier")
         assert result["mix_shift_contribution_pct"] < 10
 
 
@@ -82,13 +82,13 @@ class TestRunDecomposition:
     """Test the full decomposition pipeline."""
 
     def test_returns_json_serializable(self, sample_metric_rows):
-        result = run_decomposition(sample_metric_rows, "dlctr_value",
+        result = run_decomposition(sample_metric_rows, "click_quality_value",
                                    dimensions=["tenant_tier"])
         json_str = json.dumps(result)
         assert json_str is not None
 
     def test_includes_aggregate_and_dimensions(self, sample_metric_rows):
-        result = run_decomposition(sample_metric_rows, "dlctr_value",
+        result = run_decomposition(sample_metric_rows, "click_quality_value",
                                    dimensions=["tenant_tier"])
         assert "aggregate" in result
         assert "dimensional_breakdown" in result
@@ -145,22 +145,22 @@ class TestAggregateDeltaEdgeCases:
 
     def test_only_baseline_rows_returns_error(self):
         """If current period has no data, we can't compute a delta."""
-        baseline = [{"dlctr_value": 0.280}]
-        result = compute_aggregate_delta(baseline, [], "dlctr_value")
+        baseline = [{"click_quality_value": 0.280}]
+        result = compute_aggregate_delta(baseline, [], "click_quality_value")
         assert result["error"] is not None
         assert "Empty" in result["error"]
 
     def test_only_current_rows_returns_error(self):
         """If baseline period has no data, we can't compute a delta."""
-        current = [{"dlctr_value": 0.245}]
-        result = compute_aggregate_delta([], current, "dlctr_value")
+        current = [{"click_quality_value": 0.245}]
+        result = compute_aggregate_delta([], current, "click_quality_value")
         assert result["error"] is not None
 
     def test_single_row_each_period(self):
         """Minimal valid input: one row per period."""
-        baseline = [{"dlctr_value": 0.300}]
-        current = [{"dlctr_value": 0.270}]
-        result = compute_aggregate_delta(baseline, current, "dlctr_value")
+        baseline = [{"click_quality_value": 0.300}]
+        current = [{"click_quality_value": 0.270}]
+        result = compute_aggregate_delta(baseline, current, "click_quality_value")
         assert result["error"] is None
         assert result["baseline_mean"] == pytest.approx(0.300)
         assert result["current_mean"] == pytest.approx(0.270)
@@ -168,8 +168,8 @@ class TestAggregateDeltaEdgeCases:
 
     def test_all_same_values_no_change(self):
         """When baseline and current are identical, delta should be zero."""
-        rows = [{"dlctr_value": 0.280} for _ in range(5)]
-        result = compute_aggregate_delta(rows, rows, "dlctr_value")
+        rows = [{"click_quality_value": 0.280} for _ in range(5)]
+        result = compute_aggregate_delta(rows, rows, "click_quality_value")
         assert result["absolute_delta"] == 0.0
         assert result["relative_delta_pct"] == 0.0
         assert result["direction"] == "stable"
@@ -188,35 +188,35 @@ class TestAggregateDeltaEdgeCases:
     def test_missing_metric_field_treated_as_zero(self):
         """If a row doesn't have the metric field, _safe_float returns 0.0.
         This means we get a delta comparing real values vs zeros."""
-        baseline = [{"dlctr_value": 0.280}]
-        current = [{"other_field": 0.280}]  # missing dlctr_value
-        result = compute_aggregate_delta(baseline, current, "dlctr_value")
+        baseline = [{"click_quality_value": 0.280}]
+        current = [{"other_field": 0.280}]  # missing click_quality_value
+        result = compute_aggregate_delta(baseline, current, "click_quality_value")
         # current_mean should be 0.0 because the field is missing
         assert result["current_mean"] == pytest.approx(0.0)
 
     def test_zero_baseline_mean_returns_error(self):
         """Can't compute relative delta when baseline mean is zero
         (division by zero). The function should return an error."""
-        baseline = [{"dlctr_value": 0.0}, {"dlctr_value": 0.0}]
-        current = [{"dlctr_value": 0.280}]
-        result = compute_aggregate_delta(baseline, current, "dlctr_value")
+        baseline = [{"click_quality_value": 0.0}, {"click_quality_value": 0.0}]
+        current = [{"click_quality_value": 0.280}]
+        result = compute_aggregate_delta(baseline, current, "click_quality_value")
         assert result["error"] is not None
         assert "zero" in result["error"].lower()
 
     def test_string_metric_values_from_csv(self):
         """CSV readers return strings. The function should handle them
         via _safe_float conversion."""
-        baseline = [{"dlctr_value": "0.300"}]
-        current = [{"dlctr_value": "0.270"}]
-        result = compute_aggregate_delta(baseline, current, "dlctr_value")
+        baseline = [{"click_quality_value": "0.300"}]
+        current = [{"click_quality_value": "0.270"}]
+        result = compute_aggregate_delta(baseline, current, "click_quality_value")
         assert result["error"] is None
         assert result["baseline_mean"] == pytest.approx(0.300)
 
     def test_upward_movement_direction(self):
         """When metric goes up, direction should be 'up'."""
-        baseline = [{"dlctr_value": 0.200}]
-        current = [{"dlctr_value": 0.300}]
-        result = compute_aggregate_delta(baseline, current, "dlctr_value")
+        baseline = [{"click_quality_value": 0.200}]
+        current = [{"click_quality_value": 0.300}]
+        result = compute_aggregate_delta(baseline, current, "click_quality_value")
         assert result["direction"] == "up"
 
     def test_counts_are_correct(self):
@@ -291,10 +291,10 @@ class TestDecompositionEdgeCases:
     def test_dimension_not_in_data_uses_unknown(self):
         """When rows don't have the requested dimension, all get grouped
         under 'unknown'."""
-        baseline = [{"dlctr_value": 0.280}] * 5
-        current = [{"dlctr_value": 0.250}] * 5
+        baseline = [{"click_quality_value": 0.280}] * 5
+        current = [{"click_quality_value": 0.250}] * 5
         result = decompose_by_dimension(
-            baseline, current, "dlctr_value", "nonexistent_dim"
+            baseline, current, "click_quality_value", "nonexistent_dim"
         )
         # All rows should be in the "unknown" segment
         assert len(result["segments"]) == 1
@@ -302,10 +302,10 @@ class TestDecompositionEdgeCases:
 
     def test_single_segment_gets_100_percent_contribution(self):
         """When there's only one segment value, it gets 100% contribution."""
-        baseline = [{"dlctr_value": 0.280, "tier": "standard"}] * 5
-        current = [{"dlctr_value": 0.250, "tier": "standard"}] * 5
+        baseline = [{"click_quality_value": 0.280, "tier": "standard"}] * 5
+        current = [{"click_quality_value": 0.250, "tier": "standard"}] * 5
         result = decompose_by_dimension(
-            baseline, current, "dlctr_value", "tier"
+            baseline, current, "click_quality_value", "tier"
         )
         assert len(result["segments"]) == 1
         assert result["segments"][0]["contribution_pct"] == pytest.approx(100.0, abs=0.1)
@@ -313,13 +313,13 @@ class TestDecompositionEdgeCases:
     def test_new_segment_in_current_only(self):
         """A segment that appears only in the current period (e.g., a new
         tenant tier) should still be included in the decomposition."""
-        baseline = [{"dlctr_value": 0.280, "tier": "standard"}] * 5
+        baseline = [{"click_quality_value": 0.280, "tier": "standard"}] * 5
         current = [
-            {"dlctr_value": 0.250, "tier": "standard"},
-            {"dlctr_value": 0.300, "tier": "new_tier"},
+            {"click_quality_value": 0.250, "tier": "standard"},
+            {"click_quality_value": 0.300, "tier": "new_tier"},
         ]
         result = decompose_by_dimension(
-            baseline, current, "dlctr_value", "tier"
+            baseline, current, "click_quality_value", "tier"
         )
         segment_values = [s["segment_value"] for s in result["segments"]]
         assert "new_tier" in segment_values
@@ -332,12 +332,12 @@ class TestDecompositionEdgeCases:
         """A segment that existed in baseline but is gone in current
         (e.g., tenant churned) should still be listed."""
         baseline = [
-            {"dlctr_value": 0.280, "tier": "standard"},
-            {"dlctr_value": 0.300, "tier": "churned"},
+            {"click_quality_value": 0.280, "tier": "standard"},
+            {"click_quality_value": 0.300, "tier": "churned"},
         ]
-        current = [{"dlctr_value": 0.280, "tier": "standard"}]
+        current = [{"click_quality_value": 0.280, "tier": "standard"}]
         result = decompose_by_dimension(
-            baseline, current, "dlctr_value", "tier"
+            baseline, current, "click_quality_value", "tier"
         )
         segment_values = [s["segment_value"] for s in result["segments"]]
         assert "churned" in segment_values
@@ -349,15 +349,15 @@ class TestDecompositionEdgeCases:
         """The dominant_segment field should match the segment with the
         largest absolute contribution."""
         baseline = [
-            {"dlctr_value": 0.280, "tier": "A"},
-            {"dlctr_value": 0.280, "tier": "B"},
+            {"click_quality_value": 0.280, "tier": "A"},
+            {"click_quality_value": 0.280, "tier": "B"},
         ]
         current = [
-            {"dlctr_value": 0.100, "tier": "A"},  # big drop
-            {"dlctr_value": 0.275, "tier": "B"},  # small drop
+            {"click_quality_value": 0.100, "tier": "A"},  # big drop
+            {"click_quality_value": 0.275, "tier": "B"},  # small drop
         ]
         result = decompose_by_dimension(
-            baseline, current, "dlctr_value", "tier"
+            baseline, current, "click_quality_value", "tier"
         )
         assert result["dominant_segment"] == "A"
 
@@ -365,16 +365,16 @@ class TestDecompositionEdgeCases:
         """When the overall delta is zero, all contribution_pct should be 0
         (can't divide by zero)."""
         baseline = [
-            {"dlctr_value": 0.280, "tier": "A"},
-            {"dlctr_value": 0.220, "tier": "B"},
+            {"click_quality_value": 0.280, "tier": "A"},
+            {"click_quality_value": 0.220, "tier": "B"},
         ]
         # Same aggregate mean as baseline, but different per-segment
         current = [
-            {"dlctr_value": 0.220, "tier": "A"},
-            {"dlctr_value": 0.280, "tier": "B"},
+            {"click_quality_value": 0.220, "tier": "A"},
+            {"click_quality_value": 0.280, "tier": "B"},
         ]
         result = decompose_by_dimension(
-            baseline, current, "dlctr_value", "tier"
+            baseline, current, "click_quality_value", "tier"
         )
         for seg in result["segments"]:
             assert seg["contribution_pct"] == 0.0
@@ -388,22 +388,22 @@ class TestMixShiftEdgeCases:
         each segment, the composition effect should be near zero."""
         # Same 50/50 split in both periods, but standard tier drops
         baseline = [
-            {"dlctr_value": 0.300, "tier": "A", "period": "baseline"},
-            {"dlctr_value": 0.300, "tier": "B", "period": "baseline"},
+            {"click_quality_value": 0.300, "tier": "A", "period": "baseline"},
+            {"click_quality_value": 0.300, "tier": "B", "period": "baseline"},
         ]
         current = [
-            {"dlctr_value": 0.200, "tier": "A", "period": "current"},
-            {"dlctr_value": 0.300, "tier": "B", "period": "current"},
+            {"click_quality_value": 0.200, "tier": "A", "period": "current"},
+            {"click_quality_value": 0.300, "tier": "B", "period": "current"},
         ]
-        result = compute_mix_shift(baseline, current, "dlctr_value", "tier")
+        result = compute_mix_shift(baseline, current, "click_quality_value", "tier")
         # Behavioral effect should dominate
         assert result["behavioral_contribution_pct"] > 90
 
     def test_no_change_at_all_returns_zeros(self):
         """When nothing changes (same composition, same metrics),
         total_effect should be ~0 and no flag is raised."""
-        rows = [{"dlctr_value": 0.280, "tier": "A"}] * 5
-        result = compute_mix_shift(rows, rows, "dlctr_value", "tier")
+        rows = [{"click_quality_value": 0.280, "tier": "A"}] * 5
+        result = compute_mix_shift(rows, rows, "click_quality_value", "tier")
         assert result["total_effect"] == 0.0
         assert result["flag"] is None
 
@@ -431,16 +431,16 @@ class TestMixShiftEdgeCases:
 
         # Known strong mix-shift (from the existing fixture)
         baseline = [
-            {"dlctr_value": 0.245, "tier": "standard"},
+            {"click_quality_value": 0.245, "tier": "standard"},
         ] * 10 + [
-            {"dlctr_value": 0.295, "tier": "premium"},
+            {"click_quality_value": 0.295, "tier": "premium"},
         ] * 10
         current = [
-            {"dlctr_value": 0.245, "tier": "standard"},
+            {"click_quality_value": 0.245, "tier": "standard"},
         ] * 14 + [
-            {"dlctr_value": 0.295, "tier": "premium"},
+            {"click_quality_value": 0.295, "tier": "premium"},
         ] * 6
-        result = compute_mix_shift(baseline, current, "dlctr_value", "tier")
+        result = compute_mix_shift(baseline, current, "click_quality_value", "tier")
         # This is pure mix-shift (no behavioral change), so flag should fire
         assert result["flag"] == "mix_shift_dominant"
         assert result["mix_shift_contribution_pct"] >= 30
@@ -449,16 +449,16 @@ class TestMixShiftEdgeCases:
         """Mix-shift below 30% should NOT raise the flag."""
         # Mostly behavioral change with tiny composition shift
         baseline = [
-            {"dlctr_value": 0.300, "tier": "A"},
+            {"click_quality_value": 0.300, "tier": "A"},
         ] * 10 + [
-            {"dlctr_value": 0.300, "tier": "B"},
+            {"click_quality_value": 0.300, "tier": "B"},
         ] * 10
         current = [
-            {"dlctr_value": 0.200, "tier": "A"},  # big behavioral drop
+            {"click_quality_value": 0.200, "tier": "A"},  # big behavioral drop
         ] * 9 + [
-            {"dlctr_value": 0.300, "tier": "B"},
+            {"click_quality_value": 0.300, "tier": "B"},
         ] * 11
-        result = compute_mix_shift(baseline, current, "dlctr_value", "tier")
+        result = compute_mix_shift(baseline, current, "click_quality_value", "tier")
         # The behavioral effect is large, mix-shift is small
         assert result["behavioral_contribution_pct"] > result["mix_shift_contribution_pct"]
         # For this scenario, mix-shift should be small (not dominant)
@@ -469,9 +469,9 @@ class TestMixShiftEdgeCases:
     def test_single_segment_means_no_mix_shift(self):
         """With only one segment, composition can't shift, so mix-shift
         should be zero and behavioral effect captures everything."""
-        baseline = [{"dlctr_value": 0.300, "tier": "only"}] * 5
-        current = [{"dlctr_value": 0.250, "tier": "only"}] * 5
-        result = compute_mix_shift(baseline, current, "dlctr_value", "tier")
+        baseline = [{"click_quality_value": 0.300, "tier": "only"}] * 5
+        current = [{"click_quality_value": 0.250, "tier": "only"}] * 5
+        result = compute_mix_shift(baseline, current, "click_quality_value", "tier")
         assert result["composition_effect"] == pytest.approx(0.0, abs=1e-6)
         assert result["behavioral_contribution_pct"] == pytest.approx(100.0, abs=0.1)
 
@@ -481,18 +481,18 @@ class TestRunDecompositionEdgeCases:
 
     def test_no_rows_matching_periods(self):
         """If no rows match the default period labels, aggregate should error."""
-        rows = [{"period": "week1", "dlctr_value": 0.280}]
-        result = run_decomposition(rows, "dlctr_value", dimensions=["tenant_tier"])
+        rows = [{"period": "week1", "click_quality_value": 0.280}]
+        result = run_decomposition(rows, "click_quality_value", dimensions=["tenant_tier"])
         assert result["aggregate"]["error"] is not None
 
     def test_custom_period_labels(self):
         """Non-default period labels should work when specified."""
         rows = [
-            {"week": "week1", "dlctr_value": 0.300, "tier": "A"},
-            {"week": "week2", "dlctr_value": 0.250, "tier": "A"},
+            {"week": "week1", "click_quality_value": 0.300, "tier": "A"},
+            {"week": "week2", "click_quality_value": 0.250, "tier": "A"},
         ]
         result = run_decomposition(
-            rows, "dlctr_value",
+            rows, "click_quality_value",
             dimensions=["tier"],
             baseline_period="week1",
             current_period="week2",
@@ -504,11 +504,11 @@ class TestRunDecompositionEdgeCases:
     def test_dimension_not_in_data_is_skipped(self):
         """Dimensions not present in ANY row should not appear in output."""
         rows = [
-            {"period": "baseline", "dlctr_value": 0.300, "tier": "A"},
-            {"period": "current", "dlctr_value": 0.250, "tier": "A"},
+            {"period": "baseline", "click_quality_value": 0.300, "tier": "A"},
+            {"period": "current", "click_quality_value": 0.250, "tier": "A"},
         ]
         result = run_decomposition(
-            rows, "dlctr_value",
+            rows, "click_quality_value",
             dimensions=["tier", "nonexistent_dimension"],
         )
         assert "tier" in result["dimensional_breakdown"]
@@ -520,12 +520,12 @@ class TestRunDecompositionEdgeCases:
         # Standard tier drops heavily, premium stays flat
         rows = []
         for _ in range(10):
-            rows.append({"period": "baseline", "dlctr_value": 0.280, "tier": "standard"})
-            rows.append({"period": "baseline", "dlctr_value": 0.280, "tier": "premium"})
+            rows.append({"period": "baseline", "click_quality_value": 0.280, "tier": "standard"})
+            rows.append({"period": "baseline", "click_quality_value": 0.280, "tier": "premium"})
         for _ in range(10):
-            rows.append({"period": "current", "dlctr_value": 0.200, "tier": "standard"})
-            rows.append({"period": "current", "dlctr_value": 0.280, "tier": "premium"})
-        result = run_decomposition(rows, "dlctr_value", dimensions=["tier"])
+            rows.append({"period": "current", "click_quality_value": 0.200, "tier": "standard"})
+            rows.append({"period": "current", "click_quality_value": 0.280, "tier": "premium"})
+        result = run_decomposition(rows, "click_quality_value", dimensions=["tier"])
         assert result["drill_down_recommended"] is True
 
     def test_drill_down_not_recommended_when_even_split(self):
@@ -533,12 +533,12 @@ class TestRunDecompositionEdgeCases:
         NOT be recommended (each segment contributes ~50%)."""
         rows = []
         for _ in range(10):
-            rows.append({"period": "baseline", "dlctr_value": 0.280, "tier": "A"})
-            rows.append({"period": "baseline", "dlctr_value": 0.280, "tier": "B"})
+            rows.append({"period": "baseline", "click_quality_value": 0.280, "tier": "A"})
+            rows.append({"period": "baseline", "click_quality_value": 0.280, "tier": "B"})
         for _ in range(10):
-            rows.append({"period": "current", "dlctr_value": 0.240, "tier": "A"})
-            rows.append({"period": "current", "dlctr_value": 0.240, "tier": "B"})
-        result = run_decomposition(rows, "dlctr_value", dimensions=["tier"])
+            rows.append({"period": "current", "click_quality_value": 0.240, "tier": "A"})
+            rows.append({"period": "current", "click_quality_value": 0.240, "tier": "B"})
+        result = run_decomposition(rows, "click_quality_value", dimensions=["tier"])
         # Both segments contribute equally (~50% each), so no single dominant
         assert result["drill_down_recommended"] is False
 
@@ -546,10 +546,10 @@ class TestRunDecompositionEdgeCases:
         """Passing an empty dimensions list should still return aggregate
         and mix_shift (empty), with no dimensional breakdown."""
         rows = [
-            {"period": "baseline", "dlctr_value": 0.300},
-            {"period": "current", "dlctr_value": 0.250},
+            {"period": "baseline", "click_quality_value": 0.300},
+            {"period": "current", "click_quality_value": 0.250},
         ]
-        result = run_decomposition(rows, "dlctr_value", dimensions=[])
+        result = run_decomposition(rows, "click_quality_value", dimensions=[])
         assert result["aggregate"]["error"] is None
         assert result["dimensional_breakdown"] == {}
         assert result["mix_shift"] == {}
@@ -560,15 +560,15 @@ class TestRunDecompositionEdgeCases:
         rows = []
         for _ in range(5):
             rows.append({
-                "period": "baseline", "dlctr_value": 0.280,
+                "period": "baseline", "click_quality_value": 0.280,
                 "tier": "standard", "region": "US",
             })
             rows.append({
-                "period": "current", "dlctr_value": 0.250,
+                "period": "current", "click_quality_value": 0.250,
                 "tier": "standard", "region": "US",
             })
         result = run_decomposition(
-            rows, "dlctr_value", dimensions=["tier", "region"]
+            rows, "click_quality_value", dimensions=["tier", "region"]
         )
         assert "tier" in result["dimensional_breakdown"]
         assert "region" in result["dimensional_breakdown"]
@@ -586,7 +586,7 @@ class TestDecomposeCLI:
     def csv_file(self, tmp_path):
         """Create a temporary CSV file with metric data for CLI testing."""
         csv_content = (
-            "period,dlctr_value,tenant_tier,ai_enablement\n"
+            "period,click_quality_value,tenant_tier,ai_enablement\n"
             "baseline,0.280,standard,ai_off\n"
             "baseline,0.280,standard,ai_off\n"
             "baseline,0.280,premium,ai_off\n"
@@ -605,7 +605,7 @@ class TestDecomposeCLI:
         result = subprocess.run(
             [sys.executable, "-m", "tools.decompose",
              "--input", str(csv_file),
-             "--metric", "dlctr_value",
+             "--metric", "click_quality_value",
              "--dimensions", "tenant_tier"],
             capture_output=True, text=True,
             cwd=str(Path(__file__).parent.parent),
@@ -620,7 +620,7 @@ class TestDecomposeCLI:
         result = subprocess.run(
             [sys.executable, "-m", "tools.decompose",
              "--input", str(tmp_path / "nonexistent.csv"),
-             "--metric", "dlctr_value"],
+             "--metric", "click_quality_value"],
             capture_output=True, text=True,
             cwd=str(Path(__file__).parent.parent),
         )
@@ -633,7 +633,7 @@ class TestDecomposeCLI:
         result = subprocess.run(
             [sys.executable, "-m", "tools.decompose",
              "--input", str(csv_file),
-             "--metric", "dlctr_value",
+             "--metric", "click_quality_value",
              "--dimensions", "tenant_tier,ai_enablement"],
             capture_output=True, text=True,
             cwd=str(Path(__file__).parent.parent),
@@ -648,7 +648,7 @@ class TestDecomposeCLI:
         result = subprocess.run(
             [sys.executable, "-m", "tools.decompose",
              "--input", str(csv_file),
-             "--metric", "dlctr_value",
+             "--metric", "click_quality_value",
              "--dimensions", "tenant_tier"],
             capture_output=True, text=True,
             cwd=str(Path(__file__).parent.parent),

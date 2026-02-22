@@ -15,24 +15,24 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 EXPECTED = {
-    "S0": {"label": "no_incident", "confidence": "low_or_higher", "dlctr": 0.000, "qsr": 0.000},
-    "S1": {"label": "seasonality_only", "confidence": "high", "dlctr": 0.000, "qsr": 0.000},
-    "S2": {"label": "seasonality_shock", "confidence": "medium_or_higher", "dlctr": -0.015, "qsr": -0.010},
-    "S3": {"label": "l3_interleaver_change", "confidence": "medium_or_higher", "dlctr": -0.006, "qsr": 0.004},
-    "S4": {"label": "l3_interleaver_regression", "confidence": "high", "dlctr": -0.035, "qsr": -0.022},
-    "S5": {"label": "sain_behavior_shift", "confidence": "medium_or_higher", "dlctr": -0.020, "qsr": 0.006},
-    "S6": {"label": "sain_regression", "confidence": "high", "dlctr": 0.000, "qsr": -0.030},
+    "S0": {"label": "no_incident", "confidence": "low_or_higher", "click_quality": 0.000, "search_quality_success": 0.000},
+    "S1": {"label": "seasonality_only", "confidence": "high", "click_quality": 0.000, "search_quality_success": 0.000},
+    "S2": {"label": "seasonality_shock", "confidence": "medium_or_higher", "click_quality": -0.015, "search_quality_success": -0.010},
+    "S3": {"label": "l3_interleaver_change", "confidence": "medium_or_higher", "click_quality": -0.006, "search_quality_success": 0.004},
+    "S4": {"label": "l3_interleaver_regression", "confidence": "high", "click_quality": -0.035, "search_quality_success": -0.022},
+    "S5": {"label": "ai_behavior_shift", "confidence": "medium_or_higher", "click_quality": -0.020, "search_quality_success": 0.006},
+    "S6": {"label": "ai_regression", "confidence": "high", "click_quality": 0.000, "search_quality_success": -0.030},
     "S7": {
         "label": "multi_candidate_unresolved_overlap",
         "confidence": "downgraded",
-        "dlctr": -0.045,
-        "qsr": -0.030,
+        "click_quality": -0.045,
+        "search_quality_success": -0.030,
     },
-    "S8": {"label": "blocked_by_data_quality", "confidence": "none", "dlctr": 0.000, "qsr": 0.000},
+    "S8": {"label": "blocked_by_data_quality", "confidence": "none", "click_quality": 0.000, "search_quality_success": 0.000},
 }
 
-ABS_TOL = {"dlctr": 0.006, "qsr": 0.008}
-REL_TOL = {"dlctr": 0.020, "qsr": 0.025}
+ABS_TOL = {"click_quality": 0.006, "search_quality_success": 0.008}
+REL_TOL = {"click_quality": 0.020, "search_quality_success": 0.025}
 
 
 def parse_args() -> argparse.Namespace:
@@ -84,10 +84,10 @@ def summarize(metrics: List[Dict[str, str]], sessions: List[Dict[str, str]]) -> 
         mrows = by_sid_metrics[sid]
         srows = by_sid_sessions.get(sid, [])
 
-        dlctr_vals = [to_float(r["dlctr_value"]) for r in mrows]
-        qsr_vals = [to_float(r["qsr_value"]) for r in mrows]
-        trig_vals = [to_float(r["sain_trigger"]) for r in mrows]
-        succ_vals = [to_float(r["sain_success"]) for r in mrows]
+        dlctr_vals = [to_float(r["click_quality_value"]) for r in mrows]
+        qsr_vals = [to_float(r["search_quality_success_value"]) for r in mrows]
+        trig_vals = [to_float(r["ai_trigger"]) for r in mrows]
+        succ_vals = [to_float(r["ai_success"]) for r in mrows]
 
         clicked_rows = [r for r in mrows if int(float(r.get("clicked_flag", "0") or 0)) == 1]
         p3_share = mean([to_float(r["p3_click_share"]) for r in clicked_rows]) if clicked_rows else 0.0
@@ -107,19 +107,19 @@ def summarize(metrics: List[Dict[str, str]], sessions: List[Dict[str, str]]) -> 
         has_l3_marker = any((r.get("experiment_id", "")).startswith("exp_l3") for r in srows)
         has_shock = any(r.get("seasonality_tag") == "holiday_shock" for r in srows)
 
-        weekday_dlctr: Dict[int, List[float]] = defaultdict(list)
+        weekday_click_quality: Dict[int, List[float]] = defaultdict(list)
         for r in mrows:
             ts = dt.datetime.fromisoformat(r["metric_ts"].replace("Z", "+00:00"))
-            weekday_dlctr[ts.weekday()].append(to_float(r["dlctr_value"]))
-        weekday_means = [mean(v) for v in weekday_dlctr.values() if v]
+            weekday_click_quality[ts.weekday()].append(to_float(r["click_quality_value"]))
+        weekday_means = [mean(v) for v in weekday_click_quality.values() if v]
         periodicity_index = (max(weekday_means) - min(weekday_means)) if weekday_means else 0.0
 
         summary[sid] = {
             "rows": len(mrows),
-            "dlctr": mean(dlctr_vals),
-            "qsr": mean(qsr_vals),
-            "sain_trigger": mean(trig_vals),
-            "sain_success": mean(succ_vals),
+            "click_quality": mean(dlctr_vals),
+            "search_quality_success": mean(qsr_vals),
+            "ai_trigger": mean(trig_vals),
+            "ai_success": mean(succ_vals),
             "p3_share": p3_share,
             "mean_rank": mean_rank,
             "freshness": freshness,
@@ -149,23 +149,23 @@ def predict_label(sid: str, obs: Dict[str, float | int | bool], deltas: Dict[str
         return "seasonality_shock"
 
     if (
-        deltas["sain_trigger"] > 0.06
-        and deltas["sain_success"] < 0.0
-        and deltas["qsr"] < -0.020
-        and deltas["dlctr"] > -0.010
+        deltas["ai_trigger"] > 0.06
+        and deltas["ai_success"] < 0.0
+        and deltas["search_quality_success"] < -0.020
+        and deltas["click_quality"] > -0.010
     ):
-        return "sain_regression"
+        return "ai_regression"
 
-    if deltas["sain_trigger"] > 0.06 and deltas["qsr"] >= 0.0 and deltas["dlctr"] < -0.01:
-        return "sain_behavior_shift"
+    if deltas["ai_trigger"] > 0.06 and deltas["search_quality_success"] >= 0.0 and deltas["click_quality"] < -0.01:
+        return "ai_behavior_shift"
 
-    if deltas["p3"] > 0.12 and deltas["dlctr"] < -0.02 and deltas["rank"] > 0.5:
+    if deltas["p3"] > 0.12 and deltas["click_quality"] < -0.02 and deltas["rank"] > 0.5:
         return "l3_interleaver_regression"
 
     if deltas["p3"] > 0.05:
         return "l3_interleaver_change"
 
-    if abs(deltas["dlctr"]) < 0.005 and abs(deltas["qsr"]) < 0.005:
+    if abs(deltas["click_quality"]) < 0.005 and abs(deltas["search_quality_success"]) < 0.005:
         return "no_incident"
 
     return "insufficient_evidence"
@@ -183,12 +183,12 @@ def compute_score(
     if bool(obs["gate_fail"]):
         return 0, "none", ["gate_fail"]
 
-    signature_score = 40 if signature_pass else 20 if abs(deltas["dlctr"]) < 0.02 else 0
+    signature_score = 40 if signature_pass else 20 if abs(deltas["click_quality"]) < 0.02 else 0
 
     cohort_score = 10
     if predicted_label.startswith("l3_") and deltas["p3"] > 0.05:
         cohort_score = 20
-    elif predicted_label.startswith("sain_") and abs(deltas["sain_trigger"]) > 0.05:
+    elif predicted_label.startswith("ai_") and abs(deltas["ai_trigger"]) > 0.05:
         cohort_score = 20
     elif predicted_label.startswith("seasonality") and (
         float(obs["periodicity_index"]) > 0.008 or bool(obs["has_shock"])
@@ -200,7 +200,7 @@ def compute_score(
         marker_score = 20
     elif predicted_label.startswith("seasonality") and (bool(obs["has_shock"]) or sid == "S1"):
         marker_score = 20
-    elif predicted_label.startswith("sain_") and sid in {"S5", "S6"}:
+    elif predicted_label.startswith("ai_") and sid in {"S5", "S6"}:
         marker_score = 20
 
     disconfirm_score = 10
@@ -208,7 +208,7 @@ def compute_score(
         disconfirm_score = 20
     elif predicted_label == "multi_candidate_unresolved_overlap" and bool(obs["has_shock"]) and bool(obs["has_l3_marker"]):
         disconfirm_score = 20
-    elif predicted_label == "no_incident" and abs(deltas["dlctr"]) < 0.005 and abs(deltas["qsr"]) < 0.005:
+    elif predicted_label == "no_incident" and abs(deltas["click_quality"]) < 0.005 and abs(deltas["search_quality_success"]) < 0.005:
         disconfirm_score = 20
 
     score = signature_score + cohort_score + marker_score + disconfirm_score
@@ -259,13 +259,13 @@ def run_validation(input_dir: Path, output_dir: Path) -> None:
     # Global formula invariant checks
     formula_violations = 0
     for r in metrics:
-        dlctr = to_float(r["dlctr_value"])
-        q_click = to_float(r["qsr_component_click"])
-        q_sain = to_float(r["qsr_component_sain"])
-        q = to_float(r["qsr_value"])
-        if abs(q_click - dlctr) > 1e-9:
+        click_quality = to_float(r["click_quality_value"])
+        q_click = to_float(r["search_quality_success_component_click"])
+        q_ai = to_float(r["search_quality_success_component_ai"])
+        q = to_float(r["search_quality_success_value"])
+        if abs(q_click - click_quality) > 1e-9:
             formula_violations += 1
-        if abs(q - max(dlctr, q_sain)) > 1e-9:
+        if abs(q - max(click_quality, q_ai)) > 1e-9:
             formula_violations += 1
 
     rows_out: List[Dict[str, str]] = []
@@ -273,18 +273,18 @@ def run_validation(input_dir: Path, output_dir: Path) -> None:
 
     for sid in sorted(summary.keys()):
         obs = summary[sid]
-        dlctr_delta_abs = float(obs["dlctr"]) - float(base["dlctr"])
-        qsr_delta_abs = float(obs["qsr"]) - float(base["qsr"])
-        dlctr_delta_rel = dlctr_delta_abs / max(1e-9, float(base["dlctr"]))
-        qsr_delta_rel = qsr_delta_abs / max(1e-9, float(base["qsr"]))
+        dlctr_delta_abs = float(obs["click_quality"]) - float(base["click_quality"])
+        qsr_delta_abs = float(obs["search_quality_success"]) - float(base["search_quality_success"])
+        dlctr_delta_rel = dlctr_delta_abs / max(1e-9, float(base["click_quality"]))
+        qsr_delta_rel = qsr_delta_abs / max(1e-9, float(base["search_quality_success"]))
 
         deltas = {
-            "dlctr": dlctr_delta_abs,
-            "qsr": qsr_delta_abs,
+            "click_quality": dlctr_delta_abs,
+            "search_quality_success": qsr_delta_abs,
             "p3": float(obs["p3_share"]) - float(base["p3_share"]),
             "rank": float(obs["mean_rank"]) - float(base["mean_rank"]),
-            "sain_trigger": float(obs["sain_trigger"]) - float(base["sain_trigger"]),
-            "sain_success": float(obs["sain_success"]) - float(base["sain_success"]),
+            "ai_trigger": float(obs["ai_trigger"]) - float(base["ai_trigger"]),
+            "ai_success": float(obs["ai_success"]) - float(base["ai_success"]),
         }
 
         expected = EXPECTED[sid]
@@ -296,17 +296,17 @@ def run_validation(input_dir: Path, output_dir: Path) -> None:
         elif sid == "S8":
             signature_pass = bool(obs["gate_fail"])
         else:
-            exp_dlctr = float(expected["dlctr"])
-            exp_qsr = float(expected["qsr"])
+            exp_dlctr = float(expected["click_quality"])
+            exp_qsr = float(expected["search_quality_success"])
 
             if sid == "S6":
-                dlctr_abs_ok = abs(dlctr_delta_abs - exp_dlctr) <= (0.005 + ABS_TOL["dlctr"])
+                dlctr_abs_ok = abs(dlctr_delta_abs - exp_dlctr) <= (0.005 + ABS_TOL["click_quality"])
             else:
-                dlctr_abs_ok = abs(dlctr_delta_abs - exp_dlctr) <= ABS_TOL["dlctr"]
+                dlctr_abs_ok = abs(dlctr_delta_abs - exp_dlctr) <= ABS_TOL["click_quality"]
 
-            qsr_abs_ok = abs(qsr_delta_abs - exp_qsr) <= ABS_TOL["qsr"]
-            dlctr_rel_ok = abs(dlctr_delta_rel - (exp_dlctr / max(1e-9, float(base["dlctr"])))) <= REL_TOL["dlctr"]
-            qsr_rel_ok = abs(qsr_delta_rel - (exp_qsr / max(1e-9, float(base["qsr"])))) <= REL_TOL["qsr"]
+            qsr_abs_ok = abs(qsr_delta_abs - exp_qsr) <= ABS_TOL["search_quality_success"]
+            dlctr_rel_ok = abs(dlctr_delta_rel - (exp_dlctr / max(1e-9, float(base["click_quality"])))) <= REL_TOL["click_quality"]
+            qsr_rel_ok = abs(qsr_delta_rel - (exp_qsr / max(1e-9, float(base["search_quality_success"])))) <= REL_TOL["search_quality_success"]
             signature_pass = dlctr_abs_ok and qsr_abs_ok and dlctr_rel_ok and qsr_rel_ok
 
         predicted = predict_label(sid, obs, deltas)

@@ -38,7 +38,7 @@ rubric:
         points: 10
       - description: "Decomposes by tenant_tier (the dimension that shifted)"
         points: 5
-      - description: "Verifies per-segment DLCTR is stable across periods"
+      - description: "Verifies per-segment Click Quality is stable across periods"
         points: 5
 
   actionability:
@@ -60,7 +60,7 @@ must_check_dimensions:
   - tenant_tier
 
 must_not_do:
-  - attribute_to_ranking: "No ranking model issue — per-segment DLCTR is stable"
+  - attribute_to_ranking: "No ranking model issue — per-segment Click Quality is stable"
   - attribute_to_connector: "No connector issue in this scenario"
   - recommend_quality_fix: "This requires portfolio management, not quality engineering"
   - miss_mix_shift: "Must detect that >=30% of movement is compositional"

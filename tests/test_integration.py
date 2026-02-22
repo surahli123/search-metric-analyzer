@@ -4,7 +4,7 @@
 This is the final quality gate before v1-alpha. It verifies that the full
 diagnostic pipeline works end-to-end for 3+ scenario types:
 
-1. Single-cause regression (standard tier DLCTR drop)
+1. Single-cause regression (standard tier Click Quality drop)
 2. Mix-shift composition change (no behavioral regression)
 3. False alarm / stable baseline (no significant movement)
 
@@ -30,7 +30,7 @@ from tools.formatter import format_diagnosis_output, generate_slack_message
 # ──────────────────────────────────────────────────
 # Scenario 1: Single-Cause Regression
 # Uses sample_metric_rows from conftest.py
-# Expected: DLCTR drop concentrated in standard tier
+# Expected: Click Quality drop concentrated in standard tier
 # ──────────────────────────────────────────────────
 
 class TestSingleCauseRegression:
@@ -40,7 +40,7 @@ class TestSingleCauseRegression:
         """End-to-end: decompose -> diagnose -> format -> output."""
         # Step 1: Decompose by tenant_tier
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         assert decomp["aggregate"]["error"] is None
@@ -59,7 +59,7 @@ class TestSingleCauseRegression:
     def test_identifies_standard_tier_as_dominant(self, sample_metric_rows):
         """The pipeline should find that standard tier drives the drop."""
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         diagnosis = run_diagnosis(decomposition=decomp)
@@ -74,7 +74,7 @@ class TestSingleCauseRegression:
     def test_confidence_is_not_low(self, sample_metric_rows):
         """Clean single-cause signal should not produce Low confidence."""
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         diagnosis = run_diagnosis(decomposition=decomp)
@@ -85,7 +85,7 @@ class TestSingleCauseRegression:
     def test_validation_checks_run(self, sample_metric_rows):
         """All 4 validation checks should be present in the output."""
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         diagnosis = run_diagnosis(decomposition=decomp)
@@ -103,7 +103,7 @@ class TestSingleCauseRegression:
     def test_action_items_not_empty(self, sample_metric_rows):
         """A real regression should produce at least one action item."""
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         diagnosis = run_diagnosis(decomposition=decomp)
@@ -113,7 +113,7 @@ class TestSingleCauseRegression:
     def test_output_is_json_serializable(self, sample_metric_rows):
         """Everything must be JSON-serializable for Claude Code to read."""
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         diagnosis = run_diagnosis(decomposition=decomp)
@@ -131,7 +131,7 @@ class TestSingleCauseRegression:
 # ──────────────────────────────────────────────────
 # Scenario 2: Mix-Shift (Composition Change)
 # Uses sample_mix_shift_rows from conftest.py
-# Expected: aggregate drops but per-segment DLCTR is stable
+# Expected: aggregate drops but per-segment Click Quality is stable
 # ──────────────────────────────────────────────────
 
 class TestMixShiftScenario:
@@ -140,14 +140,14 @@ class TestMixShiftScenario:
     def test_detects_mix_shift(self, sample_mix_shift_rows):
         """Mix-shift analysis should flag significant composition change."""
         decomp = run_decomposition(
-            sample_mix_shift_rows, "dlctr_value",
+            sample_mix_shift_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
 
         # Mix-shift should be detected
         mix_shift = decomp.get("mix_shift", {})
         mix_pct = mix_shift.get("mix_shift_contribution_pct", 0)
-        # In our fixture, per-segment DLCTR is identical between periods,
+        # In our fixture, per-segment Click Quality is identical between periods,
         # so 100% of the aggregate change is mix-shift
         assert mix_pct > 30, (
             f"Mix-shift should be >30% for pure composition change, got {mix_pct}%"
@@ -156,7 +156,7 @@ class TestMixShiftScenario:
     def test_mix_shift_check_flags_investigate(self, sample_mix_shift_rows):
         """Diagnosis should flag mix-shift for investigation."""
         decomp = run_decomposition(
-            sample_mix_shift_rows, "dlctr_value",
+            sample_mix_shift_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         diagnosis = run_diagnosis(decomposition=decomp)
@@ -174,7 +174,7 @@ class TestMixShiftScenario:
     def test_full_pipeline_with_mix_shift(self, sample_mix_shift_rows):
         """End-to-end pipeline should produce valid output for mix-shift."""
         decomp = run_decomposition(
-            sample_mix_shift_rows, "dlctr_value",
+            sample_mix_shift_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         diagnosis = run_diagnosis(decomposition=decomp)
@@ -199,7 +199,7 @@ class TestFalseAlarmScenario:
 
     @pytest.fixture
     def stable_rows(self):
-        """Rows where DLCTR is essentially flat between periods.
+        """Rows where Click Quality is essentially flat between periods.
 
         Tiny random variation (<0.5%) that should NOT trigger an alert.
         """
@@ -208,23 +208,23 @@ class TestFalseAlarmScenario:
             rows.append({
                 "period": "baseline",
                 "tenant_tier": "standard" if i % 2 == 0 else "premium",
-                "dlctr_value": 0.280,
-                "qsr_value": 0.378,
+                "click_quality_value": 0.280,
+                "search_quality_success_value": 0.378,
             })
         for i in range(20):
             # Tiny variation: 0.280 -> 0.279 (-0.36%), well within normal
             rows.append({
                 "period": "current",
                 "tenant_tier": "standard" if i % 2 == 0 else "premium",
-                "dlctr_value": 0.279,
-                "qsr_value": 0.377,
+                "click_quality_value": 0.279,
+                "search_quality_success_value": 0.377,
             })
         return rows
 
     def test_stable_metric_low_severity(self, stable_rows):
         """A flat metric should get low severity (P2 or normal)."""
         decomp = run_decomposition(
-            stable_rows, "dlctr_value",
+            stable_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
 
@@ -241,7 +241,7 @@ class TestFalseAlarmScenario:
     def test_full_pipeline_stable_produces_output(self, stable_rows):
         """Even for a non-event, the pipeline should produce valid output."""
         decomp = run_decomposition(
-            stable_rows, "dlctr_value",
+            stable_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         diagnosis = run_diagnosis(decomposition=decomp)
@@ -265,7 +265,7 @@ class TestAntiPatterns:
     def test_slack_message_has_tldr(self, sample_metric_rows):
         """Every Slack message must start with or contain a TL;DR."""
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         diagnosis = run_diagnosis(decomposition=decomp)
@@ -278,7 +278,7 @@ class TestAntiPatterns:
     def test_slack_message_not_too_long(self, sample_metric_rows):
         """Slack message should be 5-15 non-empty lines (scannable)."""
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         diagnosis = run_diagnosis(decomposition=decomp)
@@ -292,7 +292,7 @@ class TestAntiPatterns:
     def test_report_has_all_sections(self, sample_metric_rows):
         """Short report should contain all required sections."""
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         diagnosis = run_diagnosis(decomposition=decomp)
@@ -314,7 +314,7 @@ class TestAntiPatterns:
     def test_no_hedging_language(self, sample_metric_rows):
         """Output should not contain hedging anti-patterns."""
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         diagnosis = run_diagnosis(decomposition=decomp)
@@ -330,7 +330,7 @@ class TestAntiPatterns:
     def test_confidence_explicitly_stated(self, sample_metric_rows):
         """Output must state confidence level explicitly."""
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         diagnosis = run_diagnosis(decomposition=decomp)
@@ -351,7 +351,7 @@ class TestPipelineStageCompatibility:
     def test_decompose_output_feeds_into_diagnose(self, sample_metric_rows):
         """decompose output should be directly usable as diagnose input."""
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         # This should not raise — output format compatibility
@@ -362,7 +362,7 @@ class TestPipelineStageCompatibility:
     def test_diagnose_output_feeds_into_formatter(self, sample_metric_rows):
         """diagnose output should be directly usable as formatter input."""
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         diagnosis = run_diagnosis(decomposition=decomp)
@@ -374,7 +374,7 @@ class TestPipelineStageCompatibility:
     def test_multi_dimension_decomposition(self, sample_metric_rows):
         """Pipeline should work with multiple decomposition dimensions."""
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier", "ai_enablement"]
         )
         diagnosis = run_diagnosis(decomposition=decomp)
@@ -390,12 +390,12 @@ class TestPipelineStageCompatibility:
     def test_anomaly_detection_feeds_into_diagnose(self, sample_metric_rows):
         """anomaly.detect_step_change output feeds into diagnose as step_change_result."""
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
 
         # Run anomaly detection
-        values = [r["dlctr_value"] for r in sample_metric_rows]
+        values = [r["click_quality_value"] for r in sample_metric_rows]
         step_result = detect_step_change(values)
 
         # Feed both into diagnose

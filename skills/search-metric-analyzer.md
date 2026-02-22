@@ -2,11 +2,11 @@
 name: search-metric-analyzer
 description: >
   Diagnose Enterprise Search metric movements using a 4-step workflow.
-  Use when an Eng Lead or DS reports a metric drop/spike (DLCTR, QSR, SAIN, etc.).
+  Use when an Eng Lead or DS reports a metric drop/spike (Click Quality, Search Quality Success, AI Answer, etc.).
   Orchestrates Python analysis tools and domain knowledge to produce
   actionable Slack messages and short reports with confidence levels.
 trigger: >
-  User mentions metric drop, metric spike, DLCTR, QSR, SAIN, search quality,
+  User mentions metric drop, metric spike, Click Quality, Search Quality Success, AI Answer, search quality,
   metric investigation, metric debugging, search regression, zero-result rate,
   latency spike, or asks to diagnose a search metric movement.
 ---
@@ -55,7 +55,7 @@ Ask the user which mode they want. Default to **Standard** if not specified.
 ### 1a. Identify Inputs
 
 Extract from the user's description:
-- **Metric name** (e.g., DLCTR, QSR, SAIN trigger rate)
+- **Metric name** (e.g., Click Quality, Search Quality Success, AI trigger rate)
 - **Time period** (e.g., WoW, MoM, specific date range)
 - **Data file** path (CSV provided by the user)
 - **Operating mode** (Quick or Standard; default Standard)
@@ -91,14 +91,14 @@ Read the `aggregate` section of the JSON output. Extract:
 Check the directions of related metrics to narrow the hypothesis space:
 
 ```bash
-python3 tools/anomaly.py --input {data_file} --check co_movement --directions '{"dlctr":"{direction}","qsr":"{direction}","sain_trigger":"{direction}","sain_success":"{direction}","zero_result_rate":"{direction}","latency":"{direction}"}'
+python3 tools/anomaly.py --input {data_file} --check co_movement --directions '{"click_quality":"{direction}","search_quality_success":"{direction}","ai_trigger":"{direction}","ai_success":"{direction}","zero_result_rate":"{direction}","latency":"{direction}"}'
 ```
 
 Compare the observed pattern against the co-movement diagnostic table
 (encoded in `data/knowledge/metric_definitions.yaml`). Key patterns:
 
-| DLCTR | QSR | SAIN Trigger | SAIN Success | Zero-Result | Latency | Likely Cause |
-|-------|-----|-------------|-------------|-------------|---------|-------------|
+| Click Quality | Search Quality Success | AI Trigger | AI Success | Zero-Result | Latency | Likely Cause |
+|--------------|----------------------|------------|------------|-------------|---------|-------------|
 | down | down | stable | stable | stable | stable | Ranking/relevance regression |
 | down | stable/up | up | up | stable | stable | AI answers working (POSITIVE) |
 | down | down | down | down | stable | stable | Broad quality degradation |
@@ -263,7 +263,7 @@ Before presenting to the user, verify the output follows these rules:
 - **Data dump:** Many numbers without a narrative thread connecting them. Every number must serve the story.
 - **Hedge parade:** "It could be X, or maybe Y, or possibly Z" -- commit to a ranked hypothesis list with evidence.
 - **Orphaned recommendation:** "Further investigation needed" with no owner, no specific next step. Every action needs a who and a what.
-- **Passive voice root cause:** "The metric was impacted by changes" -- use active voice: "Ranking model regression in Standard tier caused the DLCTR drop."
+- **Passive voice root cause:** "The metric was impacted by changes" -- use active voice: "Ranking model regression in Standard tier caused the Click Quality drop."
 
 ### 4c. Quick Mode Output
 
@@ -285,17 +285,17 @@ For Standard mode, produce ALL of:
 
 ### AI Answer Adoption Effect (The "AI Answer Trap")
 
-If DLCTR dropped but `ai_answer_rate` increased in the `ai_on` cohort:
+If Click Quality dropped but `ai_answer_rate` increased in the `ai_on` cohort:
 
 1. **Label as "AI_ADOPTION_EFFECT"** -- this is a POSITIVE signal, not a regression
-2. **Slack tone:** "DLCTR decline reflects successful AI answer adoption -- users getting answers directly without needing to click through"
+2. **Slack tone:** "Click Quality decline reflects successful AI answer adoption -- users getting answers directly without needing to click through"
 3. **Do NOT treat as regression** -- do not recommend rollback or investigation of ranking quality
-4. **Check QSR:** If QSR is stable or up, this confirms the positive interpretation
+4. **Check Search Quality Success:** If Search Quality Success is stable or up, this confirms the positive interpretation
 5. **Report as intentional tradeoff:** "This is an expected metric movement from AI feature adoption"
 
 This is the most common misdiagnosis in Enterprise Search. Getting it wrong leads to
 rolling back a successful feature. Always check ai_enablement dimension first when
-DLCTR drops.
+Click Quality drops.
 
 ### Connector Outage (Fast Path)
 

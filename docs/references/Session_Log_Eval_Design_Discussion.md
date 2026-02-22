@@ -180,7 +180,7 @@ The YAML benchmarks tell you the *hands* work. The MVE tells you the *brain* wor
 
 You've converged on a clean design. Let me push on the one remaining mechanical question before we move to planning.
 
-A Layer 1.5 eval case means re-running an investigation against historical data that still exists in Databricks (partitioned by day). But the agent's entry point is a natural language question like "why did QSR drop the week of April 17?" — and the agent then freely chooses its hypotheses, SQL, and decomposition path.
+A Layer 1.5 eval case means re-running an investigation against historical data that still exists in Databricks (partitioned by day). But the agent's entry point is a natural language question like "why did Search Quality Success drop the week of April 17?" — and the agent then freely chooses its hypotheses, SQL, and decomposition path.
 
 This means each eval run costs real Databricks compute, real LLM tokens (sub-agent SQL + finding generation + LLM-as-judge scoring), and takes 1–5 minutes wall time. And the output is non-deterministic — the agent might choose different hypotheses or decomposition paths on successive runs of the same case.
 

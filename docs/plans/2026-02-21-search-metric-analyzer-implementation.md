@@ -64,9 +64,9 @@ Designed for a team of 2 Senior DSs debugging metric movements for Eng Leads.
 ## Domain
 Enterprise Search (like Glean). Key concepts:
 - Tenant tiers (standard/premium/enterprise), AI enablement, connector types
-- Metrics: DLCTR, QSR, SAIN trigger/success, zero-result rate, latency
-- QSR formula: max(click_component, sain_trigger * sain_success)
-- AI answers and DLCTR have INVERSE co-movement (more AI answers = fewer clicks = expected)
+- Metrics: Click Quality, Search Quality Success, AI trigger/success, zero-result rate, latency
+- Search Quality Success formula: max(click_component, ai_trigger * ai_success)
+- AI answers and Click Quality have INVERSE co-movement (more AI answers = fewer clicks = expected)
 
 ## Code Conventions
 - Python 3.10+, stdlib + PyYAML only
@@ -136,7 +136,7 @@ def sample_metric_rows():
     with Enterprise Search dimensions added.
     """
     # Baseline: 20 rows representing a "normal" period
-    # 10 rows for "current" period with a DLCTR drop in JP/Standard tier
+    # 10 rows for "current" period with a Click Quality drop in JP/Standard tier
     baseline_rows = []
     current_rows = []
 
@@ -150,10 +150,10 @@ def sample_metric_rows():
             "connector_type": "confluence",
             "query_type": "informational",
             "position_bucket": "1" if i % 3 == 0 else "3-5",
-            "dlctr_value": 0.280,
-            "qsr_value": 0.378,
-            "sain_trigger": 0.220,
-            "sain_success": 0.620,
+            "click_quality_value": 0.280,
+            "search_quality_success_value": 0.378,
+            "ai_trigger": 0.220,
+            "ai_success": 0.620,
             "zero_result": 0,
             "latency_ms": 200,
             "ai_answer_shown": 0,
@@ -161,7 +161,7 @@ def sample_metric_rows():
             "data_completeness": 0.995,
         })
 
-    # Current period: DLCTR drops for standard tier
+    # Current period: Click Quality drops for standard tier
     for i in range(20):
         is_standard = i % 2 == 0
         current_rows.append({
@@ -173,11 +173,11 @@ def sample_metric_rows():
             "connector_type": "confluence",
             "query_type": "informational",
             "position_bucket": "1" if i % 3 == 0 else "3-5",
-            # Standard tier DLCTR drops from 0.280 to 0.245 (-12.5%)
-            "dlctr_value": 0.245 if is_standard else 0.280,
-            "qsr_value": 0.340 if is_standard else 0.378,
-            "sain_trigger": 0.220,
-            "sain_success": 0.620,
+            # Standard tier Click Quality drops from 0.280 to 0.245 (-12.5%)
+            "click_quality_value": 0.245 if is_standard else 0.280,
+            "search_quality_success_value": 0.340 if is_standard else 0.378,
+            "ai_trigger": 0.220,
+            "ai_success": 0.620,
             "zero_result": 0,
             "latency_ms": 200,
             "ai_answer_shown": 0,
@@ -190,10 +190,10 @@ def sample_metric_rows():
 
 @pytest.fixture
 def sample_mix_shift_rows():
-    """Rows where aggregate DLCTR drops due to mix-shift, not behavioral change.
+    """Rows where aggregate Click Quality drops due to mix-shift, not behavioral change.
 
-    Baseline: 50% standard (DLCTR=0.245), 50% premium (DLCTR=0.295)
-    Current:  70% standard, 30% premium (same per-segment DLCTR, lower aggregate)
+    Baseline: 50% standard (Click Quality=0.245), 50% premium (Click Quality=0.295)
+    Current:  70% standard, 30% premium (same per-segment Click Quality, lower aggregate)
     """
     baseline = []
     current = []
@@ -203,16 +203,16 @@ def sample_mix_shift_rows():
         baseline.append({
             "period": "baseline",
             "tenant_tier": "standard",
-            "dlctr_value": 0.245,
-            "qsr_value": 0.340,
+            "click_quality_value": 0.245,
+            "search_quality_success_value": 0.340,
             "query_count": 100,
         })
     for i in range(10):
         baseline.append({
             "period": "baseline",
             "tenant_tier": "premium",
-            "dlctr_value": 0.295,
-            "qsr_value": 0.390,
+            "click_quality_value": 0.295,
+            "search_quality_success_value": 0.390,
             "query_count": 100,
         })
 
@@ -221,16 +221,16 @@ def sample_mix_shift_rows():
         current.append({
             "period": "current",
             "tenant_tier": "standard",
-            "dlctr_value": 0.245,
-            "qsr_value": 0.340,
+            "click_quality_value": 0.245,
+            "search_quality_success_value": 0.340,
             "query_count": 100,
         })
     for i in range(6):
         current.append({
             "period": "current",
             "tenant_tier": "premium",
-            "dlctr_value": 0.295,
-            "qsr_value": 0.390,
+            "click_quality_value": 0.295,
+            "search_quality_success_value": 0.390,
             "query_count": 100,
         })
 
@@ -297,21 +297,21 @@ class TestMetricDefinitions:
         assert "metrics" in self.defs
 
     def test_core_metrics_present(self):
-        """DLCTR, QSR, and SAIN must all be defined."""
+        """Click Quality, Search Quality Success, and AI Answer must all be defined."""
         metrics = self.defs["metrics"]
-        for name in ["dlctr", "qsr", "sain_trigger_rate", "sain_success_rate"]:
+        for name in ["click_quality", "search_quality_success", "ai_trigger_rate", "ai_success_rate"]:
             assert name in metrics, f"Missing core metric: {name}"
 
-    def test_dlctr_has_required_fields(self):
-        dlctr = self.defs["metrics"]["dlctr"]
+    def test_click_quality_has_required_fields(self):
+        click_quality = self.defs["metrics"]["click_quality"]
         required = ["full_name", "formula", "decomposition_dimensions",
                      "normal_range", "co_movements", "alert_thresholds"]
         for field in required:
-            assert field in dlctr, f"DLCTR missing field: {field}"
+            assert field in click_quality, f"Click Quality missing field: {field}"
 
     def test_enterprise_dimensions_present(self):
         """Enterprise Search requires tenant_tier, ai_enablement, industry, connector."""
-        dims = self.defs["metrics"]["dlctr"]["decomposition_dimensions"]
+        dims = self.defs["metrics"]["click_quality"]["decomposition_dimensions"]
         enterprise_dims = ["tenant_tier", "ai_enablement", "industry_vertical", "connector_type"]
         for dim in enterprise_dims:
             assert dim in dims, f"Missing Enterprise dimension: {dim}"
@@ -326,8 +326,8 @@ class TestMetricDefinitions:
 
     def test_segment_baselines_exist(self):
         """Different baselines per segment (ai_on vs ai_off, tier differences)."""
-        dlctr = self.defs["metrics"]["dlctr"]
-        assert "baseline_by_segment" in dlctr
+        click_quality = self.defs["metrics"]["click_quality"]
+        assert "baseline_by_segment" in click_quality
 
 
 class TestHistoricalPatterns:
@@ -377,8 +377,8 @@ Expected: FAIL (YAML files don't exist yet)
 # This file is the "feature store" for the diagnostic workflow.
 
 metrics:
-  dlctr:
-    full_name: "Discounted Long Click-Through Rate"
+  click_quality:
+    full_name: "Click Quality"
     formula: "sum(long_clicks * log2_discount(rank)) / impressions"
     description: >
       Primary click quality metric. Measures whether users find and engage
@@ -402,7 +402,7 @@ metrics:
     baseline_by_segment:
       ai_on:
         mean: 0.220
-        notes: "Lower DLCTR expected — users get AI answers without clicking. This is GOOD."
+        notes: "Lower Click Quality expected — users get AI answers without clicking. This is GOOD."
       ai_off:
         mean: 0.310
       enterprise_tier:
@@ -414,7 +414,7 @@ metrics:
         mean: 0.245
         notes: "Fewer connectors, sparser index"
     co_movements:
-      - metric: qsr
+      - metric: search_quality_success
         expected_direction: same
         lag_days: 0
       - metric: ai_answer_rate
@@ -432,17 +432,17 @@ metrics:
       p1: 0.02    # 2-5% — significant
       p2: 0.005   # 0.5-2% — minor
 
-  qsr:
-    full_name: "Query Success Rate"
-    formula: "max(qsr_component_click, sain_trigger * sain_success)"
+  search_quality_success:
+    full_name: "Search Quality Success"
+    formula: "max(search_quality_success_component_click, ai_trigger * ai_success)"
     description: >
       Composite metric combining click quality and AI answer quality.
       A query is "successful" if the user either clicked a good result
       OR got a satisfying AI answer.
     components:
-      - qsr_component_click    # equals dlctr
-      - sain_trigger_rate
-      - sain_success_rate
+      - search_quality_success_component_click    # equals click_quality
+      - ai_trigger_rate
+      - ai_success_rate
     decomposition_dimensions:
       - tenant_tier
       - ai_enablement
@@ -457,8 +457,8 @@ metrics:
       p1: 0.015
       p2: 0.005
 
-  sain_trigger_rate:
-    full_name: "SAIN (Search AI Answer) Trigger Rate"
+  ai_trigger_rate:
+    full_name: "AI Trigger Rate"
     formula: "queries_with_ai_answer_triggered / total_queries"
     description: >
       How often the AI answer system decides to show an answer.
@@ -472,8 +472,8 @@ metrics:
       mean: 0.220
       weekly_std: 0.010
 
-  sain_success_rate:
-    full_name: "SAIN (Search AI Answer) Success Rate"
+  ai_success_rate:
+    full_name: "AI Success Rate"
     formula: "ai_answers_marked_helpful / ai_answers_triggered"
     description: >
       Of AI answers shown, how many were helpful. A drop means AI answers
@@ -514,10 +514,10 @@ metrics:
 
 co_movement_diagnostic_table:
   - pattern:
-      dlctr: down
-      qsr: down
-      sain_trigger: stable
-      sain_success: stable
+      click_quality: down
+      search_quality_success: down
+      ai_trigger: stable
+      ai_success: stable
       zero_result_rate: stable
       latency: stable
     likely_cause: "ranking_relevance_regression"
@@ -525,10 +525,10 @@ co_movement_diagnostic_table:
     priority_hypotheses: [algorithm_model, experiment]
 
   - pattern:
-      dlctr: down
-      qsr: stable_or_up
-      sain_trigger: up
-      sain_success: up
+      click_quality: down
+      search_quality_success: stable_or_up
+      ai_trigger: up
+      ai_success: up
       zero_result_rate: stable
       latency: stable
     likely_cause: "ai_answers_working"
@@ -539,10 +539,10 @@ co_movement_diagnostic_table:
     is_positive: true
 
   - pattern:
-      dlctr: down
-      qsr: down
-      sain_trigger: down
-      sain_success: down
+      click_quality: down
+      search_quality_success: down
+      ai_trigger: down
+      ai_success: down
       zero_result_rate: stable
       latency: stable
     likely_cause: "broad_quality_degradation"
@@ -550,21 +550,21 @@ co_movement_diagnostic_table:
     priority_hypotheses: [algorithm_model, experiment, connector]
 
   - pattern:
-      dlctr: down
-      qsr: down
-      sain_trigger: stable
-      sain_success: down
+      click_quality: down
+      search_quality_success: down
+      ai_trigger: stable
+      ai_success: down
       zero_result_rate: stable
       latency: stable
-    likely_cause: "sain_quality_regression"
+    likely_cause: "ai_quality_regression"
     description: "AI answers triggering normally but failing to satisfy. Check AI model."
     priority_hypotheses: [ai_feature_effect, algorithm_model]
 
   - pattern:
-      dlctr: down
-      qsr: down
-      sain_trigger: stable
-      sain_success: stable
+      click_quality: down
+      search_quality_success: down
+      ai_trigger: stable
+      ai_success: stable
       zero_result_rate: up
       latency: stable
     likely_cause: "connector_outage_or_index_gap"
@@ -572,10 +572,10 @@ co_movement_diagnostic_table:
     priority_hypotheses: [connector, instrumentation]
 
   - pattern:
-      dlctr: down
-      qsr: down
-      sain_trigger: stable
-      sain_success: stable
+      click_quality: down
+      search_quality_success: down
+      ai_trigger: stable
+      ai_success: stable
       zero_result_rate: stable
       latency: up
     likely_cause: "serving_degradation"
@@ -583,10 +583,10 @@ co_movement_diagnostic_table:
     priority_hypotheses: [instrumentation, algorithm_model]
 
   - pattern:
-      dlctr: down
-      qsr: stable
-      sain_trigger: stable
-      sain_success: stable
+      click_quality: down
+      search_quality_success: stable
+      ai_trigger: stable
+      ai_success: stable
       zero_result_rate: stable
       latency: stable
     likely_cause: "click_behavior_change"
@@ -594,24 +594,24 @@ co_movement_diagnostic_table:
     priority_hypotheses: [user_behavior, ai_feature_effect]
 
   - pattern:
-      dlctr: stable
-      qsr: down
-      sain_trigger: down
-      sain_success: stable
+      click_quality: stable
+      search_quality_success: down
+      ai_trigger: down
+      ai_success: stable
       zero_result_rate: stable
       latency: stable
-    likely_cause: "sain_trigger_regression"
+    likely_cause: "ai_trigger_regression"
     description: "AI answers not surfacing when they should. Check trigger threshold/model."
     priority_hypotheses: [ai_feature_effect]
 
   - pattern:
-      dlctr: stable
-      qsr: down
-      sain_trigger: stable
-      sain_success: down
+      click_quality: stable
+      search_quality_success: down
+      ai_trigger: stable
+      ai_success: down
       zero_result_rate: stable
       latency: stable
-    likely_cause: "sain_success_regression"
+    likely_cause: "ai_success_regression"
     description: "AI answers surfacing but wrong. Check answer quality model."
     priority_hypotheses: [ai_feature_effect, algorithm_model]
 
@@ -658,8 +658,8 @@ seasonal_patterns:
   - name: "Enterprise Onboarding Wave"
     trigger: "Large tenant batch onboarding"
     typical_impact:
-      dlctr: [-0.02, -0.04]
-      qsr: [-0.01, -0.02]
+      click_quality: [-0.02, -0.04]
+      search_quality_success: [-0.01, -0.02]
     mechanism: >
       New tenants have sparse indexes (few connectors configured),
       dragging down aggregate metrics via mix-shift.
@@ -672,12 +672,12 @@ seasonal_patterns:
   - name: "AI Feature Batch Rollout"
     trigger: "Batch AI enablement for tenant cohort"
     typical_impact:
-      dlctr: [-0.02, -0.04]
+      click_quality: [-0.02, -0.04]
       ai_answer_rate: [+0.10, +0.20]
-      qsr: [+0.005, +0.015]
+      search_quality_success: [+0.005, +0.015]
     mechanism: >
       Users get direct AI answers instead of clicking through to documents.
-      DLCTR drops but QSR may improve. This is SUCCESS, not failure.
+      Click Quality drops but Search Quality Success may improve. This is SUCCESS, not failure.
     key_check: >
       Always segment by ai_enablement. If drop is entirely in ai_on cohort
       AND ai_answer_rate increased, this is a positive signal.
@@ -686,7 +686,7 @@ seasonal_patterns:
   - name: "Connector Outage Pattern"
     trigger: "Third-party connector service degradation"
     typical_impact:
-      dlctr: [-0.02, -0.08]
+      click_quality: [-0.02, -0.08]
       zero_result_rate: [+0.02, +0.10]
     mechanism: >
       If a connector goes down, queries needing that source return
@@ -700,7 +700,7 @@ seasonal_patterns:
     trigger: "Enterprise end-of-quarter (finance, compliance searches)"
     typical_impact:
       query_volume: [+0.15, +0.30]
-      dlctr: [-0.005, -0.015]
+      click_quality: [-0.005, -0.015]
     mechanism: >
       Quarter-end drives finance/compliance/strategy searches.
       These tend to be more exploratory, lower click-through.
@@ -711,16 +711,16 @@ seasonal_patterns:
     trigger: "Normal weekly usage pattern"
     typical_impact:
       query_volume: [-0.30, -0.50]
-      dlctr: [+0.01, +0.02]
+      click_quality: [+0.01, +0.02]
     mechanism: >
       Weekend has fewer queries, skewed toward power users who click more.
-      Apparent DLCTR increase is mix-shift, not quality improvement.
+      Apparent Click Quality increase is mix-shift, not quality improvement.
     key_check: "Always compare same day-of-week (WoW), not consecutive days."
 
 known_incidents:
   - date: "2025-11-15"
     type: "logging_anomaly"
-    affected_metrics: [dlctr, qsr]
+    affected_metrics: [click_quality, search_quality_success]
     impact: -0.04
     root_cause: "Click tracking pipeline migration dropped 8% of events"
     resolution: "Pipeline rollback + backfill"
@@ -732,7 +732,7 @@ known_incidents:
 
   - date: "2025-09-22"
     type: "connector_outage"
-    affected_metrics: [dlctr, zero_result_rate]
+    affected_metrics: [click_quality, zero_result_rate]
     impact: -0.03
     root_cause: "Confluence API rate limiting during large customer migration"
     resolution: "Rate limit increase + backfill"
@@ -743,7 +743,7 @@ known_incidents:
 
   - date: "2025-08-10"
     type: "model_regression"
-    affected_metrics: [dlctr, qsr]
+    affected_metrics: [click_quality, search_quality_success]
     impact: -0.025
     root_cause: "L3 ranker retraining introduced position bias for tail queries"
     resolution: "Model rollback to previous version"
@@ -818,7 +818,7 @@ class TestAggregateDelta:
     def test_computes_wow_delta(self, sample_metric_rows):
         baseline = [r for r in sample_metric_rows if r["period"] == "baseline"]
         current = [r for r in sample_metric_rows if r["period"] == "current"]
-        result = compute_aggregate_delta(baseline, current, "dlctr_value")
+        result = compute_aggregate_delta(baseline, current, "click_quality_value")
         # Baseline: all 0.280, Current: half at 0.245 + half at 0.280 = avg 0.2625
         assert result["baseline_mean"] == pytest.approx(0.280, abs=0.001)
         assert result["current_mean"] == pytest.approx(0.2625, abs=0.001)
@@ -828,12 +828,12 @@ class TestAggregateDelta:
     def test_classifies_severity_p1(self, sample_metric_rows):
         baseline = [r for r in sample_metric_rows if r["period"] == "baseline"]
         current = [r for r in sample_metric_rows if r["period"] == "current"]
-        result = compute_aggregate_delta(baseline, current, "dlctr_value")
+        result = compute_aggregate_delta(baseline, current, "click_quality_value")
         # 6.25% drop → P0 (>5%)
         assert result["severity"] == "P0"
 
     def test_empty_input_returns_error(self):
-        result = compute_aggregate_delta([], [], "dlctr_value")
+        result = compute_aggregate_delta([], [], "click_quality_value")
         assert result["error"] is not None
 
 
@@ -843,7 +843,7 @@ class TestDimensionalDecomposition:
     def test_decompose_by_tenant_tier(self, sample_metric_rows):
         baseline = [r for r in sample_metric_rows if r["period"] == "baseline"]
         current = [r for r in sample_metric_rows if r["period"] == "current"]
-        result = decompose_by_dimension(baseline, current, "dlctr_value", "tenant_tier")
+        result = decompose_by_dimension(baseline, current, "click_quality_value", "tenant_tier")
 
         # Should have two segments: standard and premium
         assert len(result["segments"]) == 2
@@ -859,7 +859,7 @@ class TestDimensionalDecomposition:
     def test_contribution_percentages_sum_to_near_100(self, sample_metric_rows):
         baseline = [r for r in sample_metric_rows if r["period"] == "baseline"]
         current = [r for r in sample_metric_rows if r["period"] == "current"]
-        result = decompose_by_dimension(baseline, current, "dlctr_value", "tenant_tier")
+        result = decompose_by_dimension(baseline, current, "click_quality_value", "tenant_tier")
         total_contribution = sum(s["contribution_pct"] for s in result["segments"])
         assert total_contribution == pytest.approx(100.0, abs=5.0)
 
@@ -870,16 +870,16 @@ class TestMixShift:
     def test_detects_mix_shift(self, sample_mix_shift_rows):
         baseline = [r for r in sample_mix_shift_rows if r["period"] == "baseline"]
         current = [r for r in sample_mix_shift_rows if r["period"] == "current"]
-        result = compute_mix_shift(baseline, current, "dlctr_value", "tenant_tier")
+        result = compute_mix_shift(baseline, current, "click_quality_value", "tenant_tier")
 
-        # Per-segment DLCTR is unchanged, but aggregate drops due to more standard tier
+        # Per-segment Click Quality is unchanged, but aggregate drops due to more standard tier
         assert result["mix_shift_contribution_pct"] > 50  # majority is mix-shift
         assert result["behavioral_contribution_pct"] < 50
 
     def test_no_mix_shift_when_composition_stable(self, sample_metric_rows):
         baseline = [r for r in sample_metric_rows if r["period"] == "baseline"]
         current = [r for r in sample_metric_rows if r["period"] == "current"]
-        result = compute_mix_shift(baseline, current, "dlctr_value", "tenant_tier")
+        result = compute_mix_shift(baseline, current, "click_quality_value", "tenant_tier")
 
         # Composition is 50/50 in both periods → no mix shift
         assert result["mix_shift_contribution_pct"] < 10
@@ -889,14 +889,14 @@ class TestRunDecomposition:
     """Test the full decomposition pipeline."""
 
     def test_returns_json_serializable(self, sample_metric_rows):
-        result = run_decomposition(sample_metric_rows, "dlctr_value",
+        result = run_decomposition(sample_metric_rows, "click_quality_value",
                                    dimensions=["tenant_tier"])
         # Should be JSON-serializable (Claude Code reads JSON output)
         json_str = json.dumps(result)
         assert json_str is not None
 
     def test_includes_aggregate_and_dimensions(self, sample_metric_rows):
-        result = run_decomposition(sample_metric_rows, "dlctr_value",
+        result = run_decomposition(sample_metric_rows, "click_quality_value",
                                    dimensions=["tenant_tier"])
         assert "aggregate" in result
         assert "dimensional_breakdown" in result
@@ -919,11 +919,11 @@ separates behavioral changes (actual quality change) from mix-shift
 (population composition change).
 
 Usage (CLI):
-    python tools/decompose.py --input data.csv --metric dlctr_value --dimensions tenant_tier,ai_enablement
+    python tools/decompose.py --input data.csv --metric click_quality_value --dimensions tenant_tier,ai_enablement
 
 Usage (from Python):
     from tools.decompose import run_decomposition
-    result = run_decomposition(rows, "dlctr_value", dimensions=["tenant_tier"])
+    result = run_decomposition(rows, "click_quality_value", dimensions=["tenant_tier"])
 
 Output: JSON to stdout (Claude Code reads this).
 """
@@ -988,12 +988,12 @@ def compute_aggregate_delta(
 ) -> Dict[str, Any]:
     """Compute the headline metric movement between two periods.
 
-    This is the first thing we check: "DLCTR dropped X% WoW."
+    This is the first thing we check: "Click Quality dropped X% WoW."
 
     Args:
         baseline_rows: Rows from the comparison period (e.g., last week)
         current_rows: Rows from the current period
-        metric_field: Which field to analyze (e.g., "dlctr_value")
+        metric_field: Which field to analyze (e.g., "click_quality_value")
 
     Returns:
         Dict with baseline_mean, current_mean, absolute_delta,
@@ -1271,7 +1271,7 @@ def parse_args() -> argparse.Namespace:
         description="Decompose a metric movement by dimensions and detect mix-shift"
     )
     parser.add_argument("--input", required=True, help="Path to CSV file with metric data")
-    parser.add_argument("--metric", required=True, help="Metric column to analyze (e.g., dlctr_value)")
+    parser.add_argument("--metric", required=True, help="Metric column to analyze (e.g., click_quality_value)")
     parser.add_argument("--dimensions", default="tenant_tier,ai_enablement,query_type",
                         help="Comma-separated dimensions to decompose by")
     parser.add_argument("--baseline-period", default="baseline",
@@ -1399,8 +1399,8 @@ class TestCoMovementPattern:
 
     def test_matches_ranking_regression(self):
         observed = {
-            "dlctr": "down", "qsr": "down",
-            "sain_trigger": "stable", "sain_success": "stable",
+            "click_quality": "down", "search_quality_success": "down",
+            "ai_trigger": "stable", "ai_success": "stable",
             "zero_result_rate": "stable", "latency": "stable",
         }
         result = match_co_movement_pattern(observed)
@@ -1408,8 +1408,8 @@ class TestCoMovementPattern:
 
     def test_matches_ai_answers_working(self):
         observed = {
-            "dlctr": "down", "qsr": "stable_or_up",
-            "sain_trigger": "up", "sain_success": "up",
+            "click_quality": "down", "search_quality_success": "stable_or_up",
+            "ai_trigger": "up", "ai_success": "up",
             "zero_result_rate": "stable", "latency": "stable",
         }
         result = match_co_movement_pattern(observed)
@@ -1418,8 +1418,8 @@ class TestCoMovementPattern:
 
     def test_no_match_returns_unknown(self):
         observed = {
-            "dlctr": "up", "qsr": "up",
-            "sain_trigger": "up", "sain_success": "up",
+            "click_quality": "up", "search_quality_success": "up",
+            "ai_trigger": "up", "ai_success": "up",
             "zero_result_rate": "up", "latency": "up",
         }
         result = match_co_movement_pattern(observed)
@@ -1431,14 +1431,14 @@ class TestBaselineComparison:
 
     def test_within_normal_range(self):
         result = check_against_baseline(
-            current_value=0.278, metric_name="dlctr",
+            current_value=0.278, metric_name="click_quality",
             segment=None, baselines={"mean": 0.280, "weekly_std": 0.015}
         )
         assert result["status"] == "normal"
 
     def test_outside_normal_range(self):
         result = check_against_baseline(
-            current_value=0.220, metric_name="dlctr",
+            current_value=0.220, metric_name="click_quality",
             segment=None, baselines={"mean": 0.280, "weekly_std": 0.015}
         )
         assert result["status"] == "anomalous"
@@ -1458,7 +1458,7 @@ Create `tools/anomaly.py` implementing the four functions tested above:
 - `match_co_movement_pattern()` — match observed metric directions against the co-movement diagnostic table (loaded from YAML)
 - `check_against_baseline()` — z-score comparison against known segment baselines
 
-Include CLI interface: `python tools/anomaly.py --input data.csv --metric dlctr_value`
+Include CLI interface: `python tools/anomaly.py --input data.csv --metric click_quality_value`
 
 **Step 4: Run tests to verify they pass**
 
@@ -1666,7 +1666,7 @@ from tools.formatter import (
 # Sample diagnosis result (as would come from diagnose.py)
 SAMPLE_DIAGNOSIS = {
     "aggregate": {
-        "metric": "dlctr_value",
+        "metric": "click_quality_value",
         "baseline_mean": 0.280,
         "current_mean": 0.2625,
         "relative_delta_pct": -6.25,
@@ -1965,9 +1965,9 @@ The skill file encodes the 4-step diagnostic methodology that Claude Code follow
 name: search-metric-analyzer
 description: >
   Diagnose Enterprise Search metric movements using a 4-step workflow.
-  Use when an Eng Lead or DS reports a metric drop/spike (DLCTR, QSR, SAIN, etc.).
+  Use when an Eng Lead or DS reports a metric drop/spike (Click Quality, Search Quality Success, AI Answer, etc.).
 trigger: >
-  User mentions metric drop, metric spike, DLCTR, QSR, SAIN, search quality,
+  User mentions metric drop, metric spike, Click Quality, Search Quality Success, AI Answer, search quality,
   metric investigation, metric debugging, or search regression.
 ---
 
@@ -1994,7 +1994,7 @@ metrics. Follow this 4-step diagnostic workflow EXACTLY.
    ```bash
    python tools/decompose.py --input {data_file} --metric {metric} --mode aggregate
    ```
-6. Check co-movement pattern: compare directions of DLCTR, QSR, SAIN trigger, SAIN success, zero-result rate, latency
+6. Check co-movement pattern: compare directions of Click Quality, Search Quality Success, AI trigger, AI success, zero-result rate, latency
 7. Report severity (P0/P1/P2) and co-movement pattern match
 8. Draw on Domain Expert Skills: what recent system changes could be relevant?
 
@@ -2053,9 +2053,9 @@ python tools/formatter.py --input {diagnosis_result} --format slack,report
 - Passive voice: "the metric was impacted by changes"
 
 ### Special Case: AI Answer Adoption
-If DLCTR dropped but ai_answer_rate increased in ai_on cohort:
+If Click Quality dropped but ai_answer_rate increased in ai_on cohort:
 - Label as "AI_ADOPTION_EFFECT" (POSITIVE signal)
-- Slack tone: "DLCTR decline reflects successful AI answer adoption"
+- Slack tone: "Click Quality decline reflects successful AI answer adoption"
 - Do NOT treat as regression
 ```
 
@@ -2210,7 +2210,7 @@ class TestEndToEnd:
     def test_full_pipeline_produces_slack_and_report(self, sample_metric_rows):
         # Step 1-2: Decompose
         decomp = run_decomposition(
-            sample_metric_rows, "dlctr_value",
+            sample_metric_rows, "click_quality_value",
             dimensions=["tenant_tier"]
         )
         assert decomp["aggregate"]["error"] is None
@@ -2227,7 +2227,7 @@ class TestEndToEnd:
         assert "TL;DR" in output["short_report"] or "Summary" in output["short_report"]
 
     def test_output_is_json_serializable(self, sample_metric_rows):
-        decomp = run_decomposition(sample_metric_rows, "dlctr_value",
+        decomp = run_decomposition(sample_metric_rows, "click_quality_value",
                                    dimensions=["tenant_tier"])
         diagnosis = run_diagnosis(decomposition=decomp)
         output = format_diagnosis_output(diagnosis)

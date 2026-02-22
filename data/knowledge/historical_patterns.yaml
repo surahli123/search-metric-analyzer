@@ -6,8 +6,8 @@ seasonal_patterns:
   - name: "Enterprise Onboarding Wave"
     trigger: "Large tenant batch onboarding"
     typical_impact:
-      dlctr: [-0.02, -0.04]
-      qsr: [-0.01, -0.02]
+      click_quality: [-0.02, -0.04]
+      search_quality_success: [-0.01, -0.02]
     mechanism: >
       New tenants have sparse indexes (few connectors configured),
       dragging down aggregate metrics via mix-shift.
@@ -20,21 +20,21 @@ seasonal_patterns:
   - name: "AI Feature Batch Rollout"
     trigger: "Batch AI enablement for tenant cohort"
     typical_impact:
-      dlctr: [-0.02, -0.04]
+      click_quality: [-0.02, -0.04]
       ai_answer_rate: [+0.10, +0.20]
-      qsr: [+0.005, +0.015]
+      search_quality_success: [+0.005, +0.015]
     mechanism: >
       Users get direct AI answers instead of clicking through to documents.
-      DLCTR drops but QSR may improve. This is SUCCESS, not failure.
+      Click Quality drops but Search Quality Success may improve. This is SUCCESS, not failure.
     key_check: >
       Always segment by ai_enablement. If drop is entirely in ai_on cohort
-      AND ai_answer_rate increased, this is a positive signal.
+      and ai_answer_rate increased, this is a positive signal.
     is_positive: true
 
   - name: "Connector Outage Pattern"
     trigger: "Third-party connector service degradation"
     typical_impact:
-      dlctr: [-0.02, -0.08]
+      click_quality: [-0.02, -0.08]
       zero_result_rate: [+0.02, +0.10]
     mechanism: >
       If a connector goes down, queries needing that source return
@@ -48,7 +48,7 @@ seasonal_patterns:
     trigger: "Enterprise end-of-quarter (finance, compliance searches)"
     typical_impact:
       query_volume: [+0.15, +0.30]
-      dlctr: [-0.005, -0.015]
+      click_quality: [-0.005, -0.015]
     mechanism: >
       Quarter-end drives finance/compliance/strategy searches.
       These tend to be more exploratory, lower click-through.
@@ -59,16 +59,16 @@ seasonal_patterns:
     trigger: "Normal weekly usage pattern"
     typical_impact:
       query_volume: [-0.30, -0.50]
-      dlctr: [+0.01, +0.02]
+      click_quality: [+0.01, +0.02]
     mechanism: >
       Weekend has fewer queries, skewed toward power users who click more.
-      Apparent DLCTR increase is mix-shift, not quality improvement.
+      Apparent Click Quality increase is mix-shift, not quality improvement.
     key_check: "Always compare same day-of-week (WoW), not consecutive days."
 
 known_incidents:
   - date: "2025-11-15"
     type: "logging_anomaly"
-    affected_metrics: [dlctr, qsr]
+    affected_metrics: [click_quality, search_quality_success]
     impact: -0.04
     root_cause: "Click tracking pipeline migration dropped 8% of events"
     resolution: "Pipeline rollback + backfill"
@@ -80,7 +80,7 @@ known_incidents:
 
   - date: "2025-09-22"
     type: "connector_outage"
-    affected_metrics: [dlctr, zero_result_rate]
+    affected_metrics: [click_quality, zero_result_rate]
     impact: -0.03
     root_cause: "Confluence API rate limiting during large customer migration"
     resolution: "Rate limit increase + backfill"
@@ -91,7 +91,7 @@ known_incidents:
 
   - date: "2025-08-10"
     type: "model_regression"
-    affected_metrics: [dlctr, qsr]
+    affected_metrics: [click_quality, search_quality_success]
     impact: -0.025
     root_cause: "L3 ranker retraining introduced position bias for tail queries"
     resolution: "Model rollback to previous version"

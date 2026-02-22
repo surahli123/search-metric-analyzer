@@ -15,7 +15,7 @@ Design philosophy:
 - All output is JSON to stdout so Claude Code can parse it programmatically.
 
 Usage (CLI):
-    python tools/anomaly.py --input data.csv --metric dlctr_value
+    python tools/anomaly.py --input data.csv --metric click_quality_value
 
 Usage (import):
     from tools.anomaly import check_data_quality, detect_step_change
@@ -58,7 +58,7 @@ def _load_co_movement_table() -> List[Dict[str, Any]]:
     if the file is missing — tests that don't need the table still work.
 
     Returns a list of pattern dicts, each with:
-        - pattern: {dlctr: "down", qsr: "down", ...}
+        - pattern: {click_quality: "down", search_quality_success: "down", ...}
         - likely_cause: str
         - description: str
         - priority_hypotheses: list
@@ -306,7 +306,7 @@ def match_co_movement_pattern(
 
     Args:
         observed: Dict mapping metric names to directions.
-            Keys: dlctr, qsr, sain_trigger, sain_success, zero_result_rate, latency
+            Keys: click_quality, search_quality_success, ai_trigger, ai_success, zero_result_rate, latency
             Values: "up", "down", "stable", or compound like "stable_or_up"
 
     Returns:
@@ -428,7 +428,7 @@ def check_against_baseline(
 
     Args:
         current_value: The metric's current observed value.
-        metric_name:   Name of the metric (e.g., "dlctr") for labeling.
+        metric_name:   Name of the metric (e.g., "click_quality") for labeling.
         segment:       Optional segment name (e.g., "ai_on") for context.
         baselines:     Dict with "mean" and "weekly_std" keys representing
                        the expected baseline distribution.
@@ -484,10 +484,10 @@ def main() -> None:
     """CLI entrypoint: run anomaly detection on a CSV file.
 
     Example:
-        python tools/anomaly.py --input data.csv --metric dlctr_value
+        python tools/anomaly.py --input data.csv --metric click_quality_value
         python tools/anomaly.py --input data.csv --check data_quality
         python tools/anomaly.py --input data.csv --check co_movement \
-            --directions '{"dlctr":"down","qsr":"down",...}'
+            --directions '{"click_quality":"down","search_quality_success":"down",...}'
     """
     parser = argparse.ArgumentParser(
         description="Anomaly detection for Enterprise Search metrics"
@@ -497,8 +497,8 @@ def main() -> None:
         help="Path to CSV file with metric data"
     )
     parser.add_argument(
-        "--metric", default="dlctr_value",
-        help="Column name of the metric to analyze (default: dlctr_value)"
+        "--metric", default="click_quality_value",
+        help="Column name of the metric to analyze (default: click_quality_value)"
     )
     parser.add_argument(
         "--check", default="all",

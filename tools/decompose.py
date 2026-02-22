@@ -12,11 +12,11 @@ In Enterprise Search, aggregate metric drops often have simple explanations:
 Distinguishing these two is critical because they require different responses.
 
 Usage (CLI):
-    python tools/decompose.py --input data.csv --metric dlctr_value --dimensions tenant_tier,ai_enablement
+    python tools/decompose.py --input data.csv --metric click_quality_value --dimensions tenant_tier,ai_enablement
 
 Usage (from Python):
     from tools.decompose import run_decomposition
-    result = run_decomposition(rows, "dlctr_value", dimensions=["tenant_tier"])
+    result = run_decomposition(rows, "click_quality_value", dimensions=["tenant_tier"])
 
 Output: JSON to stdout (Claude Code reads this).
 """
@@ -72,7 +72,7 @@ def _classify_severity(relative_delta_pct: float) -> str:
     """Classify metric movement severity based on magnitude.
 
     Uses absolute value because both drops AND spikes can be concerning.
-    E.g., a +8% DLCTR spike might indicate a tracking bug.
+    E.g., a +8% Click Quality spike might indicate a tracking bug.
     """
     magnitude = abs(relative_delta_pct) / 100.0  # convert pct to fraction
     if magnitude >= SEVERITY_THRESHOLDS["P0"]:
@@ -108,14 +108,14 @@ def compute_aggregate_delta(
 ) -> Dict[str, Any]:
     """Compute the headline metric movement between two periods.
 
-    This is the first thing we check: "DLCTR dropped X% WoW."
+    This is the first thing we check: "Click Quality dropped X% WoW."
     Think of it like the top-level KPI dashboard: before diving into
     dimensions, you need to know the overall magnitude and direction.
 
     Args:
         baseline_rows: Rows from the comparison period (e.g., last week)
         current_rows: Rows from the current period
-        metric_field: Which field to analyze (e.g., "dlctr_value")
+        metric_field: Which field to analyze (e.g., "click_quality_value")
 
     Returns:
         Dict with baseline_mean, current_mean, absolute_delta,
@@ -170,7 +170,7 @@ def decompose_by_dimension(
     - What % of the total change this segment contributed
 
     This tells you WHERE the drop is concentrated. In Enterprise Search,
-    a DLCTR drop concentrated in "standard" tier tenants is very different
+    a Click Quality drop concentrated in "standard" tier tenants is very different
     from one spread across all tiers (the former suggests a tier-specific
     issue, the latter a platform-wide regression).
 
@@ -272,7 +272,7 @@ def compute_mix_shift(
     each segment is performing normally, just the mix changed.
 
     Example: If 20% more standard-tier tenants onboard (who naturally have
-    lower DLCTR), aggregate DLCTR drops even though no quality regression
+    lower Click Quality), aggregate Click Quality drops even though no quality regression
     occurred. The mix-shift analysis catches this.
 
     Flag threshold: 30% or more mix-shift contribution triggers a flag,
@@ -397,7 +397,7 @@ def run_decomposition(
     baseline = [r for r in rows if r.get(period_field) == baseline_period]
     current = [r for r in rows if r.get(period_field) == current_period]
 
-    # Step 1: Headline delta -- "DLCTR dropped 6.25% WoW"
+    # Step 1: Headline delta -- "Click Quality dropped 6.25% WoW"
     aggregate = compute_aggregate_delta(baseline, current, metric_field)
 
     # Step 2: Decompose by each dimension -- "The drop is in standard tier"
@@ -457,7 +457,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--metric", required=True,
-        help="Metric column to analyze (e.g., dlctr_value)"
+        help="Metric column to analyze (e.g., click_quality_value)"
     )
     parser.add_argument(
         "--dimensions", default="tenant_tier,ai_enablement,query_type",

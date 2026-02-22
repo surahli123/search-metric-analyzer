@@ -64,10 +64,10 @@ MULTI_CAUSE_MIN_CONTRIBUTION = 30.0
 # Derived from weekly_std/mean ratios in metric_definitions.yaml.
 # Used to prevent false alarm path (b) from triggering on real movements.
 METRIC_NOISE_THRESHOLDS = {
-    "dlctr_value":   0.04,   # weekly_std/mean = 5.4%; threshold at 4%
-    "qsr_value":     0.03,   # weekly_std/mean = 3.2%; threshold at 3%
-    "sain_trigger":  0.06,   # weekly_std/mean = 4.5%; was 7% → now 6% (1.3x CV)
-    "sain_success":  0.06,   # weekly_std/mean = 2.4%; was 7% → now 6% (2.5x CV)
+    "click_quality_value":   0.04,   # weekly_std/mean = 5.4%; threshold at 4%
+    "search_quality_success_value":     0.03,   # weekly_std/mean = 3.2%; threshold at 3%
+    "ai_trigger":  0.06,   # weekly_std/mean = 4.5%; was 7% → now 6% (1.3x CV)
+    "ai_success":  0.06,   # weekly_std/mean = 2.4%; was 7% → now 6% (2.5x CV)
 }
 DEFAULT_NOISE_THRESHOLD = 0.03
 
@@ -82,7 +82,7 @@ DEFAULT_NOISE_THRESHOLD = 0.03
 #
 # WHY ARCHETYPES:
 # Raw decomposition says "biggest segment is X." But a Senior DS goes further:
-# they recognize PATTERNS like "AI adoption trap" (DLCTR drops when AI works)
+# they recognize PATTERNS like "AI adoption trap" (Click Quality drops when AI works)
 # and adjust their diagnosis accordingly. Archetypes encode this domain expertise.
 ARCHETYPE_MAP = {
     "ranking_relevance_regression": {
@@ -96,21 +96,21 @@ ARCHETYPE_MAP = {
         "action_items": [
             {"action": "Check recent ranking model deploys and experiment ramps", "owner": "Search Ranking team"},
             {"action": "Compare ranking model version between baseline and current period", "owner": "Search Ranking team"},
-            {"action": "Review per-segment DLCTR to isolate affected query types", "owner": "Search Quality DS"},
+            {"action": "Review per-segment Click Quality to isolate affected query types", "owner": "Search Quality DS"},
         ],
         "category": "algorithm_model",
         # v1.4: Structured subagent specs — conditions that confirm or reject this archetype.
         # Used by verify_diagnosis() for coherence checks and by production subagents
         # for SQL query generation.
         "confirms_if": [
-            "DLCTR drop concentrated in specific position buckets (3-5, 6-10)",
+            "Click Quality drop concentrated in specific position buckets (3-5, 6-10)",
             "Ranking model version changed in the movement window",
-            "SAIN metrics stable (not AI-driven)",
+            "AI Answer metrics stable (not AI-driven)",
         ],
         "rejects_if": [
-            "DLCTR drop uniform across all segments (suggests logging, not ranking)",
+            "Click Quality drop uniform across all segments (suggests logging, not ranking)",
             "Movement proportional to traffic mix-shift (>50% compositional)",
-            "SAIN trigger or success also changed (suggests AI adoption, not ranking)",
+            "AI trigger or success also changed (suggests AI adoption, not ranking)",
         ],
     },
     "ai_answers_working": {
@@ -118,25 +118,25 @@ ARCHETYPE_MAP = {
         "severity_cap": "P2",   # Cap at P2 — this is a POSITIVE signal, not a problem
         "description_template": (
             "AI adoption effect: {metric_name} decline is expected behavior — users are "
-            "getting AI answers instead of clicking through to documents. QSR is stable "
+            "getting AI answers instead of clicking through to documents. Search Quality Success is stable "
             "or improving. This is a POSITIVE signal. "
             "The click-to-AI-answer tradeoff is working as designed."
         ),
         "action_items": [
-            {"action": "Monitor AI answer quality (SAIN success rate) for sustained improvement", "owner": "AI team"},
+            {"action": "Monitor AI answer quality (AI success rate) for sustained improvement", "owner": "AI team"},
             {"action": "Review click-vs-AI-answer tradeoff with product team", "owner": "Search Product PM"},
         ],
         "category": "ai_feature_effect",
         "is_positive": True,
         "confirms_if": [
-            "DLCTR drop concentrated in ai_enablement=ai_on segment",
-            "SAIN trigger and success both increasing",
-            "QSR stable or improving (AI answers compensate for lost clicks)",
+            "Click Quality drop concentrated in ai_enablement=ai_on segment",
+            "AI trigger and success both increasing",
+            "Search Quality Success stable or improving (AI answers compensate for lost clicks)",
         ],
         "rejects_if": [
-            "DLCTR drop in ai_enablement=ai_off segment (AI not involved)",
-            "SAIN metrics flat or declining (AI answers not improving)",
-            "QSR also declining (total quality loss, not just click substitution)",
+            "Click Quality drop in ai_enablement=ai_off segment (AI not involved)",
+            "AI Answer metrics flat or declining (AI answers not improving)",
+            "Search Quality Success also declining (total quality loss, not just click substitution)",
         ],
     },
     "broad_quality_degradation": {
@@ -160,7 +160,7 @@ ARCHETYPE_MAP = {
         ],
         "rejects_if": [
             "Movement concentrated in a single segment (suggests targeted, not broad)",
-            "Only DLCTR affected (suggests ranking or click behavior, not broad)",
+            "Only Click Quality affected (suggests ranking or click behavior, not broad)",
             "Latency unchanged (suggests model issue, not infrastructure)",
         ],
     },
@@ -168,23 +168,23 @@ ARCHETYPE_MAP = {
         "archetype": "sain_regression",
         "severity_cap": None,
         "description_template": (
-            "AI answer quality regression: SAIN success rate declining while trigger rate "
+            "AI answer quality regression: AI success rate declining while trigger rate "
             "is stable. AI answers are appearing but not satisfying users. "
             "Check AI answer model version and quality thresholds."
         ),
         "action_items": [
-            {"action": "Review SAIN model version and recent quality threshold changes", "owner": "AI team"},
+            {"action": "Review AI Answer model version and recent quality threshold changes", "owner": "AI team"},
             {"action": "Check AI answer accuracy by query type", "owner": "AI Quality DS"},
         ],
         "category": "ai_feature_effect",
         "confirms_if": [
-            "SAIN success declining while SAIN trigger stable (answers appearing, not satisfying)",
+            "AI success declining while AI trigger stable (answers appearing, not satisfying)",
             "AI answer model version or threshold changed in movement window",
             "Drop concentrated in specific query types or connector types",
         ],
         "rejects_if": [
-            "SAIN trigger also declining (suggests trigger issue, not quality)",
-            "DLCTR stable (suggests isolated AI issue with no click impact)",
+            "AI trigger also declining (suggests trigger issue, not quality)",
+            "Click Quality stable (suggests isolated AI issue with no click impact)",
             "Movement matches traffic mix-shift pattern (compositional, not behavioral)",
         ],
     },
@@ -192,7 +192,7 @@ ARCHETYPE_MAP = {
         "archetype": "behavior_change",
         "severity_cap": None,
         "description_template": (
-            "Click behavior change: only {metric_name} moved, SAIN metrics are stable. "
+            "Click behavior change: only {metric_name} moved, AI Answer metrics are stable. "
             "Possible causes: UX change, display change, or traffic mix-shift."
         ),
         "action_items": [
@@ -201,12 +201,12 @@ ARCHETYPE_MAP = {
         ],
         "category": "user_behavior",
         "confirms_if": [
-            "Only DLCTR moved while SAIN metrics are stable",
+            "Only Click Quality moved while AI Answer metrics are stable",
             "Recent UX, display, or SERP layout change in the movement window",
             "Click pattern change visible in position_bucket decomposition",
         ],
         "rejects_if": [
-            "SAIN metrics also changed (suggests broader issue, not just clicks)",
+            "AI Answer metrics also changed (suggests broader issue, not just clicks)",
             "Movement driven by mix-shift (>50% compositional)",
             "Ranking model version changed (suggests algorithm, not behavior)",
         ],
@@ -215,21 +215,21 @@ ARCHETYPE_MAP = {
         "archetype": "sain_trigger_issue",
         "severity_cap": None,
         "description_template": (
-            "SAIN trigger regression: AI answers are not surfacing when they should. "
+            "AI trigger regression: AI answers are not surfacing when they should. "
             "Check trigger threshold or model changes."
         ),
         "action_items": [
-            {"action": "Check SAIN trigger threshold and model configuration", "owner": "AI team"},
+            {"action": "Check AI trigger threshold and model configuration", "owner": "AI team"},
         ],
         "category": "ai_feature_effect",
         "confirms_if": [
-            "SAIN trigger declining while SAIN success stable (threshold or model issue)",
+            "AI trigger declining while AI success stable (threshold or model issue)",
             "Trigger threshold or model configuration changed in movement window",
             "Drop concentrated in query types that should trigger AI answers",
         ],
         "rejects_if": [
-            "SAIN success also declining (suggests broader AI quality issue)",
-            "DLCTR also declining (suggests ranking, not trigger-specific)",
+            "AI success also declining (suggests broader AI quality issue)",
+            "Click Quality also declining (suggests ranking, not trigger-specific)",
             "Trigger change proportional to query volume change (not a regression)",
         ],
     },
@@ -237,7 +237,7 @@ ARCHETYPE_MAP = {
         "archetype": "sain_success_issue",
         "severity_cap": None,
         "description_template": (
-            "SAIN success regression: AI answers are surfacing but not helpful. "
+            "AI success regression: AI answers are surfacing but not helpful. "
             "Check answer quality model."
         ),
         "action_items": [
@@ -245,12 +245,12 @@ ARCHETYPE_MAP = {
         ],
         "category": "ai_feature_effect",
         "confirms_if": [
-            "SAIN success declining while SAIN trigger stable (quality, not coverage)",
+            "AI success declining while AI trigger stable (quality, not coverage)",
             "AI answer quality model or content sources changed in movement window",
             "User engagement signals (dwell time, post-search actions) declining",
         ],
         "rejects_if": [
-            "SAIN trigger also declining (suggests trigger issue, not quality)",
+            "AI trigger also declining (suggests trigger issue, not quality)",
             "Movement matches a connector outage pattern (content source offline)",
             "Drop concentrated in a single connector type (data quality, not model)",
         ],
@@ -284,11 +284,11 @@ ARCHETYPE_MAP = {
         "confirms_if": [
             "Query reformulation error rate increased in the movement window",
             "Intent classification model retrained or threshold changed",
-            "DLCTR and QSR both declined while SAIN success is stable (upstream issue)",
+            "Click Quality and Search Quality Success both declined while AI success is stable (upstream issue)",
         ],
         "rejects_if": [
             "Movement isolated to a single segment (suggests ranking, not query understanding)",
-            "SAIN success also declining (suggests AI model issue, not L0)",
+            "AI success also declining (suggests AI model issue, not L0)",
             "Query distribution unchanged between baseline and current period",
         ],
     },
@@ -465,12 +465,12 @@ def check_temporal_consistency(
     """Check that the proposed cause precedes (or coincides with) the metric change.
 
     This is a basic causal reasoning check: if we hypothesize that a code deploy
-    caused a DLCTR drop, the deploy must have happened BEFORE or ON the same day
+    caused a Click Quality drop, the deploy must have happened BEFORE or ON the same day
     as the drop. If the metric changed BEFORE the proposed cause, our hypothesis
     is wrong.
 
     This catches a common diagnostic error: "We deployed feature X on Tuesday,
-    and DLCTR dropped on Monday" -- clearly X didn't cause the drop.
+    and Click Quality dropped on Monday" -- clearly X didn't cause the drop.
 
     Args:
         cause_date_index: Day index when the proposed cause occurred.
@@ -1228,7 +1228,7 @@ def _apply_severity_override(
 
     WHY:
     Magnitude-based severity (P0 for >5% drop) is wrong when:
-    - AI adoption: DLCTR drops 8% but it's GOOD → should be P2 not P0
+    - AI adoption: Click Quality drops 8% but it's GOOD → should be P2 not P0
     - Mix-shift: compositional change → should note "compositional" in severity
     - False alarm: noise → should be "normal" not P2
 
@@ -1355,7 +1355,7 @@ def run_diagnosis(
     # Delta guard for false alarm path (b): even if severity is P2 and no
     # segment dominates, a delta that exceeds the metric's noise threshold
     # is a real signal, not noise. Don't classify it as false alarm.
-    metric_name = aggregate.get("metric", "dlctr_value")
+    metric_name = aggregate.get("metric", "click_quality_value")
     noise_thresh = METRIC_NOISE_THRESHOLDS.get(metric_name, DEFAULT_NOISE_THRESHOLD)
     abs_delta = abs(aggregate.get("relative_delta_pct", 0)) / 100.0
     exceeds_noise = abs_delta > noise_thresh

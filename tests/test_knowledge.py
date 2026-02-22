@@ -20,21 +20,21 @@ class TestMetricDefinitions:
         assert "metrics" in self.defs
 
     def test_core_metrics_present(self):
-        """DLCTR, QSR, and SAIN must all be defined."""
+        """Click Quality, Search Quality Success, and AI Answer must all be defined."""
         metrics = self.defs["metrics"]
-        for name in ["dlctr", "qsr", "sain_trigger_rate", "sain_success_rate"]:
+        for name in ["click_quality", "search_quality_success", "ai_trigger_rate", "ai_success_rate"]:
             assert name in metrics, f"Missing core metric: {name}"
 
-    def test_dlctr_has_required_fields(self):
-        dlctr = self.defs["metrics"]["dlctr"]
+    def test_click_quality_has_required_fields(self):
+        click_quality = self.defs["metrics"]["click_quality"]
         required = ["full_name", "formula", "decomposition_dimensions",
                      "normal_range", "co_movements", "alert_thresholds"]
         for field in required:
-            assert field in dlctr, f"DLCTR missing field: {field}"
+            assert field in click_quality, f"Click Quality missing field: {field}"
 
     def test_enterprise_dimensions_present(self):
         """Enterprise Search requires tenant_tier, ai_enablement, industry, connector."""
-        dims = self.defs["metrics"]["dlctr"]["decomposition_dimensions"]
+        dims = self.defs["metrics"]["click_quality"]["decomposition_dimensions"]
         enterprise_dims = ["tenant_tier", "ai_enablement", "industry_vertical", "connector_type"]
         for dim in enterprise_dims:
             assert dim in dims, f"Missing Enterprise dimension: {dim}"
@@ -51,8 +51,8 @@ class TestMetricDefinitions:
 
     def test_segment_baselines_exist(self):
         """Different baselines per segment (ai_on vs ai_off, tier differences)."""
-        dlctr = self.defs["metrics"]["dlctr"]
-        assert "baseline_by_segment" in dlctr
+        click_quality = self.defs["metrics"]["click_quality"]
+        assert "baseline_by_segment" in click_quality
 
 
 class TestHistoricalPatterns:

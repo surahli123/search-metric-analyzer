@@ -53,17 +53,29 @@ Plus formatter integration for verification warnings (Slack + short report).
 
 ## What to Do Next Session
 
-### Immediate: Commit v1.4
+### Immediate: Rename Internal Metric Names (v1.4 follow-up)
 
-```bash
-# Review changes
-git diff --stat
-git diff tools/diagnose.py | head -100
+Internal metric names (Click Quality, Search Quality Success, AI Answer) are exposed in the public GitHub repo.
+Rename across the entire codebase before further development:
 
-# Commit
-git add tools/diagnose.py tools/anomaly.py tools/formatter.py tests/test_diagnose.py tests/test_anomaly.py
-git commit -m "feat: add verify_diagnosis, scored matching, subagent specs (v1.4 DS-STAR)"
-```
+| Current | Replacement | Rationale |
+|---------|------------|-----------|
+| `click_quality` / `Click Quality` | `click_quality` | Generic, no internal exposure |
+| `search_quality_success` / `Search Quality Success` | `search_quality_success` | Generic quality metric name |
+| `ai_trigger` / `AI trigger` | `ai_trigger` | Describes function without brand |
+| `ai_success` / `AI success` | `ai_success` | Describes function without brand |
+
+**Scope:** ~40+ tracked files, variable names, dict keys, YAML keys, test fixtures,
+eval scoring specs, formatter templates, skill file, design docs.
+
+**Risk:** High — touches every layer. Must re-run full test suite + eval after rename.
+
+**Approach:**
+1. Rename in YAML knowledge files first (metric_definitions.yaml, historical_patterns.yaml)
+2. Rename in Python tools (decompose, anomaly, diagnose, formatter)
+3. Rename in tests + eval specs
+4. Rename in docs/skills
+5. Run `pytest tests/ -v` + `eval/run_stress_test.py` — must stay 441+ passed, 5/5 GREEN
 
 ### Priority: v2 Backlog
 
@@ -71,13 +83,13 @@ These items have been deferred across multiple versions:
 
 | Priority | Item | Context |
 |----------|------|---------|
-| High | Calibrate metric noise profiles | weekly_std values are still synthetic — need real metric distributions |
-| High | Calibrate severity thresholds | Currently one-size-fits-all — should vary by metric |
+| High | Calibrate metric noise profiles | weekly_std values are still synthetic -- need real metric distributions |
+| High | Calibrate severity thresholds | Currently one-size-fits-all -- should vary by metric |
 | Medium | Evidence counting before severity override | Works by accident in current code — fragile |
 | Medium | Net vs abs sums in `_extract_explained_pct` | Documented limitation, may affect decomposition accuracy |
 | Medium | Archetype-specific actions for `unknown_pattern` | Currently falls back to generic actions |
 | Low | `click_behavior_change` UX vs mix-shift separation | Lumps two causes without prioritization |
-| Low | QSR exact formula weights/floors | No source data available yet |
+| Low | Search Quality Success exact formula weights/floors | No source data available yet |
 
 ### Stretch: Leverage New v1.4 Infrastructure
 

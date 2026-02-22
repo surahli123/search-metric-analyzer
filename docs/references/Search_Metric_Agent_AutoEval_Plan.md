@@ -102,13 +102,13 @@ Each case requires a scoring spec authored by a senior DS. Target: ~15 minutes p
 
 ```yaml
 case_id: sev-012-connector-timeout
-entry_question: "Why did QSR drop the week of April 17?"
+entry_question: "Why did Search Quality Success drop the week of April 17?"
 data_window: "2024-04-14 to 2024-04-21"
 
 scoring:
   root_cause:
     acceptable_conclusions:
-      - "3P connector timeout caused QSR degradation"
+      - "3P connector timeout caused Search Quality Success degradation"
       - "Connector X latency spike reduced search quality"
     match_type: semantic
 

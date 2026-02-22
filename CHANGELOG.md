@@ -52,7 +52,7 @@ Calibrated knowledge base against real Atlassian Rovo Search architecture
 - Added `query_understanding_regression` archetype (Rovo L0 pipeline stage)
 - Added `product_source` decomposition dimension (Rovo L3 Interleaver)
 - Added `query_understanding` hypothesis priority
-- Enriched `sain_success_rate` definition with engagement + dwell time
+- Enriched `ai_success_rate` definition with engagement + dwell time
 - Added Rovo source citations throughout metric_definitions.yaml
 
 ### Eval

@@ -32,7 +32,7 @@ def sample_metric_rows():
     with Enterprise Search dimensions added.
     """
     # Baseline: 20 rows representing a "normal" period
-    # 10 rows for "current" period with a DLCTR drop in JP/Standard tier
+    # 10 rows for "current" period with a Click Quality drop in JP/Standard tier
     baseline_rows = []
     current_rows = []
 
@@ -46,10 +46,10 @@ def sample_metric_rows():
             "connector_type": "confluence",
             "query_type": "informational",
             "position_bucket": "1" if i % 3 == 0 else "3-5",
-            "dlctr_value": 0.280,
-            "qsr_value": 0.378,
-            "sain_trigger": 0.220,
-            "sain_success": 0.620,
+            "click_quality_value": 0.280,
+            "search_quality_success_value": 0.378,
+            "ai_trigger": 0.220,
+            "ai_success": 0.620,
             "zero_result": 0,
             "latency_ms": 200,
             "ai_answer_shown": 0,
@@ -57,7 +57,7 @@ def sample_metric_rows():
             "data_completeness": 0.995,
         })
 
-    # Current period: DLCTR drops for standard tier
+    # Current period: Click Quality drops for standard tier
     for i in range(20):
         is_standard = i % 2 == 0
         current_rows.append({
@@ -69,11 +69,11 @@ def sample_metric_rows():
             "connector_type": "confluence",
             "query_type": "informational",
             "position_bucket": "1" if i % 3 == 0 else "3-5",
-            # Standard tier DLCTR drops from 0.280 to 0.245 (-12.5%)
-            "dlctr_value": 0.245 if is_standard else 0.280,
-            "qsr_value": 0.340 if is_standard else 0.378,
-            "sain_trigger": 0.220,
-            "sain_success": 0.620,
+            # Standard tier Click Quality drops from 0.280 to 0.245 (-12.5%)
+            "click_quality_value": 0.245 if is_standard else 0.280,
+            "search_quality_success_value": 0.340 if is_standard else 0.378,
+            "ai_trigger": 0.220,
+            "ai_success": 0.620,
             "zero_result": 0,
             "latency_ms": 200,
             "ai_answer_shown": 0,
@@ -86,10 +86,10 @@ def sample_metric_rows():
 
 @pytest.fixture
 def sample_mix_shift_rows():
-    """Rows where aggregate DLCTR drops due to mix-shift, not behavioral change.
+    """Rows where aggregate Click Quality drops due to mix-shift, not behavioral change.
 
-    Baseline: 50% standard (DLCTR=0.245), 50% premium (DLCTR=0.295)
-    Current:  70% standard, 30% premium (same per-segment DLCTR, lower aggregate)
+    Baseline: 50% standard (Click Quality=0.245), 50% premium (Click Quality=0.295)
+    Current:  70% standard, 30% premium (same per-segment Click Quality, lower aggregate)
     """
     baseline = []
     current = []
@@ -99,16 +99,16 @@ def sample_mix_shift_rows():
         baseline.append({
             "period": "baseline",
             "tenant_tier": "standard",
-            "dlctr_value": 0.245,
-            "qsr_value": 0.340,
+            "click_quality_value": 0.245,
+            "search_quality_success_value": 0.340,
             "query_count": 100,
         })
     for i in range(10):
         baseline.append({
             "period": "baseline",
             "tenant_tier": "premium",
-            "dlctr_value": 0.295,
-            "qsr_value": 0.390,
+            "click_quality_value": 0.295,
+            "search_quality_success_value": 0.390,
             "query_count": 100,
         })
 
@@ -117,16 +117,16 @@ def sample_mix_shift_rows():
         current.append({
             "period": "current",
             "tenant_tier": "standard",
-            "dlctr_value": 0.245,
-            "qsr_value": 0.340,
+            "click_quality_value": 0.245,
+            "search_quality_success_value": 0.340,
             "query_count": 100,
         })
     for i in range(6):
         current.append({
             "period": "current",
             "tenant_tier": "premium",
-            "dlctr_value": 0.295,
-            "qsr_value": 0.390,
+            "click_quality_value": 0.295,
+            "search_quality_success_value": 0.390,
             "query_count": 100,
         })
 

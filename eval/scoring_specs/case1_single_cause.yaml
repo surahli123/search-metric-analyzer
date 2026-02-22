@@ -69,7 +69,7 @@ must_check_dimensions:
   - position_bucket
 
 must_not_do:
-  - attribute_to_ai_feature: "Should not blame AI answers — SAIN metrics are stable"
+  - attribute_to_ai_feature: "Should not blame AI answers — AI Answer metrics are stable"
   - claim_data_quality_issue: "Data is clean in this scenario"
   - hedge_excessively: "Should state root cause with High confidence, not 'might be'"
   - recommend_no_action: "This IS a real regression — must recommend investigation"

@@ -188,17 +188,17 @@ Fixed priority for investigation — encoded in the skill:
 
 Checked at Step 1 (Intake) — the pattern narrows the hypothesis space before decomposition.
 
-| DLCTR | QSR | SAIN Trigger | SAIN Success | Zero-Result Rate | Latency | Likely Cause |
-|-------|-----|-------------|-------------|-----------------|---------|-------------|
+| Click Quality | Search Quality Success | AI Trigger | AI Success | Zero-Result Rate | Latency | Likely Cause |
+|--------------|----------------------|------------|------------|-----------------|---------|-------------|
 | down | down | stable | stable | stable | stable | Ranking/relevance regression |
-| down | stable/up | up | up | stable | stable | AI answers working (positive — cannibalizing clicks) |
+| down | stable/up | up | up | stable | stable | AI answers working (positive -- cannibalizing clicks) |
 | down | down | down | down | stable | stable | Broad quality degradation (check model/experiment) |
-| down | down | stable | down | stable | stable | SAIN quality regression (AI answers wrong) |
+| down | down | stable | down | stable | stable | AI Answer quality regression (AI answers wrong) |
 | down | down | stable | stable | up | stable | Connector outage / index gap |
 | down | down | stable | stable | stable | up | Serving degradation / model fallback |
 | down | stable | stable | stable | stable | stable | Click behavior change (UX, display, mix-shift) |
-| stable | down | down | stable | stable | stable | SAIN trigger regression (AI not surfacing answers) |
-| stable | down | stable | down | stable | stable | SAIN success regression (AI answers surfacing but wrong) |
+| stable | down | down | stable | stable | stable | AI trigger regression (AI not surfacing answers) |
+| stable | down | stable | down | stable | stable | AI success regression (AI answers surfacing but wrong) |
 
 ---
 
@@ -215,10 +215,10 @@ Key Enterprise dimensions:
 - **connector_type**: confluence, slack, gdrive, jira, sharepoint, other
 
 Key relationships:
-- QSR = max(qsr_component_click, sain_trigger * sain_success)
-- qsr_component_click = dlctr
-- AI answers and DLCTR have **inverse** co-movement (more AI answers = fewer clicks = expected)
-- Different baselines per segment (ai_on tenants have structurally lower DLCTR)
+- Search Quality Success = max(search_quality_success_component_click, ai_trigger * ai_success)
+- search_quality_success_component_click = click_quality
+- AI answers and Click Quality have **inverse** co-movement (more AI answers = fewer clicks = expected)
+- Different baselines per segment (ai_on tenants have structurally lower Click Quality)
 
 Includes the co-movement diagnostic table for fast pattern matching at Intake.
 
@@ -467,7 +467,7 @@ Search_Metric_Analyzer/
 | Risk | Impact | Mitigation |
 |------|--------|-----------|
 | Tool gets diagnosis wrong, sent to Eng Lead | Trust destroyed | 4 validation checks + dual-judge eval + mandatory confidence calibration |
-| AI answer adoption misidentified as regression | Wrong action taken (rollback good feature) | Explicit "AI answer trap" scenario + co-movement table with SAIN signals |
+| AI answer adoption misidentified as regression | Wrong action taken (rollback good feature) | Explicit "AI answer trap" scenario + co-movement table with AI Answer signals |
 | Synthetic data doesn't represent real patterns | Tool works on synth but fails on real data | Enterprise-specific scenarios based on actual past incidents; v2 adds real data |
 | Output too generic / robotic | Low adoption | Template-based with domain terminology; Review Agent checks communication quality |
 | Skill prompt quality degrades with complexity | Inconsistent behavior | Keep skill under 120 instructions; heavy detail in knowledge YAML files |

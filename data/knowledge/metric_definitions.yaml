@@ -10,7 +10,7 @@
 # Items without that tag remain synthetic assumptions pending real calibration.
 
 metrics:
-  dlctr:
+  click_quality:
     full_name: "Discounted Long Click-Through Rate"
     formula: "sum(long_clicks * log2_discount(rank)) / impressions"
     # Source: Rovo — confirmed: position-discounted long click rate
@@ -44,7 +44,7 @@ metrics:
     baseline_by_segment:
       ai_on:
         mean: 0.220
-        notes: "Lower DLCTR expected — users get AI answers without clicking. This is GOOD."
+        notes: "Lower Click Quality expected — users get AI answers without clicking. This is GOOD."
       ai_off:
         mean: 0.310
       enterprise_tier:
@@ -56,7 +56,7 @@ metrics:
         mean: 0.245
         notes: "Fewer connectors, sparser index"
     co_movements:
-      - metric: qsr
+      - metric: search_quality_success
         expected_direction: same
         lag_days: 0
       - metric: ai_answer_rate
@@ -74,9 +74,9 @@ metrics:
       p1: 0.02    # 2-5% — significant
       p2: 0.005   # 0.5-2% — minor
 
-  qsr:
+  search_quality_success:
     full_name: "Query Success Rate"
-    formula: "max(qsr_component_click, sain_trigger * sain_success)"
+    formula: "max(search_quality_success_component_click, ai_trigger * ai_success)"
     description: >
       Composite metric combining click quality and AI answer quality.
       A query is "successful" if the user either clicked a good result
@@ -86,9 +86,9 @@ metrics:
     # (1) Search Result Consumption (position-discounted long clicks)
     # (2) AI-Generated Answer Engagement (dwell time, post-search actions)
     components:
-      - qsr_component_click    # equals dlctr
-      - sain_trigger_rate
-      - sain_success_rate
+      - search_quality_success_component_click    # equals click_quality
+      - ai_trigger_rate
+      - ai_success_rate
     decomposition_dimensions:
       - tenant_tier
       - ai_enablement
@@ -104,8 +104,8 @@ metrics:
       p1: 0.015
       p2: 0.005
 
-  sain_trigger_rate:
-    full_name: "SAIN (Search AI Answer) Trigger Rate"
+  ai_trigger_rate:
+    full_name: "AI Answer Trigger Rate"
     formula: "queries_with_ai_answer_triggered / total_queries"
     description: >
       How often the AI answer system decides to show an answer.
@@ -119,8 +119,8 @@ metrics:
       mean: 0.220
       weekly_std: 0.010
 
-  sain_success_rate:
-    full_name: "SAIN (Search AI Answer) Success Rate"
+  ai_success_rate:
+    full_name: "AI Answer Success Rate"
     formula: "ai_answers_satisfying / ai_answers_triggered"
     description: >
       Of AI answers shown, how many satisfied the user. Success signals
@@ -166,7 +166,7 @@ metrics:
 # ──────────────────────────────────────────────────────────────
 
 co_movement_diagnostic_table:
-  # ── Patterns use 4 core metrics: dlctr, qsr, sain_trigger, sain_success ──
+  # ── Patterns use 4 core metrics: click_quality, search_quality_success, ai_trigger, ai_success ──
   # WHY only 4: Our synthetic data and primary pipeline only track these 4 metrics.
   # zero_result_rate and latency are documented above as metrics but aren't in the
   # pipeline data yet. When they're added, extend patterns here.
@@ -174,19 +174,19 @@ co_movement_diagnostic_table:
   # patterns are omitted — they need those metrics to be distinguishable.
 
   - pattern:
-      dlctr: down
-      qsr: down
-      sain_trigger: stable
-      sain_success: stable
+      click_quality: down
+      search_quality_success: down
+      ai_trigger: stable
+      ai_success: stable
     likely_cause: "ranking_relevance_regression"
     description: "Click quality degraded. Check ranking model, experiment ramps."
     priority_hypotheses: [algorithm_model, experiment]
 
   - pattern:
-      dlctr: down
-      qsr: stable_or_up
-      sain_trigger: up
-      sain_success: up
+      click_quality: down
+      search_quality_success: stable_or_up
+      ai_trigger: up
+      ai_success: up
     likely_cause: "ai_answers_working"
     description: >
       AI answers cannibalizing clicks — this is a POSITIVE signal.
@@ -196,46 +196,46 @@ co_movement_diagnostic_table:
     # Source: Rovo — confirmed. AI answers cannibalize clicks by design.
 
   - pattern:
-      dlctr: down
-      qsr: down
-      sain_trigger: down
-      sain_success: down
+      click_quality: down
+      search_quality_success: down
+      ai_trigger: down
+      ai_success: down
     likely_cause: "broad_quality_degradation"
     description: "Both click and AI pathways affected. Check model/experiment/infra."
     priority_hypotheses: [algorithm_model, experiment, connector]
 
   - pattern:
-      dlctr: down
-      qsr: down
-      sain_trigger: stable
-      sain_success: down
+      click_quality: down
+      search_quality_success: down
+      ai_trigger: stable
+      ai_success: down
     likely_cause: "sain_quality_regression"
     description: "AI answers triggering normally but failing to satisfy. Check AI model."
     priority_hypotheses: [ai_feature_effect, algorithm_model]
 
   - pattern:
-      dlctr: down
-      qsr: stable
-      sain_trigger: stable
-      sain_success: stable
+      click_quality: down
+      search_quality_success: stable
+      ai_trigger: stable
+      ai_success: stable
     likely_cause: "click_behavior_change"
     description: "Only click behavior changed. Check UX changes, display changes, mix-shift."
     priority_hypotheses: [user_behavior, ai_feature_effect]
 
   - pattern:
-      dlctr: stable
-      qsr: down
-      sain_trigger: down
-      sain_success: stable
+      click_quality: stable
+      search_quality_success: down
+      ai_trigger: down
+      ai_success: stable
     likely_cause: "sain_trigger_regression"
     description: "AI answers not surfacing when they should. Check trigger threshold/model."
     priority_hypotheses: [ai_feature_effect]
 
   - pattern:
-      dlctr: stable
-      qsr: down
-      sain_trigger: stable
-      sain_success: down
+      click_quality: stable
+      search_quality_success: down
+      ai_trigger: stable
+      ai_success: down
     likely_cause: "sain_success_regression"
     description: "AI answers surfacing but wrong. Check answer quality model."
     priority_hypotheses: [ai_feature_effect, algorithm_model]
@@ -246,26 +246,26 @@ co_movement_diagnostic_table:
   # A regression here affects ALL downstream metrics because queries are
   # misunderstood before they reach retrieval.
   - pattern:
-      dlctr: down
-      qsr: down
-      sain_trigger: down
-      sain_success: stable_or_down
+      click_quality: down
+      search_quality_success: down
+      ai_trigger: down
+      ai_success: stable_or_down
     likely_cause: "query_understanding_regression"
     description: >
       Query understanding layer (L0) degraded — intent misclassification,
       reformulation bugs, or spell correction errors. Affects all downstream
       metrics because queries are misunderstood before reaching retrieval.
-      Distinguished from broad_degradation by sain_success being stable
+      Distinguished from broad_degradation by ai_success being stable
       (AI answer quality itself is fine, but wrong queries are reaching it).
     priority_hypotheses: [query_understanding, algorithm_model]
 
   # ── "All stable" pattern for false alarm detection ──
   # If all 4 metrics are stable, it's likely normal fluctuation — no action needed.
   - pattern:
-      dlctr: stable
-      qsr: stable
-      sain_trigger: stable
-      sain_success: stable
+      click_quality: stable
+      search_quality_success: stable
+      ai_trigger: stable
+      ai_success: stable
     likely_cause: "no_significant_movement"
     description: "All metrics within normal variation. No action needed."
     priority_hypotheses: []

@@ -1,22 +1,22 @@
 # eval/scoring_specs/case2_ai_adoption_trap.yaml
 # Case 2: S5 — AI answers cannibalizing clicks
-# Archetype: Enterprise-specific trap — DLCTR drops but it's GOOD
+# Archetype: Enterprise-specific trap — Click Quality drops but it's GOOD
 # Pass criteria: 3/3 GREEN (high-stakes — wrong escalation wastes eng resources)
 
 case:
   name: "AI adoption trap (positive signal misread)"
   scenario: "S5"
   archetype: "ai_adoption_trap"
-  purpose: "Can the tool recognize that DLCTR decline from AI adoption is a POSITIVE signal?"
+  purpose: "Can the tool recognize that Click Quality decline from AI adoption is a POSITIVE signal?"
   pass_threshold: "3/3 GREEN"
 
 rubric:
   root_cause_accuracy:
     weight: 40
     criteria:
-      - description: "Identifies AI answer adoption as the mechanism behind DLCTR decline"
+      - description: "Identifies AI answer adoption as the mechanism behind Click Quality decline"
         points: 20
-      - description: "Notes that QSR is stable or improving (AI pathway compensating)"
+      - description: "Notes that Search Quality Success is stable or improving (AI pathway compensating)"
         points: 10
       - description: "Recognizes this is concentrated in ai_on cohort"
         points: 10
@@ -36,7 +36,7 @@ rubric:
     criteria:
       - description: "Segments by ai_enablement dimension"
         points: 10
-      - description: "Checks co-movement of DLCTR, QSR, SAIN trigger, SAIN success"
+      - description: "Checks co-movement of Click Quality, Search Quality Success, AI trigger, AI success"
         points: 6
       - description: "Compares ai_on vs ai_off cohorts"
         points: 4
@@ -52,7 +52,7 @@ rubric:
         points: 3
 
 must_find:
-  root_cause: "DLCTR decline driven by AI answer adoption in ai_on cohort"
+  root_cause: "Click Quality decline driven by AI answer adoption in ai_on cohort"
   semantic_match: true
   # The tool should recognize the mechanism, not just label it
   mechanism: "Users getting AI answers instead of clicking through to documents"
@@ -64,7 +64,7 @@ must_check_dimensions:
 must_not_do:
   - recommend_rollback: "AI adoption is working as intended — do not roll back"
   - label_as_regression: "This is a feature success, not a quality regression"
-  - ignore_ai_signal: "Must check SAIN trigger/success co-movement"
+  - ignore_ai_signal: "Must check AI trigger/success co-movement"
   - assign_p0_severity: "Should not escalate as critical incident"
 
 output_quality:

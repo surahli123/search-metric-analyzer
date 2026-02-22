@@ -47,7 +47,7 @@ Execute the 10 tasks from the implementation plan in order. At each checkpoint, 
 - The existing generator is at `generators/generate_synthetic_data.py` — READ IT FULLY before modifying
 - Key changes: add Enterprise dimensions (tenant_tier, ai_enablement, industry_vertical, connector_type), add period column (baseline/current), add scenarios S9-S12
 - After implementation, run the generator and verify output with `pytest tests/test_generator.py -v`
-- Also run `python tools/decompose.py --input data/synthetic/synthetic_metric_aggregate.csv --metric dlctr_value --dimensions tenant_tier` to verify the generated data works with our analysis tools
+- Also run `python tools/decompose.py --input data/synthetic/synthetic_metric_aggregate.csv --metric click_quality_value --dimensions tenant_tier` to verify the generated data works with our analysis tools
 
 ### Task 8 — Skill File (Special Handling):
 - The skill file at `skills/search-metric-analyzer.md` encodes the diagnostic methodology
@@ -75,8 +75,8 @@ Execute the 10 tasks from the implementation plan in order. At each checkpoint, 
 
 This is an **Enterprise Search** platform (like Glean). Critical things to know:
 - **Tenant tiers** (standard/premium/enterprise) have different metric baselines
-- **AI enablement** (ai_on/ai_off) fundamentally changes click behavior — DLCTR drops when AI answers work, and that's GOOD
-- **QSR formula:** max(qsr_component_click, sain_trigger * sain_success)
+- **AI enablement** (ai_on/ai_off) fundamentally changes click behavior -- Click Quality drops when AI answers work, and that's GOOD
+- **Search Quality Success formula:** max(search_quality_success_component_click, ai_trigger * ai_success)
 - **Connector types** (Confluence, Slack, GDrive, etc.) each have different failure modes
 - **Mix-shift** causes 30-40% of Enterprise Search metric movements — always check it
 - **Co-movement diagnostic table** in `data/knowledge/metric_definitions.yaml` is the first thing to check during intake

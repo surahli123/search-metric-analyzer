@@ -59,7 +59,7 @@ class TestSkillFileFrontmatter:
     def test_trigger_mentions_key_metrics(self, content):
         """The trigger should fire on common metric names users would mention."""
         # Extract just the trigger section from frontmatter
-        trigger_terms = ["DLCTR", "QSR", "SAIN", "metric drop", "metric spike"]
+        trigger_terms = ["Click Quality", "Search Quality Success", "AI Answer", "metric drop", "metric spike"]
         found = sum(1 for term in trigger_terms if term.lower() in content.lower())
         assert found >= 3, (
             f"Trigger should mention at least 3 key metric terms, found {found}. "
@@ -345,7 +345,7 @@ class TestSkillFileAntiPatterns:
 class TestSkillFileAIAdoptionSpecialCase:
     """Verify the AI adoption special case is explicitly handled.
 
-    This is the "AI answer trap" from the design doc: DLCTR drops because
+    This is the "AI answer trap" from the design doc: Click Quality drops because
     AI answers are working, which is a POSITIVE signal, not a regression.
     Misidentifying this wastes engineering time and could roll back a good feature.
     """
@@ -363,7 +363,7 @@ class TestSkillFileAIAdoptionSpecialCase:
     def test_labels_as_positive(self, content):
         content_lower = content.lower()
         assert "positive" in content_lower, (
-            "Must explicitly label AI adoption DLCTR decline as positive"
+            "Must explicitly label AI adoption Click Quality decline as positive"
         )
 
     def test_do_not_treat_as_regression(self, content):
@@ -406,7 +406,7 @@ class TestSkillFileCoMovement:
         """Co-movement check compares directions of related metrics."""
         content_lower = content.lower()
         # Should mention at least some of these metrics in co-movement context
-        metrics = ["dlctr", "qsr", "sain", "zero-result", "latency"]
+        metrics = ["click_quality", "search_quality_success", "ai_answer", "zero-result", "latency"]
         found = sum(1 for m in metrics if m in content_lower)
         assert found >= 3, (
             f"Co-movement section should reference at least 3 related metrics, found {found}"

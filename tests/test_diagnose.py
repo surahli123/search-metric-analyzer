@@ -134,7 +134,7 @@ class TestRunDiagnosis:
 
     def test_runs_on_decomposition_output(self, sample_metric_rows):
         from tools.decompose import run_decomposition
-        decomp = run_decomposition(sample_metric_rows, "dlctr_value",
+        decomp = run_decomposition(sample_metric_rows, "click_quality_value",
                                    dimensions=["tenant_tier"])
         result = run_diagnosis(decomposition=decomp)
         assert "confidence" in result
@@ -143,7 +143,7 @@ class TestRunDiagnosis:
 
     def test_includes_all_4_checks(self, sample_metric_rows):
         from tools.decompose import run_decomposition
-        decomp = run_decomposition(sample_metric_rows, "dlctr_value",
+        decomp = run_decomposition(sample_metric_rows, "click_quality_value",
                                    dimensions=["tenant_tier"])
         result = run_diagnosis(decomposition=decomp)
         check_names = [c["check"] for c in result["validation_checks"]]
@@ -570,7 +570,7 @@ class TestRunDiagnosisEdgeCases:
         """
         decomposition = {
             "aggregate": {
-                "metric": "dlctr_value",
+                "metric": "click_quality_value",
                 "direction": "down",
                 "severity": "P1",
             },
@@ -980,7 +980,7 @@ class TestRunDiagnosisActionItems:
     def test_all_halt_checks_produce_multiple_actions(self):
         """When all checks HALT, each HALT should generate its own action."""
         decomposition = {
-            "aggregate": {"severity": "P0", "metric": "dlctr_value", "direction": "down"},
+            "aggregate": {"severity": "P0", "metric": "click_quality_value", "direction": "down"},
             "dimensional_breakdown": {
                 "tenant_tier": {
                     "segments": [{
@@ -1061,7 +1061,7 @@ class TestDiagnoseCLI:
         # Arrange: create a minimal decomposition JSON
         decomp = {
             "aggregate": {
-                "metric": "dlctr_value",
+                "metric": "click_quality_value",
                 "direction": "down",
                 "severity": "P1",
                 "baseline_mean": 0.280,
@@ -1223,12 +1223,12 @@ class TestFalseAlarmDeltaGuard:
     def test_path_b_blocked_by_large_delta(self):
         """P2 + unknown + segment < 50% BUT delta 5% → should NOT be false alarm.
 
-        A 5% relative delta in DLCTR (noise threshold 4%) is a real signal.
+        A 5% relative delta in Click Quality (noise threshold 4%) is a real signal.
         The delta guard should prevent false alarm classification.
         """
         decomposition = {
             "aggregate": {
-                "metric": "dlctr_value",
+                "metric": "click_quality_value",
                 "severity": "P2",
                 "relative_delta_pct": -5.0,  # 5% > 4% noise threshold
                 "direction": "down",
@@ -1258,12 +1258,12 @@ class TestFalseAlarmDeltaGuard:
     def test_path_b_works_for_small_delta(self):
         """P2 + unknown + segment < 50% AND delta 0.3% → IS false alarm.
 
-        A 0.3% relative delta in DLCTR (noise threshold 4%) is within noise.
+        A 0.3% relative delta in Click Quality (noise threshold 4%) is within noise.
         The delta guard should allow false alarm classification.
         """
         decomposition = {
             "aggregate": {
-                "metric": "dlctr_value",
+                "metric": "click_quality_value",
                 "severity": "P2",
                 "relative_delta_pct": -0.3,  # 0.3% < 4% noise threshold
                 "direction": "down",
@@ -1304,7 +1304,7 @@ class TestHaltBlocksFalseAlarmHighConfidence:
         """
         decomposition = {
             "aggregate": {
-                "metric": "dlctr_value",
+                "metric": "click_quality_value",
                 "severity": "P2",
                 "relative_delta_pct": -0.2,  # Within noise → path (b) triggers
                 "direction": "down",
@@ -1344,7 +1344,7 @@ class TestMixShiftArchetypeActivation:
         """
         decomposition = {
             "aggregate": {
-                "metric": "dlctr_value",
+                "metric": "click_quality_value",
                 "severity": "P1",
                 "relative_delta_pct": -3.5,
                 "direction": "down",
@@ -1425,7 +1425,7 @@ class TestMultiCauseSuppressionSmart:
         """
         decomposition = {
             "aggregate": {
-                "metric": "dlctr_value",
+                "metric": "click_quality_value",
                 "severity": "P1",
                 "direction": "down",
             },
@@ -1465,7 +1465,7 @@ class TestMultiCauseSuppressionSmart:
         """
         decomposition = {
             "aggregate": {
-                "metric": "dlctr_value",
+                "metric": "click_quality_value",
                 "severity": "P1",
                 "direction": "down",
             },
@@ -1573,7 +1573,7 @@ class TestVerifyDiagnosis:
     def _make_diagnosis(self, **overrides) -> dict:
         """Helper to build a minimal coherent diagnosis dict for testing."""
         base = {
-            "aggregate": {"severity": "P1", "metric": "dlctr_value"},
+            "aggregate": {"severity": "P1", "metric": "click_quality_value"},
             "primary_hypothesis": {
                 "archetype": "ranking_regression",
                 "dimension": "tenant_tier",
@@ -1820,7 +1820,7 @@ class TestVerifyDiagnosis:
     def test_run_diagnosis_includes_verification_warnings(self):
         """run_diagnosis() output should include verification_warnings key."""
         decomposition = {
-            "aggregate": {"severity": "P1", "metric": "dlctr_value", "direction": "down"},
+            "aggregate": {"severity": "P1", "metric": "click_quality_value", "direction": "down"},
             "dimensional_breakdown": {
                 "tenant_tier": {
                     "segments": [{"segment_value": "standard", "contribution_pct": 85.0,
