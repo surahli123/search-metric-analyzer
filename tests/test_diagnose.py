@@ -14,6 +14,7 @@ from tools.diagnose import (
     check_mix_shift_threshold,
     compute_confidence,
     run_diagnosis,
+    verify_diagnosis,
     _extract_explained_pct,
     _extract_mix_shift_pct,
     _build_primary_hypothesis,
@@ -1495,3 +1496,341 @@ class TestMultiCauseSuppressionSmart:
         hypothesis = result["primary_hypothesis"]
         assert hypothesis.get("multi_cause") is None, \
             "Multi-cause should be suppressed for correlated dimensions"
+
+
+# ======================================================================
+# v1.4: Structured Subagent Specs (confirms_if / rejects_if)
+# ======================================================================
+
+
+class TestArchetypeSubagentSpecs:
+    """Validate that every archetype has confirms_if and rejects_if fields.
+
+    v1.4 adds structured verification specs to each archetype for:
+    1. verify_diagnosis() coherence checks
+    2. Production subagent SQL query generation
+    """
+
+    def test_all_archetypes_have_confirms_if(self):
+        """Every archetype must have a non-empty confirms_if list."""
+        from tools.diagnose import ARCHETYPE_MAP
+        for key, val in ARCHETYPE_MAP.items():
+            assert "confirms_if" in val, f"{key} missing confirms_if"
+            assert isinstance(val["confirms_if"], list), f"{key} confirms_if is not a list"
+            assert len(val["confirms_if"]) > 0, f"{key} confirms_if is empty"
+
+    def test_all_archetypes_have_rejects_if(self):
+        """Every archetype must have a non-empty rejects_if list."""
+        from tools.diagnose import ARCHETYPE_MAP
+        for key, val in ARCHETYPE_MAP.items():
+            assert "rejects_if" in val, f"{key} missing rejects_if"
+            assert isinstance(val["rejects_if"], list), f"{key} rejects_if is not a list"
+            assert len(val["rejects_if"]) > 0, f"{key} rejects_if is empty"
+
+    def test_all_archetypes_have_description_template(self):
+        """Every archetype must have description_template (bug fix validation).
+
+        The v1.3 query_understanding_regression archetype had summary_template
+        instead of description_template, causing silent render failures.
+        This test prevents that regression.
+        """
+        from tools.diagnose import ARCHETYPE_MAP
+        for key, val in ARCHETYPE_MAP.items():
+            assert "description_template" in val, \
+                f"{key} missing description_template (uses wrong key?)"
+
+    def test_all_archetypes_have_action_items(self):
+        """Every archetype must have action_items (list, may be empty for false alarm)."""
+        from tools.diagnose import ARCHETYPE_MAP
+        for key, val in ARCHETYPE_MAP.items():
+            assert "action_items" in val, \
+                f"{key} missing action_items (uses wrong key?)"
+            assert isinstance(val["action_items"], list), \
+                f"{key} action_items is not a list"
+
+    def test_confirms_and_rejects_are_strings(self):
+        """Each entry in confirms_if and rejects_if must be a string."""
+        from tools.diagnose import ARCHETYPE_MAP
+        for key, val in ARCHETYPE_MAP.items():
+            for i, item in enumerate(val["confirms_if"]):
+                assert isinstance(item, str), f"{key}.confirms_if[{i}] is not a string"
+            for i, item in enumerate(val["rejects_if"]):
+                assert isinstance(item, str), f"{key}.rejects_if[{i}] is not a string"
+
+
+# ======================================================================
+# v1.4: verify_diagnosis() Coherence Checks
+# ======================================================================
+
+
+class TestVerifyDiagnosis:
+    """Test the v1.4 post-diagnosis verification checks.
+
+    verify_diagnosis() runs 5 coherence checks on the completed diagnosis
+    and returns a list of warnings. Empty list = fully coherent.
+    """
+
+    def _make_diagnosis(self, **overrides) -> dict:
+        """Helper to build a minimal coherent diagnosis dict for testing."""
+        base = {
+            "aggregate": {"severity": "P1", "metric": "dlctr_value"},
+            "primary_hypothesis": {
+                "archetype": "ranking_regression",
+                "dimension": "tenant_tier",
+                "segment": "standard",
+                "contribution_pct": 85.0,
+                "is_positive": False,
+            },
+            "confidence": {"level": "Medium", "reasoning": "test"},
+            "validation_checks": [
+                {"check": "logging_artifact", "status": "PASS"},
+                {"check": "decomposition_completeness", "status": "PASS"},
+                {"check": "temporal_consistency", "status": "PASS"},
+                {"check": "mix_shift", "status": "PASS"},
+            ],
+            "action_items": [
+                {"action": "Check ranking model deploys", "owner": "Search Ranking team"},
+            ],
+        }
+        # Apply overrides by merging into nested dicts
+        for key, value in overrides.items():
+            if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+                base[key].update(value)
+            else:
+                base[key] = value
+        return base
+
+    # ── Check 1: Archetype-segment consistency ──
+
+    def test_check1_fires_ai_adoption_wrong_segment(self):
+        """ai_adoption archetype with non-ai_enablement top segment → warning."""
+        diag = self._make_diagnosis(
+            primary_hypothesis={
+                "archetype": "ai_adoption",
+                "dimension": "tenant_tier",
+                "segment": "standard",
+                "is_positive": True,
+            },
+        )
+        warnings = verify_diagnosis(diag)
+        archetype_warnings = [w for w in warnings if w["check"] == "archetype_segment_consistency"]
+        assert len(archetype_warnings) == 1
+        assert "ai_adoption" in archetype_warnings[0]["detail"]
+
+    def test_check1_no_fire_ai_adoption_correct_segment(self):
+        """ai_adoption archetype with ai_enablement top segment → no warning."""
+        diag = self._make_diagnosis(
+            primary_hypothesis={
+                "archetype": "ai_adoption",
+                "dimension": "ai_enablement",
+                "segment": "ai_on",
+                "is_positive": True,
+            },
+        )
+        warnings = verify_diagnosis(diag)
+        archetype_warnings = [w for w in warnings if w["check"] == "archetype_segment_consistency"]
+        assert len(archetype_warnings) == 0
+
+    def test_check1_fires_ranking_regression_ai_segment(self):
+        """ranking_regression with ai_enablement=ai_on → warning."""
+        diag = self._make_diagnosis(
+            primary_hypothesis={
+                "archetype": "ranking_regression",
+                "dimension": "ai_enablement",
+                "segment": "ai_on",
+                "is_positive": False,
+            },
+        )
+        warnings = verify_diagnosis(diag)
+        archetype_warnings = [w for w in warnings if w["check"] == "archetype_segment_consistency"]
+        assert len(archetype_warnings) == 1
+        assert "ranking_regression" in archetype_warnings[0]["detail"]
+
+    # ── Check 2: Severity-action consistency ──
+
+    def test_check2_fires_p0_no_actions(self):
+        """P0 severity with empty action_items → error."""
+        diag = self._make_diagnosis(
+            aggregate={"severity": "P0"},
+            action_items=[],
+        )
+        warnings = verify_diagnosis(diag)
+        severity_warnings = [w for w in warnings if w["check"] == "severity_action_consistency"]
+        assert len(severity_warnings) == 1
+        assert severity_warnings[0]["severity"] == "error"
+
+    def test_check2_fires_normal_with_actions(self):
+        """'normal' severity with action items → warning."""
+        diag = self._make_diagnosis(
+            aggregate={"severity": "normal"},
+            action_items=[{"action": "something", "owner": "someone"}],
+        )
+        warnings = verify_diagnosis(diag)
+        severity_warnings = [w for w in warnings if w["check"] == "severity_action_consistency"]
+        assert len(severity_warnings) == 1
+        assert severity_warnings[0]["severity"] == "warning"
+
+    def test_check2_no_fire_p1_with_actions(self):
+        """P1 severity with action items → no warning (expected)."""
+        diag = self._make_diagnosis()  # default has P1 + actions
+        warnings = verify_diagnosis(diag)
+        severity_warnings = [w for w in warnings if w["check"] == "severity_action_consistency"]
+        assert len(severity_warnings) == 0
+
+    # ── Check 3: Confidence-check consistency ──
+
+    def test_check3_fires_high_confidence_with_halt(self):
+        """High confidence + HALT check + non-false_alarm → warning."""
+        diag = self._make_diagnosis(
+            confidence={"level": "High", "reasoning": "test"},
+            validation_checks=[
+                {"check": "logging_artifact", "status": "HALT"},
+                {"check": "decomposition_completeness", "status": "PASS"},
+                {"check": "temporal_consistency", "status": "PASS"},
+                {"check": "mix_shift", "status": "PASS"},
+            ],
+        )
+        warnings = verify_diagnosis(diag)
+        conf_warnings = [w for w in warnings if w["check"] == "confidence_check_consistency"]
+        assert len(conf_warnings) == 1
+
+    def test_check3_no_fire_false_alarm_with_halt(self):
+        """High confidence + HALT + false_alarm archetype → no warning (allowed)."""
+        diag = self._make_diagnosis(
+            primary_hypothesis={
+                "archetype": "false_alarm",
+                "dimension": None,
+                "segment": None,
+                "is_positive": True,
+            },
+            confidence={"level": "High", "reasoning": "test"},
+            validation_checks=[
+                {"check": "logging_artifact", "status": "HALT"},
+                {"check": "decomposition_completeness", "status": "PASS"},
+                {"check": "temporal_consistency", "status": "PASS"},
+                {"check": "mix_shift", "status": "PASS"},
+            ],
+            aggregate={"severity": "normal"},
+            action_items=[],
+        )
+        warnings = verify_diagnosis(diag)
+        conf_warnings = [w for w in warnings if w["check"] == "confidence_check_consistency"]
+        assert len(conf_warnings) == 0
+
+    # ── Check 4: False-alarm coherence ──
+
+    def test_check4_fires_false_alarm_with_actions(self):
+        """false_alarm archetype with non-empty action_items → error."""
+        diag = self._make_diagnosis(
+            primary_hypothesis={
+                "archetype": "false_alarm",
+                "dimension": None,
+                "segment": None,
+                "is_positive": True,
+            },
+            aggregate={"severity": "normal"},
+            action_items=[{"action": "something", "owner": "someone"}],
+        )
+        warnings = verify_diagnosis(diag)
+        fa_warnings = [w for w in warnings if w["check"] == "false_alarm_coherence"]
+        assert any(w["severity"] == "error" for w in fa_warnings)
+
+    def test_check4_fires_false_alarm_not_positive(self):
+        """false_alarm with is_positive=False → error."""
+        diag = self._make_diagnosis(
+            primary_hypothesis={
+                "archetype": "false_alarm",
+                "dimension": None,
+                "segment": None,
+                "is_positive": False,
+            },
+            aggregate={"severity": "normal"},
+            action_items=[],
+        )
+        warnings = verify_diagnosis(diag)
+        fa_warnings = [w for w in warnings if w["check"] == "false_alarm_coherence"]
+        assert len(fa_warnings) == 1
+        assert "is_positive" in fa_warnings[0]["detail"]
+
+    def test_check4_no_fire_coherent_false_alarm(self):
+        """Coherent false alarm (empty actions, is_positive=True) → no warning."""
+        diag = self._make_diagnosis(
+            primary_hypothesis={
+                "archetype": "false_alarm",
+                "dimension": None,
+                "segment": None,
+                "is_positive": True,
+            },
+            aggregate={"severity": "normal"},
+            action_items=[],
+        )
+        warnings = verify_diagnosis(diag)
+        fa_warnings = [w for w in warnings if w["check"] == "false_alarm_coherence"]
+        assert len(fa_warnings) == 0
+
+    # ── Check 5: Multi-cause-confidence consistency ──
+
+    def test_check5_fires_multi_cause_high_confidence(self):
+        """Multi-cause + High confidence → warning."""
+        diag = self._make_diagnosis(
+            primary_hypothesis={
+                "archetype": "ranking_regression",
+                "dimension": "tenant_tier",
+                "segment": "standard",
+                "is_positive": False,
+                "multi_cause": [
+                    {"dimension": "tenant_tier", "segment": "standard", "contribution_pct": 55},
+                    {"dimension": "connector_type", "segment": "slack", "contribution_pct": 40},
+                ],
+            },
+            confidence={"level": "High", "reasoning": "test"},
+        )
+        warnings = verify_diagnosis(diag)
+        mc_warnings = [w for w in warnings if w["check"] == "multi_cause_confidence_consistency"]
+        assert len(mc_warnings) == 1
+
+    def test_check5_no_fire_multi_cause_medium_confidence(self):
+        """Multi-cause + Medium confidence → no warning (already downgraded)."""
+        diag = self._make_diagnosis(
+            primary_hypothesis={
+                "archetype": "ranking_regression",
+                "dimension": "tenant_tier",
+                "segment": "standard",
+                "is_positive": False,
+                "multi_cause": [
+                    {"dimension": "tenant_tier", "segment": "standard", "contribution_pct": 55},
+                    {"dimension": "connector_type", "segment": "slack", "contribution_pct": 40},
+                ],
+            },
+        )
+        warnings = verify_diagnosis(diag)
+        mc_warnings = [w for w in warnings if w["check"] == "multi_cause_confidence_consistency"]
+        assert len(mc_warnings) == 0
+
+    # ── Integration: coherent diagnosis produces zero warnings ──
+
+    def test_coherent_diagnosis_zero_warnings(self):
+        """A well-formed diagnosis should produce zero verification warnings."""
+        diag = self._make_diagnosis()
+        warnings = verify_diagnosis(diag)
+        assert warnings == [], f"Expected zero warnings, got: {warnings}"
+
+    # ── Integration: run_diagnosis includes verification_warnings ──
+
+    def test_run_diagnosis_includes_verification_warnings(self):
+        """run_diagnosis() output should include verification_warnings key."""
+        decomposition = {
+            "aggregate": {"severity": "P1", "metric": "dlctr_value", "direction": "down"},
+            "dimensional_breakdown": {
+                "tenant_tier": {
+                    "segments": [{"segment_value": "standard", "contribution_pct": 85.0,
+                                  "baseline_mean": 0.28, "current_mean": 0.245}]
+                }
+            },
+            "mix_shift": {"mix_shift_contribution_pct": 5.0},
+            "dominant_dimension": "tenant_tier",
+            "drill_down_recommended": True,
+        }
+        result = run_diagnosis(decomposition=decomposition)
+        assert "verification_warnings" in result
+        assert isinstance(result["verification_warnings"], list)

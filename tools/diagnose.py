@@ -99,6 +99,19 @@ ARCHETYPE_MAP = {
             {"action": "Review per-segment DLCTR to isolate affected query types", "owner": "Search Quality DS"},
         ],
         "category": "algorithm_model",
+        # v1.4: Structured subagent specs — conditions that confirm or reject this archetype.
+        # Used by verify_diagnosis() for coherence checks and by production subagents
+        # for SQL query generation.
+        "confirms_if": [
+            "DLCTR drop concentrated in specific position buckets (3-5, 6-10)",
+            "Ranking model version changed in the movement window",
+            "SAIN metrics stable (not AI-driven)",
+        ],
+        "rejects_if": [
+            "DLCTR drop uniform across all segments (suggests logging, not ranking)",
+            "Movement proportional to traffic mix-shift (>50% compositional)",
+            "SAIN trigger or success also changed (suggests AI adoption, not ranking)",
+        ],
     },
     "ai_answers_working": {
         "archetype": "ai_adoption",
@@ -115,6 +128,16 @@ ARCHETYPE_MAP = {
         ],
         "category": "ai_feature_effect",
         "is_positive": True,
+        "confirms_if": [
+            "DLCTR drop concentrated in ai_enablement=ai_on segment",
+            "SAIN trigger and success both increasing",
+            "QSR stable or improving (AI answers compensate for lost clicks)",
+        ],
+        "rejects_if": [
+            "DLCTR drop in ai_enablement=ai_off segment (AI not involved)",
+            "SAIN metrics flat or declining (AI answers not improving)",
+            "QSR also declining (total quality loss, not just click substitution)",
+        ],
     },
     "broad_quality_degradation": {
         "archetype": "broad_degradation",
@@ -130,6 +153,16 @@ ARCHETYPE_MAP = {
             {"action": "Check experiment ramp schedules for conflicting experiments", "owner": "Experimentation team"},
         ],
         "category": "algorithm_model",
+        "confirms_if": [
+            "All 4 metrics declined simultaneously",
+            "Movement uniform across tenant tiers and segments",
+            "Infrastructure event or major deploy in the movement window",
+        ],
+        "rejects_if": [
+            "Movement concentrated in a single segment (suggests targeted, not broad)",
+            "Only DLCTR affected (suggests ranking or click behavior, not broad)",
+            "Latency unchanged (suggests model issue, not infrastructure)",
+        ],
     },
     "sain_quality_regression": {
         "archetype": "sain_regression",
@@ -144,6 +177,16 @@ ARCHETYPE_MAP = {
             {"action": "Check AI answer accuracy by query type", "owner": "AI Quality DS"},
         ],
         "category": "ai_feature_effect",
+        "confirms_if": [
+            "SAIN success declining while SAIN trigger stable (answers appearing, not satisfying)",
+            "AI answer model version or threshold changed in movement window",
+            "Drop concentrated in specific query types or connector types",
+        ],
+        "rejects_if": [
+            "SAIN trigger also declining (suggests trigger issue, not quality)",
+            "DLCTR stable (suggests isolated AI issue with no click impact)",
+            "Movement matches traffic mix-shift pattern (compositional, not behavioral)",
+        ],
     },
     "click_behavior_change": {
         "archetype": "behavior_change",
@@ -157,6 +200,16 @@ ARCHETYPE_MAP = {
             {"action": "Review traffic mix-shift for composition changes", "owner": "Search Quality DS"},
         ],
         "category": "user_behavior",
+        "confirms_if": [
+            "Only DLCTR moved while SAIN metrics are stable",
+            "Recent UX, display, or SERP layout change in the movement window",
+            "Click pattern change visible in position_bucket decomposition",
+        ],
+        "rejects_if": [
+            "SAIN metrics also changed (suggests broader issue, not just clicks)",
+            "Movement driven by mix-shift (>50% compositional)",
+            "Ranking model version changed (suggests algorithm, not behavior)",
+        ],
     },
     "sain_trigger_regression": {
         "archetype": "sain_trigger_issue",
@@ -169,6 +222,16 @@ ARCHETYPE_MAP = {
             {"action": "Check SAIN trigger threshold and model configuration", "owner": "AI team"},
         ],
         "category": "ai_feature_effect",
+        "confirms_if": [
+            "SAIN trigger declining while SAIN success stable (threshold or model issue)",
+            "Trigger threshold or model configuration changed in movement window",
+            "Drop concentrated in query types that should trigger AI answers",
+        ],
+        "rejects_if": [
+            "SAIN success also declining (suggests broader AI quality issue)",
+            "DLCTR also declining (suggests ranking, not trigger-specific)",
+            "Trigger change proportional to query volume change (not a regression)",
+        ],
     },
     "sain_success_regression": {
         "archetype": "sain_success_issue",
@@ -181,6 +244,16 @@ ARCHETYPE_MAP = {
             {"action": "Review AI answer quality model and content sources", "owner": "AI team"},
         ],
         "category": "ai_feature_effect",
+        "confirms_if": [
+            "SAIN success declining while SAIN trigger stable (quality, not coverage)",
+            "AI answer quality model or content sources changed in movement window",
+            "User engagement signals (dwell time, post-search actions) declining",
+        ],
+        "rejects_if": [
+            "SAIN trigger also declining (suggests trigger issue, not quality)",
+            "Movement matches a connector outage pattern (content source offline)",
+            "Drop concentrated in a single connector type (data quality, not model)",
+        ],
     },
     # ── Query Understanding regression ──
     # Source: Rovo — L0 Query Intelligence layer (intent classification,
@@ -192,17 +265,32 @@ ARCHETYPE_MAP = {
         "severity_cap": None,           # Real regression — use magnitude severity
         "is_positive": False,
         "category": "query_understanding",
-        "summary_template": (
+        # v1.4 bug fix: was summary_template + action (strings), which silently
+        # failed in _build_primary_hypothesis() and _build_action_items().
+        # Now matches the description_template + action_items pattern used by
+        # all other archetypes.
+        "description_template": (
             "Query understanding degradation detected — the search system's "
             "intent classification or query reformulation layer (L0) may be "
-            "misinterpreting queries before they reach ranking."
+            "misinterpreting queries before they reach ranking. "
+            "{metric_name} decline is concentrated in {dimension}='{segment}' "
+            "({contribution:.1f}% of total change)."
         ),
-        "action": (
-            "Check query reformulation logs for increased rewrite error rates. "
-            "Verify intent classification model has not been retrained or "
-            "threshold-changed. Compare raw vs. reformulated query distributions "
-            "before and after the movement date."
-        ),
+        "action_items": [
+            {"action": "Check query reformulation logs for increased rewrite error rates", "owner": "Query Understanding team"},
+            {"action": "Verify intent classification model has not been retrained or threshold-changed", "owner": "Query Understanding team"},
+            {"action": "Compare raw vs. reformulated query distributions before and after movement date", "owner": "Search Quality DS"},
+        ],
+        "confirms_if": [
+            "Query reformulation error rate increased in the movement window",
+            "Intent classification model retrained or threshold changed",
+            "DLCTR and QSR both declined while SAIN success is stable (upstream issue)",
+        ],
+        "rejects_if": [
+            "Movement isolated to a single segment (suggests ranking, not query understanding)",
+            "SAIN success also declining (suggests AI model issue, not L0)",
+            "Query distribution unchanged between baseline and current period",
+        ],
     },
     "mix_shift_composition": {
         "archetype": "mix_shift",
@@ -217,6 +305,16 @@ ARCHETYPE_MAP = {
             {"action": "Investigate traffic composition change (tenant onboarding, portfolio shift)", "owner": "Search Quality DS"},
         ],
         "category": "mix_shift",
+        "confirms_if": [
+            "Per-segment metrics stable (aggregate moved, individual segments didn't)",
+            "Traffic volume distribution shifted between segments",
+            "Mix-shift contribution exceeds 50% of total movement",
+        ],
+        "rejects_if": [
+            "Per-segment metrics also changed (behavioral change, not just mix)",
+            "Traffic distribution stable between baseline and current period",
+            "Movement concentrated in a single segment (not compositional)",
+        ],
     },
     "no_significant_movement": {
         "archetype": "false_alarm",
@@ -228,6 +326,16 @@ ARCHETYPE_MAP = {
         "action_items": [],  # Empty — no action needed for false alarm
         "category": "false_alarm",
         "is_positive": True,
+        "confirms_if": [
+            "All 4 metrics within 1 standard deviation of their weekly baseline",
+            "No single segment explains more than 50% of movement",
+            "Movement consistent with historical weekly noise patterns",
+        ],
+        "rejects_if": [
+            "Any metric moved more than 2 standard deviations",
+            "A dominant segment explains >50% of movement (real cause masked as noise)",
+            "Step-change pattern detected (sudden shift, not gradual noise)",
+        ],
     },
 }
 
@@ -607,6 +715,157 @@ def compute_confidence(
         "would_upgrade_if": upgrade_str,
         "would_downgrade_if": downgrade_str,
     }
+
+
+# ──────────────────────────────────────────────────
+# Post-Diagnosis Verification (v1.4 — DS-STAR Verifier)
+# ──────────────────────────────────────────────────
+
+def verify_diagnosis(diagnosis: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Post-diagnosis coherence checks. Returns list of warnings (empty = coherent).
+
+    Inspired by DS-STAR's Verifier pattern: instead of trusting the first-pass
+    diagnosis, run deterministic checks for internal contradictions. Unlike
+    DS-STAR's LLM-based verifier, ours is pure Python assertions — no LLM cost,
+    fully deterministic, runs in <1ms.
+
+    WHY: The diagnostic pipeline is linear — each step builds on the previous.
+    If an early archetype match is wrong, the severity, actions, and confidence
+    all inherit the error. These checks catch contradictions that slip through.
+
+    5 coherence checks:
+    1. Archetype-segment consistency (does the top segment match the archetype?)
+    2. Severity-action consistency (P0/P1 should have actions; "normal" shouldn't)
+    3. Confidence-check consistency (High confidence shouldn't have HALT checks)
+    4. False-alarm coherence (false_alarm must have empty actions + is_positive)
+    5. Multi-cause-confidence consistency (multi-cause should downgrade confidence)
+
+    Advisory mode: warnings don't block the diagnosis — they're surfaced in the
+    formatted output so the analyst can decide what to do.
+
+    Args:
+        diagnosis: Complete diagnosis dict from run_diagnosis().
+
+    Returns:
+        List of warning dicts. Empty list = fully coherent.
+        Each warning: {"check": str, "severity": "warning"|"error", "detail": str}
+    """
+    warnings: List[Dict[str, Any]] = []
+    hypothesis = diagnosis.get("primary_hypothesis", {})
+    archetype = hypothesis.get("archetype", "generic")
+    aggregate = diagnosis.get("aggregate", {})
+    severity = aggregate.get("severity", "P2")
+    confidence = diagnosis.get("confidence", {})
+    confidence_level = confidence.get("level", "Unknown")
+    action_items = diagnosis.get("action_items", [])
+    checks = diagnosis.get("validation_checks", [])
+
+    # ── Check 1: Archetype-segment consistency ──
+    # If archetype is ai_adoption, the top contributing segment should be
+    # in the ai_enablement dimension. If archetype is ranking_regression,
+    # the top segment should NOT be ai_enablement=ai_on.
+    top_dimension = hypothesis.get("dimension")
+    top_segment = hypothesis.get("segment")
+
+    if archetype == "ai_adoption" and top_dimension and top_dimension != "ai_enablement":
+        warnings.append({
+            "check": "archetype_segment_consistency",
+            "severity": "warning",
+            "detail": (
+                f"Archetype is ai_adoption but top segment is {top_dimension}='{top_segment}', "
+                f"not ai_enablement. The AI adoption hypothesis may be misattributed."
+            ),
+        })
+
+    if archetype == "ranking_regression" and top_dimension == "ai_enablement" and top_segment == "ai_on":
+        warnings.append({
+            "check": "archetype_segment_consistency",
+            "severity": "warning",
+            "detail": (
+                "Archetype is ranking_regression but top segment is ai_enablement='ai_on'. "
+                "This contradicts the ranking hypothesis — consider ai_adoption instead."
+            ),
+        })
+
+    # ── Check 2: Severity-action consistency ──
+    # P0/P1 should have action items (something urgent needs doing).
+    # "normal" severity should have empty actions (nothing to do).
+    if severity in ("P0", "P1") and len(action_items) == 0:
+        warnings.append({
+            "check": "severity_action_consistency",
+            "severity": "error",
+            "detail": (
+                f"Severity is {severity} but no action items were generated. "
+                f"High-severity findings should always include recommended actions."
+            ),
+        })
+
+    if severity == "normal" and len(action_items) > 0:
+        warnings.append({
+            "check": "severity_action_consistency",
+            "severity": "warning",
+            "detail": (
+                f"Severity is 'normal' but {len(action_items)} action item(s) were generated. "
+                f"Normal severity typically means no action needed."
+            ),
+        })
+
+    # ── Check 3: Confidence-check consistency ──
+    # High confidence with a HALT check is suspicious — how can we be highly
+    # confident when a fundamental check failed?
+    # Exception: false_alarm archetype is allowed to override HALTs (the multi-metric
+    # stability signal is strong enough to override individual check failures).
+    has_halt = any(c.get("status") == "HALT" for c in checks)
+    if confidence_level == "High" and has_halt and archetype != "false_alarm":
+        halt_names = [c.get("check", "unknown") for c in checks if c.get("status") == "HALT"]
+        warnings.append({
+            "check": "confidence_check_consistency",
+            "severity": "warning",
+            "detail": (
+                f"Confidence is High but HALT check(s) present: {', '.join(halt_names)}. "
+                f"High confidence is unusual when fundamental checks have failed."
+            ),
+        })
+
+    # ── Check 4: False-alarm coherence ──
+    # If archetype is false_alarm, action_items MUST be empty (nothing to do)
+    # and is_positive MUST be True (this is good news, not bad).
+    if archetype == "false_alarm":
+        if len(action_items) > 0:
+            warnings.append({
+                "check": "false_alarm_coherence",
+                "severity": "error",
+                "detail": (
+                    f"Archetype is false_alarm but {len(action_items)} action item(s) were generated. "
+                    f"False alarms should have no action items."
+                ),
+            })
+        if not hypothesis.get("is_positive", False):
+            warnings.append({
+                "check": "false_alarm_coherence",
+                "severity": "error",
+                "detail": (
+                    "Archetype is false_alarm but is_positive is False. "
+                    "False alarms are inherently positive (nothing went wrong)."
+                ),
+            })
+
+    # ── Check 5: Multi-cause-confidence consistency ──
+    # If multi_cause is flagged, confidence should not be High.
+    # Multi-cause means we can't cleanly attribute the movement to a single
+    # archetype — the confidence downgrade should have fired in run_diagnosis().
+    if hypothesis.get("multi_cause") and confidence_level == "High":
+        warnings.append({
+            "check": "multi_cause_confidence_consistency",
+            "severity": "warning",
+            "detail": (
+                "Multi-cause detected but confidence is High. "
+                "Attribution is uncertain with multiple overlapping causes — "
+                "confidence should be Medium or lower."
+            ),
+        })
+
+    return warnings
 
 
 # ──────────────────────────────────────────────────
@@ -1200,7 +1459,7 @@ def run_diagnosis(
     )
 
     # ── Assemble the full diagnosis report ──
-    return {
+    result = {
         "aggregate": aggregate,
         "primary_hypothesis": primary_hypothesis,
         "confidence": confidence,
@@ -1209,6 +1468,14 @@ def run_diagnosis(
         "mix_shift": decomposition.get("mix_shift", {}),
         "action_items": action_items,
     }
+
+    # ── v1.4: Post-diagnosis verification ──
+    # Run coherence checks on the completed diagnosis. Advisory mode —
+    # warnings are surfaced in the formatter output but don't block diagnosis.
+    verification_warnings = verify_diagnosis(result)
+    result["verification_warnings"] = verification_warnings
+
+    return result
 
 
 def _get_top_segment_contribution(decomposition: Dict[str, Any]) -> float:

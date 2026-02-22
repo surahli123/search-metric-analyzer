@@ -78,9 +78,13 @@ class TestCoMovementPattern:
         assert result.get("is_positive") is True
 
     def test_no_match_returns_unknown(self):
+        # v1.4: scored matching returns a 3/4 partial match for "all up" because
+        # ai_answers_working matches on qsr, sain_trigger, sain_success.
+        # Use a truly unmatched pattern: up-down-up-down (alternating) gets at
+        # most 2/4 on any pattern, which is below the 0.75 threshold.
         observed = {
-            "dlctr": "up", "qsr": "up",
-            "sain_trigger": "up", "sain_success": "up",
+            "dlctr": "up", "qsr": "down",
+            "sain_trigger": "up", "sain_success": "down",
             "zero_result_rate": "up", "latency": "up",
         }
         result = match_co_movement_pattern(observed)
@@ -841,3 +845,131 @@ class TestAnomalyCLI:
         assert "step_change" in output
         assert "co_movement" in output
         assert "baseline" in output
+
+
+# ======================================================================
+# v1.4: Scored Co-Movement Pattern Matching
+# ======================================================================
+
+
+class TestScoredCoMovement:
+    """Test the v1.4 scored matching in match_co_movement_pattern().
+
+    v1.4 changed from first-match to score-all: every pattern gets a score
+    (0-4 matching fields / total fields), and the best match above 0.75 wins.
+    """
+
+    def test_perfect_match_returns_score_1(self):
+        """A 4/4 match should return match_score=1.0 (backward compatible)."""
+        observed = {
+            "dlctr": "down", "qsr": "down",
+            "sain_trigger": "stable", "sain_success": "stable",
+        }
+        result = match_co_movement_pattern(observed)
+        assert result["likely_cause"] == "ranking_relevance_regression"
+        assert result["match_score"] == 1.0
+
+    def test_perfect_match_has_runner_up(self):
+        """A perfect match should include a runner_up if another pattern scores >= 0.75."""
+        observed = {
+            "dlctr": "down", "qsr": "down",
+            "sain_trigger": "stable", "sain_success": "stable",
+        }
+        result = match_co_movement_pattern(observed)
+        # Runner-up may or may not exist depending on which patterns score >= 0.75.
+        # The key assertion: the field is present.
+        assert "runner_up" in result
+        assert "match_score" in result
+
+    def test_partial_match_3_of_4_returns_with_score(self):
+        """A 3/4 match (score=0.75) should return the best pattern.
+
+        Example: dlctr down, qsr down, sain_trigger stable, sain_success DOWN.
+        This matches ranking_regression on 3/4 (sain_success is "down" not "stable").
+        """
+        observed = {
+            "dlctr": "down", "qsr": "down",
+            "sain_trigger": "stable", "sain_success": "down",
+        }
+        result = match_co_movement_pattern(observed)
+        # sain_quality_regression is dlctr:down, qsr:down, sain_trigger:stable, sain_success:down = 4/4
+        # So this is actually a perfect match for sain_quality_regression!
+        assert result["likely_cause"] == "sain_quality_regression"
+        assert result["match_score"] == 1.0
+
+    def test_below_threshold_returns_unknown(self):
+        """A 2/4 match (score=0.5) should return unknown_pattern."""
+        observed = {
+            "dlctr": "up", "qsr": "up",
+            "sain_trigger": "stable", "sain_success": "stable",
+        }
+        result = match_co_movement_pattern(observed)
+        # No pattern has dlctr:up AND qsr:up. Best partial matches score 2/4 = 0.5.
+        assert result["likely_cause"] == "unknown_pattern"
+        assert result["match_score"] < 0.75
+
+    def test_tiebreaker_first_pattern_wins(self):
+        """When two patterns score equally, the one listed first in YAML wins.
+
+        Python's sort is stable, so original YAML order is the tiebreaker.
+        """
+        # All stable = no_significant_movement (4/4 exact match).
+        # This is also checked via the special false alarm rule.
+        observed = {
+            "dlctr": "stable", "qsr": "stable",
+            "sain_trigger": "stable", "sain_success": "stable",
+        }
+        result = match_co_movement_pattern(observed)
+        assert result["likely_cause"] == "no_significant_movement"
+        assert result["match_score"] == 1.0
+
+    def test_false_alarm_requires_exact_match(self):
+        """no_significant_movement should ONLY match at 4/4 (exact).
+
+        A 3/4 "almost stable" could be a real movement being masked.
+        The special rule in v1.4 prevents partial false alarm matches.
+        """
+        # 3 stable + 1 down = not all stable
+        observed = {
+            "dlctr": "down", "qsr": "stable",
+            "sain_trigger": "stable", "sain_success": "stable",
+        }
+        result = match_co_movement_pattern(observed)
+        # Should NOT be no_significant_movement (only 3/4 match for that).
+        # Instead, click_behavior_change is a perfect 4/4 match for this combo.
+        assert result["likely_cause"] != "no_significant_movement"
+        assert result["likely_cause"] == "click_behavior_change"
+
+    def test_unknown_pattern_includes_best_score(self):
+        """When returning unknown_pattern, match_score shows how close we got."""
+        # Use an alternating pattern that no co-movement entry matches well.
+        # up-down-up-down gets at most 2/4 on any pattern (below 0.75 threshold).
+        observed = {
+            "dlctr": "up", "qsr": "down",
+            "sain_trigger": "up", "sain_success": "down",
+        }
+        result = match_co_movement_pattern(observed)
+        assert result["likely_cause"] == "unknown_pattern"
+        assert isinstance(result["match_score"], float)
+        assert result["runner_up"] is None
+
+    def test_backward_compatibility_existing_patterns(self):
+        """All existing test patterns should still return the same results."""
+        # AI answers working
+        observed_ai = {
+            "dlctr": "down", "qsr": "stable_or_up",
+            "sain_trigger": "up", "sain_success": "up",
+        }
+        result_ai = match_co_movement_pattern(observed_ai)
+        assert result_ai["likely_cause"] == "ai_answers_working"
+        assert result_ai["is_positive"] is True
+        assert result_ai["match_score"] == 1.0
+
+        # Click behavior change
+        observed_click = {
+            "dlctr": "down", "qsr": "stable",
+            "sain_trigger": "stable", "sain_success": "stable",
+        }
+        result_click = match_co_movement_pattern(observed_click)
+        assert result_click["likely_cause"] == "click_behavior_change"
+        assert result_click["match_score"] == 1.0

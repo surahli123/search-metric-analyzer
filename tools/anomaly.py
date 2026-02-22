@@ -295,6 +295,15 @@ def match_co_movement_pattern(
 
     The diagnostic table is loaded from data/knowledge/metric_definitions.yaml.
 
+    v1.4 CHANGE (DS-STAR scored matching):
+    Instead of returning the first pattern where ALL metrics match, we now
+    SCORE every pattern (0-4 matching fields) and return the best match.
+    This catches partial matches (3/4) that the old first-match missed.
+
+    Why: If the first exact match is wrong, everything downstream is wrong.
+    Scoring all candidates picks the strongest match and provides a runner-up
+    for the Verifier to compare against.
+
     Args:
         observed: Dict mapping metric names to directions.
             Keys: dlctr, qsr, sain_trigger, sain_success, zero_result_rate, latency
@@ -302,42 +311,99 @@ def match_co_movement_pattern(
 
     Returns:
         {"likely_cause": str, "description": str,
-         "priority_hypotheses": list, "is_positive": bool}
+         "priority_hypotheses": list, "is_positive": bool,
+         "match_score": float, "runner_up": dict|None}
     """
     # Load the diagnostic table from YAML
     table = _load_co_movement_table()
 
+    # ── Score every pattern ──
+    # For each pattern, count how many of its fields match the observed directions.
+    # match_score = matching_fields / total_fields (0.0 to 1.0)
+    scored: List[Dict[str, Any]] = []
+
     for entry in table:
         pattern = entry["pattern"]
+        total_fields = len(pattern)
+        matching_fields = 0
 
-        # Check if every field in the pattern matches the observed directions.
-        # All fields must match for the pattern to be considered a match.
-        all_match = True
         for metric_key, expected_direction in pattern.items():
             observed_direction = observed.get(metric_key)
-            if observed_direction is None:
-                # Missing observed metric = can't confirm this pattern
-                all_match = False
-                break
-            if not _direction_matches(observed_direction, expected_direction):
-                all_match = False
-                break
+            if observed_direction is not None and _direction_matches(observed_direction, expected_direction):
+                matching_fields += 1
 
-        if all_match:
-            return {
-                "likely_cause": entry["likely_cause"],
-                "description": entry.get("description", ""),
-                "priority_hypotheses": entry.get("priority_hypotheses", []),
-                "is_positive": entry.get("is_positive", False),
-            }
+        score = matching_fields / total_fields if total_fields > 0 else 0.0
 
-    # No pattern matched — this is a novel or ambiguous situation.
-    # The diagnostic workflow should fall back to full decomposition.
+        scored.append({
+            "likely_cause": entry["likely_cause"],
+            "description": entry.get("description", ""),
+            "priority_hypotheses": entry.get("priority_hypotheses", []),
+            "is_positive": entry.get("is_positive", False),
+            "match_score": score,
+        })
+
+    # ── Sort by score descending, preserving YAML order as tiebreaker ──
+    # Python's sort is stable, so equal-score patterns keep their YAML order.
+    scored.sort(key=lambda x: x["match_score"], reverse=True)
+
+    # ── Apply match threshold ──
+    # 0.75 = at least 3/4 metrics match. Below that, the match is ambiguous.
+    # SPECIAL RULE: "no_significant_movement" (false alarm) requires exact 4/4.
+    # A 3/4 "almost stable" could be a real movement being masked.
+    MATCH_THRESHOLD = 0.75
+
+    best = scored[0] if scored else None
+    runner_up_entry = scored[1] if len(scored) > 1 else None
+
+    if best and best["match_score"] >= MATCH_THRESHOLD:
+        # Special rule: false alarm ("no_significant_movement") must be exact match
+        if best["likely_cause"] == "no_significant_movement" and best["match_score"] < 1.0:
+            # Fall through to check if there's another pattern above threshold
+            for candidate in scored[1:]:
+                if candidate["match_score"] >= MATCH_THRESHOLD and candidate["likely_cause"] != "no_significant_movement":
+                    best = candidate
+                    runner_up_entry = scored[0]  # The rejected false alarm becomes runner-up
+                    break
+            else:
+                # No other pattern qualifies — return unknown
+                return {
+                    "likely_cause": "unknown_pattern",
+                    "description": "Observed metric directions do not match any known co-movement pattern.",
+                    "priority_hypotheses": [],
+                    "is_positive": False,
+                    "match_score": best["match_score"],
+                    "runner_up": None,
+                }
+
+        # Build runner-up dict (if it exists and is above a useful threshold)
+        runner_up = None
+        if runner_up_entry and runner_up_entry["match_score"] >= MATCH_THRESHOLD:
+            # Skip runner_up if it's the same cause as best
+            if runner_up_entry["likely_cause"] != best["likely_cause"]:
+                runner_up = {
+                    "likely_cause": runner_up_entry["likely_cause"],
+                    "match_score": runner_up_entry["match_score"],
+                }
+
+        return {
+            "likely_cause": best["likely_cause"],
+            "description": best["description"],
+            "priority_hypotheses": best["priority_hypotheses"],
+            "is_positive": best["is_positive"],
+            "match_score": best["match_score"],
+            "runner_up": runner_up,
+        }
+
+    # No pattern met the threshold — novel or ambiguous situation.
+    # Include the best score so callers know how close we got.
+    best_score = best["match_score"] if best else 0.0
     return {
         "likely_cause": "unknown_pattern",
         "description": "Observed metric directions do not match any known co-movement pattern.",
         "priority_hypotheses": [],
         "is_positive": False,
+        "match_score": best_score,
+        "runner_up": None,
     }
 
 

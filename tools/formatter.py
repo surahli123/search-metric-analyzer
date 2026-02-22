@@ -571,6 +571,15 @@ def generate_slack_message(diagnosis: Dict[str, Any]) -> str:
     lines.append("")
     lines.append(actions)
 
+    # v1.4: Surface verification warnings (error-level only for Slack brevity)
+    verification_warnings = diagnosis.get("verification_warnings", [])
+    error_warnings = [w for w in verification_warnings if w.get("severity") == "error"]
+    if error_warnings:
+        lines.append("")
+        lines.append("Verification notes:")
+        for w in error_warnings:
+            lines.append(f"- {w['detail']}")
+
     return "\n".join(lines)
 
 
@@ -646,6 +655,15 @@ def generate_short_report(diagnosis: Dict[str, Any]) -> str:
 
 ## What Would Change This Assessment
 {conf_change}"""
+
+    # v1.4: Append verification notes if any warnings exist
+    verification_warnings = diagnosis.get("verification_warnings", [])
+    if verification_warnings:
+        warning_lines = []
+        for w in verification_warnings:
+            level = w.get("severity", "warning").upper()
+            warning_lines.append(f"- [{level}] {w['detail']}")
+        report += f"\n\n## Verification Notes\n" + "\n".join(warning_lines)
 
     return report
 
