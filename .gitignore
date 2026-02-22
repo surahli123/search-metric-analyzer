@@ -1,0 +1,14 @@
+# Synthetic data (large CSVs, regenerable via tools/generate_synthetic_data.py)
+data/synthetic/*.csv
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
