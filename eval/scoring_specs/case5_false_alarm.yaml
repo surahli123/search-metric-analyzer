@@ -1,0 +1,76 @@
+# eval/scoring_specs/case5_false_alarm.yaml
+# Case 5: S0 — Stable baseline (false alarm / restraint test)
+# Archetype: no real movement — tool must show restraint
+# Pass criteria: 2/3 GREEN
+
+case:
+  name: "Stable baseline (false alarm / restraint)"
+  scenario: "S0"
+  archetype: "false_alarm_restraint"
+  purpose: "Can the tool correctly say 'no action needed' and not manufacture a problem?"
+  pass_threshold: "2/3 GREEN"
+
+rubric:
+  root_cause_accuracy:
+    weight: 40
+    criteria:
+      - description: "Concludes no significant movement or action needed"
+        points: 20
+      - description: "Does NOT attribute to any specific root cause"
+        points: 10
+      - description: "Classifies severity as P2 or normal (not P0/P1)"
+        points: 10
+
+  confidence_calibration:
+    weight: 25
+    criteria:
+      - description: "High confidence in 'no action needed' conclusion"
+        points: 15
+      - description: "Does NOT manufacture uncertainty about a non-problem"
+        points: 5
+      - description: "States the metric is within normal variation range"
+        points: 5
+
+  investigation_completeness:
+    weight: 20
+    criteria:
+      - description: "Runs standard decomposition (doesn't skip because 'looks fine')"
+        points: 10
+      - description: "Checks co-movement pattern (should show 'stable' across metrics)"
+        points: 5
+      - description: "Runs data quality check (confirms data is trustworthy)"
+        points: 5
+
+  actionability:
+    weight: 15
+    criteria:
+      - description: "Does NOT create unnecessary action items or escalations"
+        points: 8
+      - description: "May recommend continued monitoring (acceptable)"
+        points: 4
+      - description: "TL;DR says 'within normal range' or equivalent"
+        points: 3
+
+must_find:
+  root_cause: "No significant metric movement — within normal weekly variation"
+  semantic_match: true
+
+must_check_dimensions:
+  - tenant_tier
+
+must_not_do:
+  - flag_as_incident: "This is normal variation — do not treat as an incident"
+  - assign_p0_or_p1: "Severity should be P2 or normal, not P0/P1"
+  - recommend_rollback: "Nothing to roll back — metrics are normal"
+  - manufacture_cause: "Do not invent a root cause for normal fluctuation"
+
+output_quality:
+  has_tldr: true
+  confidence_stated: true
+  confidence_level: "High"
+  actionable_recommendation: false  # No action needed IS the correct output
+  no_anti_patterns: true
+
+scoring:
+  pass: 60
+  green: 80

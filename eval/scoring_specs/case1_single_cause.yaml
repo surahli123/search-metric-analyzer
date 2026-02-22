@@ -1,0 +1,86 @@
+# eval/scoring_specs/case1_single_cause.yaml
+# Case 1: S4 — Ranking model regression for Standard tier
+# Archetype: single-cause, clean signal
+# Pass criteria: 3/3 GREEN (high-stakes — missed regression is worst failure)
+
+case:
+  name: "Single-cause ranking regression"
+  scenario: "S4"
+  archetype: "single_cause_clean_signal"
+  purpose: "Can the tool find an obvious problem and attribute it correctly?"
+  pass_threshold: "3/3 GREEN"
+
+# ──────────────────────────────────────────────────────────
+# Scoring Rubric (100 points total)
+# ──────────────────────────────────────────────────────────
+
+rubric:
+  root_cause_accuracy:
+    weight: 40
+    criteria:
+      - description: "Identifies ranking model change as root cause"
+        points: 20
+      - description: "Correctly localizes to Standard tier (not all tiers)"
+        points: 10
+      - description: "Does NOT attribute to AI features, connector, or seasonal"
+        points: 10
+
+  confidence_calibration:
+    weight: 25
+    criteria:
+      - description: "States confidence as High (clean signal, single cause)"
+        points: 15
+      - description: "Provides what-would-downgrade condition"
+        points: 5
+      - description: "Does NOT hedge with 'possibly' or 'might be'"
+        points: 5
+
+  investigation_completeness:
+    weight: 20
+    criteria:
+      - description: "Decomposes by tenant_tier dimension"
+        points: 8
+      - description: "Checks at least one of: query_type, position_bucket"
+        points: 6
+      - description: "Runs mix-shift analysis (should show low mix-shift)"
+        points: 6
+
+  actionability:
+    weight: 15
+    criteria:
+      - description: "Recommends checking ranking model version/deployment"
+        points: 8
+      - description: "Each action has an owner (team or role)"
+        points: 4
+      - description: "Includes TL;DR with what happened, why, what to do"
+        points: 3
+
+# ──────────────────────────────────────────────────────────
+# Specific must_find / must_not_do for LLM-as-judge
+# ──────────────────────────────────────────────────────────
+
+must_find:
+  root_cause: "Ranking model change degraded Standard tier queries"
+  semantic_match: true  # LLM-as-judge checks semantic similarity, not exact string
+
+must_check_dimensions:
+  - tenant_tier
+  - query_type
+  - position_bucket
+
+must_not_do:
+  - attribute_to_ai_feature: "Should not blame AI answers — SAIN metrics are stable"
+  - claim_data_quality_issue: "Data is clean in this scenario"
+  - hedge_excessively: "Should state root cause with High confidence, not 'might be'"
+  - recommend_no_action: "This IS a real regression — must recommend investigation"
+
+output_quality:
+  has_tldr: true
+  confidence_stated: true
+  confidence_level: "High"
+  actionable_recommendation: true
+  no_anti_patterns: true
+
+scoring:
+  pass: 60      # >= 60 points = PASS
+  green: 80     # >= 80 points = GREEN (strong pass)

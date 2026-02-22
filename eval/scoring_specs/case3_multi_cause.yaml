@@ -1,0 +1,82 @@
+# eval/scoring_specs/case3_multi_cause.yaml
+# Case 3: S7 — Overlap: AI rollout + whale tenant churn
+# Archetype: multi-cause overlap with ambiguity
+# Pass criteria: 2/3 GREEN (hardest case — ambiguity is inherent)
+
+case:
+  name: "Multi-cause overlap (AI rollout + tenant churn)"
+  scenario: "S7"
+  archetype: "multi_cause_overlap"
+  purpose: "Can the tool handle ambiguity without over-attributing to a single cause?"
+  pass_threshold: "2/3 GREEN"
+
+rubric:
+  root_cause_accuracy:
+    weight: 40
+    criteria:
+      - description: "Identifies at least ONE of the two causes correctly"
+        points: 15
+      - description: "Identifies BOTH causes (AI rollout AND tenant churn)"
+        points: 15
+        # Bonus: finding both is harder but expected for a strong pass
+      - description: "Does NOT over-attribute to a single cause when multiple exist"
+        points: 10
+
+  confidence_calibration:
+    weight: 25
+    criteria:
+      - description: "Confidence is Medium (not High — ambiguity prevents High)"
+        points: 15
+      - description: "Explicitly states what additional data would resolve ambiguity"
+        points: 5
+      - description: "Does NOT claim certainty on attribution percentages"
+        points: 5
+
+  investigation_completeness:
+    weight: 20
+    criteria:
+      - description: "Decomposes by tenant_tier AND ai_enablement"
+        points: 8
+      - description: "Runs mix-shift analysis (should show significant mix-shift)"
+        points: 6
+      - description: "Checks co-movement pattern for AI feature effect"
+        points: 6
+
+  actionability:
+    weight: 15
+    criteria:
+      - description: "Recommends investigating BOTH causes, not just one"
+        points: 8
+      - description: "Actions have owners"
+        points: 4
+      - description: "TL;DR acknowledges multi-cause nature"
+        points: 3
+
+must_find:
+  root_cause: "Multiple overlapping causes: AI rollout effect AND tenant portfolio change"
+  semantic_match: true
+  # Finding either cause is partial credit; finding both is full credit
+  partial_credit:
+    one_cause: 15  # points for finding one of two
+    both_causes: 30  # points for finding both
+
+must_check_dimensions:
+  - tenant_tier
+  - ai_enablement
+  - industry_vertical
+
+must_not_do:
+  - claim_single_cause_high_confidence: "Must not present as single-cause with High confidence"
+  - ignore_mix_shift: "Significant composition change — must flag mix-shift"
+  - miss_both_causes: "Finding zero causes is a complete failure (>30% of drop from each)"
+
+output_quality:
+  has_tldr: true
+  confidence_stated: true
+  confidence_level: "Medium"
+  actionable_recommendation: true
+  no_anti_patterns: true
+
+scoring:
+  pass: 60
+  green: 80

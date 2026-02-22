@@ -1,0 +1,77 @@
+# eval/scoring_specs/case4_mix_shift.yaml
+# Case 4: S9 — Tenant portfolio mix-shift
+# Archetype: composition change, no behavioral regression
+# Pass criteria: 2/3 GREEN (mix-shift detection is nuanced)
+
+case:
+  name: "Tenant portfolio mix-shift (composition change)"
+  scenario: "S9"
+  archetype: "mix_shift_no_regression"
+  purpose: "Can the tool distinguish composition change from behavioral regression?"
+  pass_threshold: "2/3 GREEN"
+
+rubric:
+  root_cause_accuracy:
+    weight: 40
+    criteria:
+      - description: "Identifies mix-shift as the primary driver (not behavioral regression)"
+        points: 20
+      - description: "Notes that per-segment metrics are stable (no quality change)"
+        points: 10
+      - description: "Correctly attributes to tenant portfolio change (more standard-tier)"
+        points: 10
+
+  confidence_calibration:
+    weight: 25
+    criteria:
+      - description: "Does NOT assign P0 severity (this is not a quality regression)"
+        points: 10
+      - description: "Confidence is Medium or High (mix-shift is a clear finding)"
+        points: 10
+      - description: "Flags mix-shift contribution percentage explicitly (>=30%)"
+        points: 5
+
+  investigation_completeness:
+    weight: 20
+    criteria:
+      - description: "Runs mix-shift analysis showing dominant composition effect"
+        points: 10
+      - description: "Decomposes by tenant_tier (the dimension that shifted)"
+        points: 5
+      - description: "Verifies per-segment DLCTR is stable across periods"
+        points: 5
+
+  actionability:
+    weight: 15
+    criteria:
+      - description: "Does NOT recommend ranking model rollback or quality investigation"
+        points: 8
+      - description: "Recommends monitoring tenant onboarding or portfolio composition"
+        points: 4
+      - description: "TL;DR explains this is expected from tenant growth, not regression"
+        points: 3
+
+must_find:
+  root_cause: "Aggregate metric decline driven by mix-shift from tenant portfolio change"
+  semantic_match: true
+  mechanism: "More standard-tier tenants (lower baseline) shifted the aggregate down"
+
+must_check_dimensions:
+  - tenant_tier
+
+must_not_do:
+  - attribute_to_ranking: "No ranking model issue — per-segment DLCTR is stable"
+  - attribute_to_connector: "No connector issue in this scenario"
+  - recommend_quality_fix: "This requires portfolio management, not quality engineering"
+  - miss_mix_shift: "Must detect that >=30% of movement is compositional"
+
+output_quality:
+  has_tldr: true
+  confidence_stated: true
+  confidence_level: "Medium_or_High"
+  actionable_recommendation: true
+  no_anti_patterns: true
+
+scoring:
+  pass: 60
+  green: 80

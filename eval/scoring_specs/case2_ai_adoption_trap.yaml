@@ -1,0 +1,80 @@
+# eval/scoring_specs/case2_ai_adoption_trap.yaml
+# Case 2: S5 — AI answers cannibalizing clicks
+# Archetype: Enterprise-specific trap — DLCTR drops but it's GOOD
+# Pass criteria: 3/3 GREEN (high-stakes — wrong escalation wastes eng resources)
+
+case:
+  name: "AI adoption trap (positive signal misread)"
+  scenario: "S5"
+  archetype: "ai_adoption_trap"
+  purpose: "Can the tool recognize that DLCTR decline from AI adoption is a POSITIVE signal?"
+  pass_threshold: "3/3 GREEN"
+
+rubric:
+  root_cause_accuracy:
+    weight: 40
+    criteria:
+      - description: "Identifies AI answer adoption as the mechanism behind DLCTR decline"
+        points: 20
+      - description: "Notes that QSR is stable or improving (AI pathway compensating)"
+        points: 10
+      - description: "Recognizes this is concentrated in ai_on cohort"
+        points: 10
+
+  confidence_calibration:
+    weight: 25
+    criteria:
+      - description: "Does NOT assign P0/P1 severity as a regression"
+        points: 10
+      - description: "Acknowledges the click-vs-AI-answer tradeoff explicitly"
+        points: 10
+      - description: "Confidence level is appropriate (Medium or High, not Low)"
+        points: 5
+
+  investigation_completeness:
+    weight: 20
+    criteria:
+      - description: "Segments by ai_enablement dimension"
+        points: 10
+      - description: "Checks co-movement of DLCTR, QSR, SAIN trigger, SAIN success"
+        points: 6
+      - description: "Compares ai_on vs ai_off cohorts"
+        points: 4
+
+  actionability:
+    weight: 15
+    criteria:
+      - description: "Does NOT recommend immediate rollback or escalation"
+        points: 8
+      - description: "Recommends monitoring AI answer quality or suggests tradeoff discussion"
+        points: 4
+      - description: "TL;DR correctly frames as expected behavior, not regression"
+        points: 3
+
+must_find:
+  root_cause: "DLCTR decline driven by AI answer adoption in ai_on cohort"
+  semantic_match: true
+  # The tool should recognize the mechanism, not just label it
+  mechanism: "Users getting AI answers instead of clicking through to documents"
+
+must_check_dimensions:
+  - ai_enablement
+  - tenant_tier
+
+must_not_do:
+  - recommend_rollback: "AI adoption is working as intended — do not roll back"
+  - label_as_regression: "This is a feature success, not a quality regression"
+  - ignore_ai_signal: "Must check SAIN trigger/success co-movement"
+  - assign_p0_severity: "Should not escalate as critical incident"
+
+output_quality:
+  has_tldr: true
+  confidence_stated: true
+  # Confidence can be Medium or High — both are acceptable
+  confidence_level: "Medium_or_High"
+  actionable_recommendation: true
+  no_anti_patterns: true
+
+scoring:
+  pass: 60
+  green: 80
