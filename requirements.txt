@@ -1,0 +1,4 @@
+# Search Metric Analyzer v1 — minimal dependencies
+pyyaml>=6.0       # Parse metric_definitions.yaml and historical_patterns.yaml
+pytest>=7.0        # Test runner
+pytest-cov>=4.0    # Coverage reporting
