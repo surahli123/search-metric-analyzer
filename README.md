@@ -4,7 +4,7 @@ A diagnostic tool for Enterprise Search metric movements. Built for Senior Data 
 
 ## What It Does
 
-When a search metric (DLCTR, QSR, SAIN trigger/success) moves, this tool runs a 4-step diagnostic pipeline:
+When a search metric moves, this tool runs a 4-step diagnostic pipeline:
 
 1. **Decompose** — Kitagawa-Oaxaca decomposition to isolate which segments drove the movement (tenant tier, AI enablement, connector type, product source). Separates real quality changes from mix-shift.
 
@@ -16,8 +16,8 @@ When a search metric (DLCTR, QSR, SAIN trigger/success) moves, this tool runs a 
 
 ## Key Design Decisions
 
-- **AI adoption is not a regression.** When AI answers work well, DLCTR drops because users get answers without clicking. The tool detects this co-movement pattern and correctly labels it as a positive signal.
-- **Mix-shift is the most common false alarm.** ~30-40% of Enterprise Search metric movements are caused by changes in traffic composition, not quality. The tool quantifies mix-shift contribution before diagnosing.
+- **AI adoption is not a regression.** When AI answers work well, Long Click CTR related metrics drops because users get answers without clicking. The tool detects this co-movement pattern and correctly labels it as a positive signal.
+- **Mix-shift is the most common false alarm.** ~30-40% of Search metric movements are caused by changes in traffic composition, not quality. The tool quantifies mix-shift contribution before diagnosing.
 - **False alarms get high confidence.** If all metrics are within normal variation and no single segment dominates, the tool says "no action needed" with high confidence — rather than hedging.
 
 ## Quick Start
@@ -69,10 +69,10 @@ Search_Metric_Analyzer/
 
 | Metric | What It Measures |
 |--------|-----------------|
-| **DLCTR** | Discounted Long Click-Through Rate — position-weighted click quality |
-| **QSR** | Query Success Rate — composite of click quality + AI answer quality |
-| **SAIN Trigger** | How often AI answers are shown (detection rate) |
-| **SAIN Success** | How often shown AI answers satisfy users (quality rate) |
+| **LCTR** |Long Click-Through Rate — (position-weighted or non position-weighted) click quality |
+| **Main Search Metric** | Query Success Rate — composite of click quality + AI answer quality |
+| **AI Search Trigger** | How often AI answers are shown (detection rate) |
+| **AI Search Success** | How often shown AI answers satisfy users (quality rate) |
 
 ## Archetypes
 
@@ -80,11 +80,11 @@ The diagnostic engine recognizes these failure patterns:
 
 | Archetype | Co-Movement Signature | What It Means |
 |-----------|----------------------|---------------|
-| `ranking_regression` | DLCTR down, QSR down, SAIN stable | Ranking model degraded |
-| `ai_adoption` | DLCTR down, QSR stable/up, SAIN up | AI answers working (positive) |
+| `ranking_regression` | LCTR down, Main Metric down, AI Search Quality stable | Ranking model degraded |
+| `ai_adoption` | LCTR down, Main Metric stable/up, AI Search Quality up | AI answers working (positive) |
 | `broad_degradation` | All metrics down | System-wide issue |
-| `query_understanding` | DLCTR/QSR/SAIN trigger down, SAIN success stable | Query interpretation layer degraded |
-| `sain_regression` | SAIN metrics down, DLCTR stable | AI answer quality issue |
+| `query_understanding` | DLCTR/QSR/AI Search trigger down, AI Search success stable | Query interpretation layer degraded |
+| `sain_regression` | AI Search Quality metrics down, LCTR stable | AI answer quality issue |
 | `mix_shift` | Movement explained by traffic composition | Not a quality change |
 | `false_alarm` | All metrics within noise | No action needed |
 
@@ -116,3 +116,4 @@ Areas still pending real-world calibration:
 - Per-metric severity thresholds
 - Real incident scenarios for eval
 - QSR formula exact weights/floors
+
