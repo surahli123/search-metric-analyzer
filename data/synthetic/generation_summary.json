@@ -1,0 +1,8 @@
+{
+  "seed": 42,
+  "rows_per_scenario": 20000,
+  "scenario_count": 13,
+  "session_rows": 260000,
+  "metric_rows": 260000,
+  "baseline_qsr_reference": 0.378208
+}
