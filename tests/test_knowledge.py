@@ -45,7 +45,9 @@ class TestMetricDefinitions:
 
     def test_co_movement_table_has_patterns(self):
         table = self.defs["co_movement_diagnostic_table"]
-        assert len(table) >= 9, "Need at least 9 co-movement patterns (from design doc)"
+        # 8 patterns: 7 core (4-metric) + 1 all-stable false alarm pattern.
+        # connector_outage and serving_degradation removed — need zero_result_rate/latency.
+        assert len(table) >= 8, "Need at least 8 co-movement patterns"
 
     def test_segment_baselines_exist(self):
         """Different baselines per segment (ai_on vs ai_off, tier differences)."""

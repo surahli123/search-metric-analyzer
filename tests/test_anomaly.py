@@ -406,35 +406,29 @@ class TestCoMovementEdgeCases:
         result = match_co_movement_pattern({})
         assert result["likely_cause"] == "unknown_pattern"
 
-    def test_connector_outage_pattern(self):
-        """Zero result rate going up with DLCTR/QSR down = connector outage."""
-        observed = {
-            "dlctr": "down", "qsr": "down",
-            "sain_trigger": "stable", "sain_success": "stable",
-            "zero_result_rate": "up", "latency": "stable",
-        }
-        result = match_co_movement_pattern(observed)
-        assert result["likely_cause"] == "connector_outage_or_index_gap"
-
-    def test_serving_degradation_pattern(self):
-        """Latency up with DLCTR/QSR down = serving issues."""
-        observed = {
-            "dlctr": "down", "qsr": "down",
-            "sain_trigger": "stable", "sain_success": "stable",
-            "zero_result_rate": "stable", "latency": "up",
-        }
-        result = match_co_movement_pattern(observed)
-        assert result["likely_cause"] == "serving_degradation"
+    # NOTE: connector_outage and serving_degradation tests removed —
+    # those patterns need zero_result_rate and latency metrics which aren't
+    # in our synthetic data yet. Patterns will be re-added when those metrics
+    # are available in the pipeline.
 
     def test_click_behavior_change_pattern(self):
         """Only DLCTR down, everything else stable = click behavior change."""
         observed = {
             "dlctr": "down", "qsr": "stable",
             "sain_trigger": "stable", "sain_success": "stable",
-            "zero_result_rate": "stable", "latency": "stable",
         }
         result = match_co_movement_pattern(observed)
         assert result["likely_cause"] == "click_behavior_change"
+
+    def test_all_stable_pattern(self):
+        """All metrics stable = no significant movement (false alarm detection)."""
+        observed = {
+            "dlctr": "stable", "qsr": "stable",
+            "sain_trigger": "stable", "sain_success": "stable",
+        }
+        result = match_co_movement_pattern(observed)
+        assert result["likely_cause"] == "no_significant_movement"
+        assert result["is_positive"] is True
 
     def test_unknown_pattern_has_empty_hypotheses(self):
         """Unknown pattern should have no priority hypotheses."""

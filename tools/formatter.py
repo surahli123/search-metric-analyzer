@@ -220,7 +220,7 @@ def _build_tldr(diagnosis: Dict[str, Any]) -> str:
 
     # Sentence 3: What to do -- top action item
     action_items = diagnosis.get("action_items", [])
-    top_action = _format_single_action(action_items[0]) if action_items else "Review diagnostic output"
+    top_action = _format_single_action(action_items[0]) if action_items else "No action needed"
 
     return f"{what}. {why}. {top_action}."
 
@@ -268,7 +268,7 @@ def _format_action_items(diagnosis: Dict[str, Any]) -> str:
     """
     action_items = diagnosis.get("action_items", [])
     if not action_items:
-        return "No action items identified."
+        return "No action required. Continue standard monitoring — re-alert if movement exceeds 2 standard deviations."
 
     lines = []
     for item in action_items:
@@ -309,8 +309,10 @@ def _build_key_findings(diagnosis: Dict[str, Any]) -> str:
             seg_value = top.get("segment_value", "unknown")
             contrib = top.get("contribution_pct", 0)
             delta = top.get("delta", 0)
+            # Derive direction word from delta sign (metric-agnostic)
+            direction_word = "decline" if delta < 0 else "increase" if delta > 0 else "change"
             findings.append(
-                f"- {contrib:.0f}% of drop concentrated in {dim_name}={seg_value} "
+                f"- {contrib:.0f}% of {direction_word} concentrated in {dim_name}={seg_value} "
                 f"(delta: {delta:+.3f})"
             )
 
@@ -551,14 +553,14 @@ def generate_slack_message(diagnosis: Dict[str, Any]) -> str:
     # We build it programmatically rather than using string.format() on the template
     # because we need to control line count and enforce anti-pattern rules.
     lines = [
-        f"{emoji} {metric} Movement Alert -- [Severity: {severity}] [Confidence: {confidence}]",
+        f"{emoji} {metric} Movement Alert — [Severity: {severity}] [Confidence: {confidence}]",
         "",
         f"TL;DR: {tldr}",
         "",
         "Key findings:",
         findings,
         "",
-        f"Confidence: {confidence} -- {confidence_reasoning}",
+        f"Confidence: {confidence} — {confidence_reasoning}",
     ]
 
     # Add confidence change conditions if they exist
@@ -677,12 +679,13 @@ def _build_alternatives(primary_category: str) -> str:
         "ai_feature_effect": "AI feature effect (adoption, threshold, model)",
         "seasonal": "Seasonal/External pattern",
         "user_behavior": "User behavior shift",
+        "mix_shift": "Traffic composition change (mix-shift)",
     }
 
     alternatives = []
     for cat, desc in all_categories.items():
         if cat != primary_category:
-            alternatives.append(f"{desc} (ruled out)")
+            alternatives.append(f"{desc} (considered, not primary)")
 
     if not alternatives:
         return "Standard diagnostic categories reviewed"
