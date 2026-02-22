@@ -2,13 +2,26 @@
 # Metric definitions for Enterprise Search — formulas, dimensions, baselines, co-movements.
 # This file is the "feature store" for the diagnostic workflow.
 
+# CALIBRATION SOURCE: Atlassian Rovo Search blog posts (Feb 2026)
+#   - "Unraveling Rovo Search" — pipeline architecture (L0-L3), ranking signals
+#   - "Rovo Search Quality" — composite quality metric, long clicks, AI engagement
+#   - "Entity Linking in Rovo" — query understanding, connector ingestion models
+# Items marked "# Source: Rovo" are validated against real Enterprise Search.
+# Items without that tag remain synthetic assumptions pending real calibration.
+
 metrics:
   dlctr:
     full_name: "Discounted Long Click-Through Rate"
     formula: "sum(long_clicks * log2_discount(rank)) / impressions"
+    # Source: Rovo — confirmed: position-discounted long click rate
     description: >
       Primary click quality metric. Measures whether users find and engage
       with results. Discounted by position to weight higher-ranked clicks more.
+      "Long clicks" = user clicks a link and finds the landing page useful
+      (sufficient dwell time or post-click actions like comments/edits).
+    # Source: Rovo — "long clicks where users click on a link and find the
+    # landing page useful" with position discount ("gradually discount when
+    # long clicks happen towards the bottom")
     components:
       - click_through_rate
       - long_click_rate
@@ -19,6 +32,9 @@ metrics:
       - ai_enablement      # ai_on, ai_off
       - industry_vertical  # tech, healthcare, finance, retail, other
       - connector_type     # confluence, slack, gdrive, jira, sharepoint, other
+                           # Source: Rovo — three ingestion models: full content (GDrive, Slack),
+                           # linked content (Figma), federated API (Gmail, Outlook). 50+ connectors.
+      - product_source     # confluence, jira, slack, gdrive, figma, etc.  # Source: Rovo — L3 Interleaver merges across products using "product affinity"
       # Standard dimensions
       - query_type         # navigational, informational, action
       - position_bucket    # 1, 2, 3-5, 6-10, 10+
@@ -64,7 +80,11 @@ metrics:
     description: >
       Composite metric combining click quality and AI answer quality.
       A query is "successful" if the user either clicked a good result
-      OR got a satisfying AI answer.
+      OR got a satisfying AI answer. Measures "the extent to which user
+      needs are fulfilled" by search.
+    # Source: Rovo — composite metric with two components:
+    # (1) Search Result Consumption (position-discounted long clicks)
+    # (2) AI-Generated Answer Engagement (dwell time, post-search actions)
     components:
       - qsr_component_click    # equals dlctr
       - sain_trigger_rate
@@ -74,6 +94,7 @@ metrics:
       - ai_enablement
       - industry_vertical
       - connector_type
+      - product_source
       - query_type
     normal_range:
       mean: 0.378
@@ -100,14 +121,20 @@ metrics:
 
   sain_success_rate:
     full_name: "SAIN (Search AI Answer) Success Rate"
-    formula: "ai_answers_marked_helpful / ai_answers_triggered"
+    formula: "ai_answers_satisfying / ai_answers_triggered"
     description: >
-      Of AI answers shown, how many were helpful. A drop means AI answers
-      are getting worse (quality problem), not that fewer are being shown.
+      Of AI answers shown, how many satisfied the user. Success signals
+      include answer engagement, dwell time, and post-search actions
+      (not just explicit thumbs up/down). A drop means AI answers are
+      getting worse (quality problem), not that fewer are being shown.
+    # Source: Rovo — AI answer success = "engagement levels, dwell time,
+    # and post-search actions", accommodating "users obtaining answers
+    # directly without clicking through to cited sources"
     decomposition_dimensions:
       - tenant_tier
       - industry_vertical
       - query_type
+      - product_source
     normal_range:
       mean: 0.620
       weekly_std: 0.015
@@ -139,13 +166,18 @@ metrics:
 # ──────────────────────────────────────────────────────────────
 
 co_movement_diagnostic_table:
+  # ── Patterns use 4 core metrics: dlctr, qsr, sain_trigger, sain_success ──
+  # WHY only 4: Our synthetic data and primary pipeline only track these 4 metrics.
+  # zero_result_rate and latency are documented above as metrics but aren't in the
+  # pipeline data yet. When they're added, extend patterns here.
+  # NOTE: connector_outage (zero_result_rate: up) and serving_degradation (latency: up)
+  # patterns are omitted — they need those metrics to be distinguishable.
+
   - pattern:
       dlctr: down
       qsr: down
       sain_trigger: stable
       sain_success: stable
-      zero_result_rate: stable
-      latency: stable
     likely_cause: "ranking_relevance_regression"
     description: "Click quality degraded. Check ranking model, experiment ramps."
     priority_hypotheses: [algorithm_model, experiment]
@@ -155,22 +187,19 @@ co_movement_diagnostic_table:
       qsr: stable_or_up
       sain_trigger: up
       sain_success: up
-      zero_result_rate: stable
-      latency: stable
     likely_cause: "ai_answers_working"
     description: >
       AI answers cannibalizing clicks — this is a POSITIVE signal.
       Users get answers without needing to click. Do NOT treat as regression.
     priority_hypotheses: [ai_feature_effect]
     is_positive: true
+    # Source: Rovo — confirmed. AI answers cannibalize clicks by design.
 
   - pattern:
       dlctr: down
       qsr: down
       sain_trigger: down
       sain_success: down
-      zero_result_rate: stable
-      latency: stable
     likely_cause: "broad_quality_degradation"
     description: "Both click and AI pathways affected. Check model/experiment/infra."
     priority_hypotheses: [algorithm_model, experiment, connector]
@@ -180,41 +209,15 @@ co_movement_diagnostic_table:
       qsr: down
       sain_trigger: stable
       sain_success: down
-      zero_result_rate: stable
-      latency: stable
     likely_cause: "sain_quality_regression"
     description: "AI answers triggering normally but failing to satisfy. Check AI model."
     priority_hypotheses: [ai_feature_effect, algorithm_model]
 
   - pattern:
       dlctr: down
-      qsr: down
-      sain_trigger: stable
-      sain_success: stable
-      zero_result_rate: up
-      latency: stable
-    likely_cause: "connector_outage_or_index_gap"
-    description: "Missing content leading to no results for some queries."
-    priority_hypotheses: [connector, instrumentation]
-
-  - pattern:
-      dlctr: down
-      qsr: down
-      sain_trigger: stable
-      sain_success: stable
-      zero_result_rate: stable
-      latency: up
-    likely_cause: "serving_degradation"
-    description: "Latency causing model fallback or user abandonment."
-    priority_hypotheses: [instrumentation, algorithm_model]
-
-  - pattern:
-      dlctr: down
       qsr: stable
       sain_trigger: stable
       sain_success: stable
-      zero_result_rate: stable
-      latency: stable
     likely_cause: "click_behavior_change"
     description: "Only click behavior changed. Check UX changes, display changes, mix-shift."
     priority_hypotheses: [user_behavior, ai_feature_effect]
@@ -224,8 +227,6 @@ co_movement_diagnostic_table:
       qsr: down
       sain_trigger: down
       sain_success: stable
-      zero_result_rate: stable
-      latency: stable
     likely_cause: "sain_trigger_regression"
     description: "AI answers not surfacing when they should. Check trigger threshold/model."
     priority_hypotheses: [ai_feature_effect]
@@ -235,11 +236,40 @@ co_movement_diagnostic_table:
       qsr: down
       sain_trigger: stable
       sain_success: down
-      zero_result_rate: stable
-      latency: stable
     likely_cause: "sain_success_regression"
     description: "AI answers surfacing but wrong. Check answer quality model."
     priority_hypotheses: [ai_feature_effect, algorithm_model]
+
+  # ── Query Understanding regression ──
+  # Source: Rovo — L0 Query Intelligence layer handles intent classification,
+  # spell correction, acronym resolution, and LLM-based query reformulation.
+  # A regression here affects ALL downstream metrics because queries are
+  # misunderstood before they reach retrieval.
+  - pattern:
+      dlctr: down
+      qsr: down
+      sain_trigger: down
+      sain_success: stable_or_down
+    likely_cause: "query_understanding_regression"
+    description: >
+      Query understanding layer (L0) degraded — intent misclassification,
+      reformulation bugs, or spell correction errors. Affects all downstream
+      metrics because queries are misunderstood before reaching retrieval.
+      Distinguished from broad_degradation by sain_success being stable
+      (AI answer quality itself is fine, but wrong queries are reaching it).
+    priority_hypotheses: [query_understanding, algorithm_model]
+
+  # ── "All stable" pattern for false alarm detection ──
+  # If all 4 metrics are stable, it's likely normal fluctuation — no action needed.
+  - pattern:
+      dlctr: stable
+      qsr: stable
+      sain_trigger: stable
+      sain_success: stable
+    likely_cause: "no_significant_movement"
+    description: "All metrics within normal variation. No action needed."
+    priority_hypotheses: []
+    is_positive: true
 
 # ──────────────────────────────────────────────────────────────
 # Hypothesis Priority Ordering
@@ -255,6 +285,11 @@ hypothesis_priority:
     name: "Connector/data pipeline change"
     rationale: "Most common root cause in Enterprise Search, under-documented"
     check_always: true
+  - category: query_understanding
+    name: "Query understanding regression"
+    rationale: "Intent classification, spell correction, query reformulation — L0 layer affects all downstream"
+    # Source: Rovo — dedicated L0 Query Intelligence layer with pre-trained
+    # language models for intent classification and LLM for query reformulation
   - category: algorithm_model
     name: "Algorithm/Model change"
     rationale: "Ranking model, embedding model, retraining"

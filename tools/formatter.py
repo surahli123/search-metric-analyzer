@@ -669,11 +669,14 @@ def _build_alternatives(primary_category: str) -> str:
     Returns:
         String listing alternative categories considered.
     """
-    # 7 hypothesis categories from metric_definitions.yaml hypothesis_priority.
+    # 9 hypothesis categories from metric_definitions.yaml hypothesis_priority.
     # Must match the design doc's fixed investigation ordering exactly.
     all_categories = {
         "instrumentation": "Instrumentation/Logging anomaly",
         "connector": "Connector/data pipeline change",
+        # Source: Rovo — L0 Query Intelligence layer (intent classification,
+        # spell correction, query reformulation). Check early — upstream of ranking.
+        "query_understanding": "Query understanding regression (intent, reformulation, spelling)",
         "algorithm_model": "Algorithm/Model change (ranking, embedding)",
         "experiment": "Experiment ramp/de-ramp",
         "ai_feature_effect": "AI feature effect (adoption, threshold, model)",

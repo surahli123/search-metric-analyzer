@@ -182,6 +182,28 @@ ARCHETYPE_MAP = {
         ],
         "category": "ai_feature_effect",
     },
+    # ── Query Understanding regression ──
+    # Source: Rovo — L0 Query Intelligence layer (intent classification,
+    # spell correction, acronym resolution, LLM-based query reformulation).
+    # A regression here is upstream of all ranking — misunderstood queries
+    # produce bad results everywhere.
+    "query_understanding_regression": {
+        "archetype": "query_understanding",
+        "severity_cap": None,           # Real regression — use magnitude severity
+        "is_positive": False,
+        "category": "query_understanding",
+        "summary_template": (
+            "Query understanding degradation detected — the search system's "
+            "intent classification or query reformulation layer (L0) may be "
+            "misinterpreting queries before they reach ranking."
+        ),
+        "action": (
+            "Check query reformulation logs for increased rewrite error rates. "
+            "Verify intent classification model has not been retrained or "
+            "threshold-changed. Compare raw vs. reformulated query distributions "
+            "before and after the movement date."
+        ),
+    },
     "mix_shift_composition": {
         "archetype": "mix_shift",
         "severity_cap": None,
