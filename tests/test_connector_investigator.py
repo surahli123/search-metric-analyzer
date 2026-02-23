@@ -5,6 +5,8 @@ from __future__ import annotations
 import time
 from typing import Any, Dict
 
+from tools.connector_investigator import ConnectorInvestigator
+
 
 def decomp_high_confidence() -> Dict[str, Any]:
     """Build a decomposition payload that yields High confidence."""
@@ -96,3 +98,16 @@ def fake_execute_slow(sql: str) -> Dict[str, Any]:
     del sql
     time.sleep(0.02)
     return {"rows": [{"matched": 0}], "elapsed_seconds": 0.02}
+
+
+def test_max_three_queries_enforced():
+    inv = ConnectorInvestigator(max_queries=3, timeout_seconds=120)
+    result = inv.run(hypothesis=sample_hypothesis(), execute_query=fake_execute_ok)
+    assert len(result["queries"]) <= 3
+
+
+def test_timeout_returns_rejected_verdict():
+    inv = ConnectorInvestigator(max_queries=3, timeout_seconds=0)
+    result = inv.run(hypothesis=sample_hypothesis(), execute_query=fake_execute_slow)
+    assert result["verdict"] == "rejected"
+    assert "timeout" in result["reason"].lower()
