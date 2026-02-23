@@ -14,6 +14,7 @@ from tests.test_connector_investigator import (
     fake_rejecting_inv,
 )
 from tools.diagnose import (
+    ARCHETYPE_MAP,
     check_logging_artifact,
     check_decomposition_completeness,
     check_temporal_consistency,
@@ -197,6 +198,33 @@ class TestConnectorInvestigatorContracts:
         assert any(
             "connector" in a["action"].lower() for a in result["action_items"]
         )
+
+    def test_connector_investigator_receives_archetype_hints(self):
+        captured = {}
+
+        def capturing_inv(hypothesis, decomposition):
+            captured["hypothesis"] = hypothesis
+            captured["decomposition"] = decomposition
+            return {
+                "ran": True,
+                "verdict": "confirmed",
+                "reason": "captured hypothesis",
+                "queries": [],
+                "evidence": [],
+            }
+
+        result = run_diagnosis(
+            decomposition=decomp_medium_confidence(),
+            co_movement_result={"likely_cause": "ranking_relevance_regression"},
+            connector_investigator=capturing_inv,
+        )
+
+        expected = ARCHETYPE_MAP["ranking_relevance_regression"]
+        hypothesis = captured["hypothesis"]
+
+        assert result["connector_investigation"]["ran"] is True
+        assert hypothesis["confirms_if"] == expected["confirms_if"]
+        assert hypothesis["rejects_if"] == expected["rejects_if"]
 
 
 # ======================================================================

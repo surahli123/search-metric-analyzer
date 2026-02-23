@@ -111,3 +111,26 @@ def test_timeout_returns_rejected_verdict():
     result = inv.run(hypothesis=sample_hypothesis(), execute_query=fake_execute_slow)
     assert result["verdict"] == "rejected"
     assert "timeout" in result["reason"].lower()
+
+
+def test_timeout_during_query_execution_returns_partial_evidence():
+    inv = ConnectorInvestigator(max_queries=3, timeout_seconds=0.08)
+    calls = {"count": 0}
+
+    def fake_execute_with_slow_second_query(sql: str) -> Dict[str, Any]:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return {"rows": [{"matched": 1}], "elapsed_seconds": 0.0, "sql": sql}
+        time.sleep(0.2)
+        return {"rows": [{"matched": 1}], "elapsed_seconds": 0.2, "sql": sql}
+
+    result = inv.run(
+        hypothesis=sample_hypothesis(),
+        execute_query=fake_execute_with_slow_second_query,
+    )
+
+    assert result["verdict"] == "rejected"
+    assert "timeout" in result["reason"].lower()
+    assert calls["count"] >= 2
+    assert len(result["queries"]) == 1
+    assert len(result["evidence"]) == 1

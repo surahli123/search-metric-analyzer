@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 import time
 from typing import Any, Callable, Dict, List
 
@@ -46,7 +47,8 @@ class ConnectorInvestigator:
 
         for query in queries:
             elapsed = time.monotonic() - start
-            if elapsed >= self.timeout_seconds:
+            remaining = self.timeout_seconds - elapsed
+            if remaining <= 0:
                 return {
                     "ran": True,
                     "verdict": "rejected",
@@ -57,7 +59,25 @@ class ConnectorInvestigator:
                     "evidence": evidence,
                 }
 
-            result = execute_query(query)
+            executor = ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(execute_query, query)
+            try:
+                result = future.result(timeout=remaining)
+            except TimeoutError:
+                future.cancel()
+                return {
+                    "ran": True,
+                    "verdict": "rejected",
+                    "reason": (
+                        "timeout budget exceeded during bounded checks"
+                    ),
+                    "queries": executed_queries,
+                    "evidence": evidence,
+                }
+            finally:
+                # Don't wait if the query thread overran its timeout budget.
+                executor.shutdown(wait=False, cancel_futures=True)
+
             executed_queries.append(query)
             evidence.append(
                 {

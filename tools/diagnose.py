@@ -1052,6 +1052,12 @@ def _build_primary_hypothesis(
         category = archetype_info.get("category", "unknown")
         archetype = archetype_info.get("archetype", "unknown")
         is_positive = archetype_info.get("is_positive", False)
+        confirms_if = archetype_info.get("confirms_if", [])
+        if not isinstance(confirms_if, list):
+            confirms_if = []
+        rejects_if = archetype_info.get("rejects_if", [])
+        if not isinstance(rejects_if, list):
+            rejects_if = []
     else:
         # No archetype match — fall back to generic description
         if top_segment_info["segment"]:
@@ -1067,6 +1073,8 @@ def _build_primary_hypothesis(
         category = "unknown"
         archetype = "generic"
         is_positive = False
+        confirms_if = []
+        rejects_if = []
 
     # ── Enhance description for multi-cause ──
     # Suppress multi-cause for false_alarm (decomposition math amplifies noise).
@@ -1097,6 +1105,8 @@ def _build_primary_hypothesis(
         "category": category,
         "archetype": archetype,
         "is_positive": is_positive,
+        "confirms_if": confirms_if,
+        "rejects_if": rejects_if,
     }
 
     if multi_cause and not suppress_multi_cause:
