@@ -7,6 +7,12 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from tests.test_connector_investigator import (
+    decomp_high_confidence,
+    decomp_medium_confidence,
+    fake_inv,
+    fake_rejecting_inv,
+)
 from tools.diagnose import (
     check_logging_artifact,
     check_decomposition_completeness,
@@ -151,6 +157,34 @@ class TestRunDiagnosis:
         assert "decomposition_completeness" in check_names
         assert "temporal_consistency" in check_names
         assert "mix_shift" in check_names
+
+
+class TestConnectorInvestigatorContracts:
+    """Contract tests for connector investigator gating on diagnosis output."""
+
+    def test_connector_investigator_skips_high_confidence(self):
+        result = run_diagnosis(
+            decomposition=decomp_high_confidence(),
+            co_movement_result={"likely_cause": "ranking_relevance_regression"},
+            has_historical_precedent=True,
+            connector_investigator=fake_inv,
+        )
+        assert result["connector_investigation"]["ran"] is False
+
+    def test_connector_investigator_runs_medium_confidence(self):
+        result = run_diagnosis(
+            decomposition=decomp_medium_confidence(),
+            connector_investigator=fake_inv,
+        )
+        assert result["connector_investigation"]["ran"] is True
+
+    def test_rejected_connector_hypothesis_downgrades_to_insufficient_evidence(self):
+        result = run_diagnosis(
+            decomposition=decomp_medium_confidence(),
+            connector_investigator=fake_rejecting_inv,
+        )
+        assert result["decision_status"] == "insufficient_evidence"
+        assert result["confidence"]["level"] == "Low"
 
 
 # ======================================================================
