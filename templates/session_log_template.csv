@@ -1,0 +1,2 @@
+session_id,query_id,event_ts,query_token,query_class,seasonality_tag,ai_experience_type,ai_trigger,ai_success,ai_engaged,ranked_results_json,clicked_rank,clicked_doc_token,clicked_connector,click_ts,release_id,experiment_id,tenant_tier,ai_enablement,industry_vertical,connector_type,period,scenario_id
+S0_sess_0,S0_q_0,2026-01-05T00:00:00Z,query_tok_x,exploratory,none,NONE,0,0,0,[],,,,,,,standard,ai_off,tech,confluence,baseline,S0

@@ -1206,6 +1206,101 @@ class TestDiagnoseCLI:
         output = json.loads(result.stdout)
         assert "error" in output
 
+    def test_cli_with_co_movement_and_trust_gate_json(self, tmp_path):
+        """CLI should load co-movement and trust-gate JSON inputs."""
+        decomp = {
+            "aggregate": {"metric": "click_quality_value", "severity": "P0"},
+            "dimensional_breakdown": {},
+            "mix_shift": {},
+        }
+        co_movement = {"likely_cause": "ranking_relevance_regression", "is_positive": False}
+        trust_gate = {"status": "fail", "reason": "freshness too stale"}
+        decomp_file = tmp_path / "decomp.json"
+        decomp_file.write_text(json.dumps(decomp))
+        co_movement_file = tmp_path / "co_movement.json"
+        co_movement_file.write_text(json.dumps(co_movement))
+        trust_gate_file = tmp_path / "trust_gate.json"
+        trust_gate_file.write_text(json.dumps(trust_gate))
+
+        result = subprocess.run(
+            [sys.executable, str(PROJECT_ROOT / "tools" / "diagnose.py"),
+             "--input", str(decomp_file),
+             "--co-movement-json", str(co_movement_file),
+             "--trust-gate-json", str(trust_gate_file)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision_status"] == "blocked_by_data_quality"
+
+
+class TestDecisionStatus:
+    """Decision status should align with trust gate and overlap rules."""
+
+    def test_trust_gate_fail_blocks_definitive_diagnosis(self):
+        decomp = {
+            "aggregate": {
+                "metric": "click_quality_value",
+                "severity": "P1",
+                "direction": "down",
+                "relative_delta_pct": -3.0,
+            },
+            "dimensional_breakdown": {
+                "tenant_tier": {
+                    "segments": [
+                        {"segment_value": "standard", "contribution_pct": 80.0, "delta": -0.03}
+                    ]
+                }
+            },
+            "mix_shift": {"mix_shift_contribution_pct": 5.0},
+            "dominant_dimension": "tenant_tier",
+        }
+        result = run_diagnosis(
+            decomposition=decomp,
+            co_movement_result={"likely_cause": "ranking_relevance_regression", "is_positive": False},
+            trust_gate_result={"status": "fail", "reason": "freshness too stale"},
+        )
+        assert result["decision_status"] == "blocked_by_data_quality"
+        assert result["aggregate"]["severity"] == "blocked"
+        assert result["aggregate"]["original_severity"] == "P1"
+        assert "blocked" in result["primary_hypothesis"]["description"].lower()
+        assert result["confidence"]["level"] != "High"
+
+    def test_unresolved_overlap_returns_insufficient_evidence(self):
+        decomp = {
+            "aggregate": {
+                "metric": "click_quality_value",
+                "severity": "P0",
+                "direction": "down",
+                "relative_delta_pct": -10.0,
+            },
+            "dimensional_breakdown": {
+                "tenant_tier": {
+                    "segments": [
+                        {"segment_value": "standard", "contribution_pct": 55.0, "delta": -0.05}
+                    ]
+                },
+                "ai_enablement": {
+                    "segments": [
+                        {"segment_value": "ai_off", "contribution_pct": 51.0, "delta": -0.05}
+                    ]
+                },
+            },
+            "mix_shift": {"mix_shift_contribution_pct": 8.0},
+            "dominant_dimension": "tenant_tier",
+            "drill_down_recommended": True,
+        }
+        result = run_diagnosis(
+            decomposition=decomp,
+            co_movement_result={"likely_cause": "ranking_relevance_regression", "is_positive": False},
+            trust_gate_result={"status": "pass", "reason": "ok"},
+        )
+        assert result["decision_status"] == "insufficient_evidence"
+        assert result["confidence"]["level"] in ("Medium", "Low")
+
 
 # ======================================================================
 # v1.2 Group 3: New tests for diagnostic logic fixes
@@ -1372,6 +1467,75 @@ class TestMixShiftArchetypeActivation:
         # Description should mention composition/mix-shift
         desc = result["primary_hypothesis"]["description"].lower()
         assert "composition" in desc or "mix" in desc
+
+    def test_mix_shift_overrides_no_significant_movement(self):
+        """High mix-shift should not be framed as false alarm when co-movement is stable."""
+        decomposition = {
+            "aggregate": {
+                "metric": "click_quality_value",
+                "severity": "P2",
+                "relative_delta_pct": -0.9,
+                "direction": "down",
+            },
+            "dimensional_breakdown": {
+                "tenant_tier": {
+                    "segments": [
+                        {
+                            "segment_value": "standard",
+                            "contribution_pct": 62.0,
+                            "baseline_mean": 0.245,
+                            "current_mean": 0.244,
+                        },
+                    ]
+                }
+            },
+            "mix_shift": {"mix_shift_contribution_pct": 60.0},
+            "dominant_dimension": "tenant_tier",
+            "drill_down_recommended": True,
+        }
+        result = run_diagnosis(
+            decomposition=decomposition,
+            co_movement_result={"likely_cause": "no_significant_movement", "is_positive": True},
+        )
+        assert result["primary_hypothesis"]["archetype"] == "mix_shift"
+        assert result["primary_hypothesis"]["category"] == "mix_shift"
+        assert result["primary_hypothesis"]["archetype"] != "false_alarm"
+        desc = result["primary_hypothesis"]["description"].lower()
+        assert "compositional" in desc or "mix-shift" in desc or "mix shift" in desc
+
+    def test_mix_shift_clear_signal_not_forced_to_low_confidence(self):
+        """Diagnosed mix-shift with clear compositional evidence should be >= Medium."""
+        decomposition = {
+            "aggregate": {
+                "metric": "click_quality_value",
+                "severity": "P2",
+                "relative_delta_pct": -0.9,
+                "direction": "down",
+            },
+            "dimensional_breakdown": {
+                "tenant_tier": {
+                    "segments": [
+                        {
+                            "segment_value": "standard",
+                            "contribution_pct": 65.0,
+                            "baseline_mean": 0.247,
+                            "current_mean": 0.246,
+                        },
+                    ]
+                }
+            },
+            "mix_shift": {"mix_shift_contribution_pct": 60.0},
+            "dominant_dimension": "tenant_tier",
+            "drill_down_recommended": True,
+        }
+        result = run_diagnosis(
+            decomposition=decomposition,
+            step_change_result={"detected": True, "change_day_index": 2, "magnitude_pct": 3.0},
+            co_movement_result={"likely_cause": "no_significant_movement", "is_positive": True},
+        )
+        assert result["decision_status"] == "diagnosed"
+        assert result["primary_hypothesis"]["archetype"] == "mix_shift"
+        assert result["confidence"]["level"] in {"Medium", "High"}
 
 
 class TestGetTopSegmentContributionDirect:

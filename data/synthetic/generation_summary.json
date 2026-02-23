@@ -4,5 +4,5 @@
   "scenario_count": 13,
   "session_rows": 260000,
   "metric_rows": 260000,
-  "baseline_qsr_reference": 0.378208
+  "baseline_search_quality_success_reference": 0.378208
 }

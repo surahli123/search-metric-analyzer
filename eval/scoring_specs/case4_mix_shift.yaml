@@ -64,6 +64,7 @@ must_not_do:
   - attribute_to_connector: "No connector issue in this scenario"
   - recommend_quality_fix: "This requires portfolio management, not quality engineering"
   - miss_mix_shift: "Must detect that >=30% of movement is compositional"
+  - underconfident_mix_shift: "Do not emit Low confidence for diagnosed mix-shift with >=30% compositional contribution"
 
 output_quality:
   has_tldr: true

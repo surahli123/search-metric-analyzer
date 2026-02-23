@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Eval stress-test: run the full diagnostic pipeline on 5 eval scenarios.
+"""Eval stress-test: run the full diagnostic pipeline on eval scenarios.
 
 This script:
 1. Loads synthetic data (already generated)
-2. Filters to each eval scenario (S4, S5, S7, S9, S0)
+2. Filters to each eval scenario (S4, S5, S7, S8, S9, S0)
 3. Runs the FULL pipeline: decompose -> anomaly -> diagnose -> format
 4. Scores each run using the eval framework
 5. Prints a scorecard
@@ -14,8 +14,10 @@ Usage:
 
 import csv
 import json
+import argparse
 import sys
 from pathlib import Path
+from datetime import datetime, timezone
 
 # ── Setup paths ──────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -25,7 +27,7 @@ from tools.decompose import run_decomposition
 from tools.anomaly import detect_step_change, match_co_movement_pattern, check_data_quality
 from tools.diagnose import run_diagnosis
 from tools.formatter import format_diagnosis_output
-from eval.run_eval import load_scoring_specs, score_single_run
+from eval.run_eval import load_scoring_specs, run_three_run_majority
 
 
 # ── Config ────────────────────────────────────────────────────────────────
@@ -36,6 +38,7 @@ EVAL_CASES = [
     {"scenario_id": "S4", "spec_file": "case1_single_cause.yaml",     "label": "Ranking regression"},
     {"scenario_id": "S5", "spec_file": "case2_ai_adoption_trap.yaml", "label": "AI adoption trap"},
     {"scenario_id": "S7", "spec_file": "case3_multi_cause.yaml",      "label": "Multi-cause overlap"},
+    {"scenario_id": "S8", "spec_file": "case6_data_quality_gate.yaml", "label": "Data quality gate block"},
     {"scenario_id": "S9", "spec_file": "case4_mix_shift.yaml",        "label": "Mix-shift"},
     {"scenario_id": "S0", "spec_file": "case5_false_alarm.yaml",      "label": "False alarm (stable)"},
 ]
@@ -45,6 +48,61 @@ ENTERPRISE_DIMENSIONS = ["tenant_tier", "ai_enablement", "connector_type"]
 
 # Metrics to check for co-movement patterns
 CO_MOVEMENT_METRICS = ["click_quality_value", "search_quality_success_value", "ai_trigger", "ai_success"]
+
+
+def build_stress_artifact(results: list[dict]) -> dict:
+    """Build a machine-readable artifact for CI diffing and regression checks."""
+    total_cases = len(results)
+    green_count = sum(1 for r in results if r.get("grade") == "GREEN")
+    yellow_count = sum(1 for r in results if r.get("grade") == "YELLOW")
+    red_count = sum(1 for r in results if r.get("grade") == "RED")
+    error_count = sum(1 for r in results if r.get("grade") == "ERROR")
+
+    scores = [float(r.get("score", 0)) for r in results if "error" not in r]
+
+    artifact_cases = []
+    for row in results:
+        violations = row.get("violations", [])
+        artifact_cases.append(
+            {
+                "case": row.get("case"),
+                "label": row.get("label"),
+                "grade": row.get("grade"),
+                "score": row.get("score"),
+                "run_scores": row.get("run_scores", []),
+                "run_grades": row.get("run_grades", []),
+                "majority": row.get("majority", {}),
+                "decision_status": row.get("decision_status"),
+                "severity": row.get("severity"),
+                "confidence": row.get("confidence"),
+                "violation_rules": [
+                    v.get("rule") if isinstance(v, dict) else str(v)
+                    for v in violations
+                ],
+            }
+        )
+
+    return {
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "summary": {
+            "total_cases": total_cases,
+            "green": green_count,
+            "yellow": yellow_count,
+            "red": red_count,
+            "error": error_count,
+            "avg_score": (sum(scores) / len(scores)) if scores else 0.0,
+            "min_score": min(scores) if scores else 0.0,
+            "max_score": max(scores) if scores else 0.0,
+        },
+        "cases": artifact_cases,
+    }
+
+
+def _write_stress_artifact(path: Path, artifact: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w") as f:
+        json.dump(artifact, f, indent=2, sort_keys=True)
+        f.write("\n")
 
 
 def load_synthetic_data() -> list[dict]:
@@ -214,9 +272,11 @@ def run_pipeline_for_scenario(rows: list[dict], scenario_id: str) -> tuple[dict,
         decomposition=decomposition,
         step_change_result=step_change,
         co_movement_result=co_movement,
+        trust_gate_result=dq_result,
     )
     print(f"        Hypothesis: {diagnosis['primary_hypothesis']['description'][:80]}...")
     print(f"        Confidence: {diagnosis['confidence']['level']}")
+    print(f"        Decision status: {diagnosis.get('decision_status', 'diagnosed')}")
     print(f"        Category: {diagnosis['primary_hypothesis'].get('category', 'N/A')}")
 
     # ── Step 4: Formatting ──
@@ -230,8 +290,8 @@ def run_pipeline_for_scenario(rows: list[dict], scenario_id: str) -> tuple[dict,
     return diagnosis, formatted
 
 
-def run_eval():
-    """Run the full eval stress-test across all 5 scenarios."""
+def run_eval(artifact_json: Path | None = None):
+    """Run the full eval stress-test across configured scenarios."""
     print("=" * 60)
     print("  SEARCH METRIC ANALYZER — EVAL STRESS TEST")
     print("=" * 60)
@@ -270,27 +330,44 @@ def run_eval():
             # Run the pipeline
             diagnosis, formatted = run_pipeline_for_scenario(all_rows, sid)
 
-            # Score it
-            score_result = score_single_run(spec, diagnosis, formatted)
+            # Score with 3-run majority verdict
+            run_pack = run_three_run_majority(
+                spec=spec,
+                diagnosis=diagnosis,
+                formatted=formatted,
+                runs=3,
+            )
+            score_result = run_pack["majority"]
+            first_run = run_pack["run_results"][0]
+            run_scores = [r["total_score"] for r in run_pack["run_results"]]
+            run_grades = [r["grade"] for r in run_pack["run_results"]]
 
             results.append({
                 "case": sid,
                 "label": label,
-                "score": score_result["total_score"],
-                "grade": score_result["grade"],
-                "raw_score": score_result["raw_score"],
-                "deductions": score_result["deductions"],
-                "violations": score_result.get("violations", []),
-                "per_dimension": score_result.get("per_dimension", {}),
+                "score": round(score_result["avg_score"], 1),
+                "grade": score_result["verdict"],
+                "raw_score": first_run["raw_score"],
+                "deductions": first_run["deductions"],
+                "violations": first_run.get("violations", []),
+                "per_dimension": first_run.get("per_dimension", {}),
+                "run_scores": run_scores,
+                "run_grades": run_grades,
+                "majority": score_result,
                 "hypothesis": diagnosis["primary_hypothesis"]["description"],
+                "decision_status": diagnosis.get("decision_status", "diagnosed"),
                 "confidence": diagnosis["confidence"]["level"],
                 "severity": diagnosis["aggregate"]["severity"],
                 "spec": spec,
             })
 
-            print(f"\n  SCORE: {score_result['total_score']}/100 ({score_result['grade']})")
-            if score_result.get("violations"):
-                print(f"  VIOLATIONS: {score_result['violations']}")
+            print(
+                f"\n  RUN SCORES: {run_scores} / {run_grades} "
+                f"-> MAJORITY {score_result['verdict']} "
+                f"(avg {score_result['avg_score']:.1f})"
+            )
+            if first_run.get("violations"):
+                print(f"  VIOLATIONS (first run): {first_run['violations']}")
 
         except Exception as e:
             print(f"\n  ERROR running {sid}: {e}")
@@ -333,7 +410,10 @@ def run_eval():
             continue
         print(f"\n  {r['case']} — {r['label']} (Total: {r['score']}/{100})")
         print(f"  Hypothesis: {r['hypothesis'][:100]}")
+        print(f"  Decision status: {r.get('decision_status', 'diagnosed')}")
         print(f"  Confidence: {r['confidence']}, Severity: {r.get('severity', 'N/A')}")
+        print(f"  Run grades: {r.get('run_grades', [])}")
+        print(f"  Run scores: {r.get('run_scores', [])}")
         per_dim = r.get("per_dimension", {})
         for dim_name, dim_info in per_dim.items():
             score = dim_info.get("earned", 0)
@@ -358,11 +438,12 @@ def run_eval():
     red_count = sum(1 for r in results if r.get("grade") == "RED")
     error_count = sum(1 for r in results if r.get("grade") == "ERROR")
 
-    print(f"  GREEN:  {green_count}/5")
-    print(f"  YELLOW: {yellow_count}/5")
-    print(f"  RED:    {red_count}/5")
+    total_cases = len(results)
+    print(f"  GREEN:  {green_count}/{total_cases}")
+    print(f"  YELLOW: {yellow_count}/{total_cases}")
+    print(f"  RED:    {red_count}/{total_cases}")
     if error_count:
-        print(f"  ERROR:  {error_count}/5")
+        print(f"  ERROR:  {error_count}/{total_cases}")
 
     scores = [r["score"] for r in results if "error" not in r]
     if scores:
@@ -407,9 +488,26 @@ def run_eval():
             if r.get("violations"):
                 print(f"  Violations that cost points: {r['violations']}")
 
+    if artifact_json is not None:
+        artifact = build_stress_artifact(results)
+        _write_stress_artifact(artifact_json, artifact)
+        print(f"\n  Wrote machine-readable artifact: {artifact_json}")
+
     # Return results for further analysis
     return results
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run stress eval pipeline")
+    parser.add_argument(
+        "--artifact-json",
+        default=None,
+        help="Optional path to write machine-readable stress results JSON",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    results = run_eval()
+    args = parse_args()
+    artifact_path = Path(args.artifact_json) if args.artifact_json else None
+    results = run_eval(artifact_json=artifact_path)

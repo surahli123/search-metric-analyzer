@@ -33,6 +33,11 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+try:
+    from tools.schema import normalize_diagnosis_payload, normalize_metric_name
+except ModuleNotFoundError:
+    from schema import normalize_diagnosis_payload, normalize_metric_name
+
 
 # ──────────────────────────────────────────────────
 # Thresholds — from the diagnostic workflow design doc
@@ -59,6 +64,7 @@ FALSE_ALARM_MAX_SEGMENT_CONTRIBUTION = 50.0
 # Multi-cause detection: if top segments in DIFFERENT dimensions each
 # explain more than this %, flag as multi-cause.
 MULTI_CAUSE_MIN_CONTRIBUTION = 30.0
+UNRESOLVED_OVERLAP_MAX_GAP_PCT = 10.0
 
 # Per-metric noise thresholds (fraction, not percentage).
 # Derived from weekly_std/mean ratios in metric_definitions.yaml.
@@ -1261,10 +1267,38 @@ def _apply_severity_override(
     return result
 
 
+def _normalize_trust_gate_result(trust_gate_result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Normalize trust-gate payload shape and defaults."""
+    normalized = dict(trust_gate_result or {})
+    status = str(normalized.get("status", "pass")).strip().lower()
+    if status not in {"pass", "warn", "fail"}:
+        status = "pass"
+    normalized["status"] = status
+    normalized.setdefault("reason", "not_provided")
+    return normalized
+
+
+def _is_unresolved_overlap(primary_hypothesis: Dict[str, Any]) -> bool:
+    """Return True when overlapping causes are too close to attribute decisively."""
+    causes = primary_hypothesis.get("multi_cause") or []
+    if len(causes) < 2:
+        return False
+
+    ranked = sorted(
+        [abs(float(c.get("contribution_pct", 0.0))) for c in causes],
+        reverse=True,
+    )
+    if ranked[0] < MULTI_CAUSE_MIN_CONTRIBUTION or ranked[1] < MULTI_CAUSE_MIN_CONTRIBUTION:
+        return False
+
+    return abs(ranked[0] - ranked[1]) <= UNRESOLVED_OVERLAP_MAX_GAP_PCT
+
+
 def run_diagnosis(
     decomposition: Dict[str, Any],
     step_change_result: Optional[Dict[str, Any]] = None,
     co_movement_result: Optional[Dict[str, Any]] = None,
+    trust_gate_result: Optional[Dict[str, Any]] = None,
     cause_date_index: Optional[int] = None,
     metric_change_date_index: Optional[int] = None,
     has_historical_precedent: bool = False,
@@ -1295,6 +1329,8 @@ def run_diagnosis(
             If None, defaults to no step-change detected.
         co_movement_result: Output from anomaly.match_co_movement_pattern().
             If None, archetype recognition falls back to generic.
+        trust_gate_result: Output from anomaly.check_data_quality().
+            If status is "fail", definitive diagnosis is blocked.
         cause_date_index: Day index of the proposed cause event.
             If None, defaults to 0 (assumes cause is at the start).
         metric_change_date_index: Day index when the metric changed.
@@ -1303,7 +1339,7 @@ def run_diagnosis(
             past incident pattern. True enables High confidence.
 
     Returns:
-        Dict with: aggregate, primary_hypothesis, confidence,
+        Dict with: aggregate, primary_hypothesis, confidence, decision_status,
         validation_checks, dimensional_breakdown, mix_shift, action_items.
     """
     # ── Defaults for optional parameters ──
@@ -1311,15 +1347,21 @@ def run_diagnosis(
         step_change_result = {"detected": False, "change_day_index": None, "magnitude_pct": 0.0}
     if co_movement_result is None:
         co_movement_result = {"likely_cause": "unknown_pattern", "is_positive": False}
+    trust_gate_result = _normalize_trust_gate_result(trust_gate_result)
     if cause_date_index is None:
         cause_date_index = 0
     if metric_change_date_index is None:
         metric_change_date_index = 0
 
+    decomposition = dict(decomposition)
+
     # ── Extract key metrics from decomposition ──
     explained_pct = _extract_explained_pct(decomposition)
     mix_shift_pct = _extract_mix_shift_pct(decomposition)
-    aggregate = decomposition.get("aggregate", {})
+    aggregate = dict(decomposition.get("aggregate", {}))
+    if "metric" in aggregate:
+        aggregate["metric"] = normalize_metric_name(aggregate["metric"])
+    decomposition["aggregate"] = aggregate
 
     # ── Run all 4 validation checks ──
     check_1 = check_logging_artifact(step_change_result)
@@ -1336,10 +1378,11 @@ def run_diagnosis(
     archetype_info = ARCHETYPE_MAP.get(likely_cause)
 
     # ── Mix-shift archetype activation ──
-    # If co-movement didn't match a known pattern BUT Check #4 says INVESTIGATE
-    # (mix-shift >= 30%), the movement is likely compositional, not behavioral.
-    # Assign the mix_shift_composition archetype for proper framing.
-    if likely_cause == "unknown_pattern" and check_4.get("status") == "INVESTIGATE":
+    # If Check #4 says INVESTIGATE (mix-shift >= 30%), the movement is likely
+    # compositional. This should take precedence over unknown/stable co-movement
+    # framing so we avoid false-alarm narratives on true mix-shift cases.
+    mix_shift_investigate = check_4.get("status") == "INVESTIGATE"
+    if mix_shift_investigate and likely_cause in {"unknown_pattern", "no_significant_movement"}:
         archetype_info = ARCHETYPE_MAP["mix_shift_composition"]
         likely_cause = "mix_shift_composition"
 
@@ -1361,13 +1404,16 @@ def run_diagnosis(
     exceeds_noise = abs_delta > noise_thresh
 
     # Path (a): co-movement explicitly says no significant movement
-    false_alarm_from_co_movement = likely_cause == "no_significant_movement"
+    false_alarm_from_co_movement = (
+        likely_cause == "no_significant_movement" and not mix_shift_investigate
+    )
     # Path (b): inferred from P2 severity + no dominant segment + delta within noise
     false_alarm_inferred = (
         severity in ("P2", "normal")
         and likely_cause == "unknown_pattern"
         and _get_top_segment_contribution(decomposition) < FALSE_ALARM_MAX_SEGMENT_CONTRIBUTION
         and not exceeds_noise
+        and not mix_shift_investigate
     )
     is_false_alarm = false_alarm_from_co_movement or false_alarm_inferred
     if is_false_alarm:
@@ -1452,17 +1498,112 @@ def run_diagnosis(
             "Attribution between causes is uncertain."
         )
 
+    # Mix-shift confidence floor: when compositional signal is explicit and
+    # diagnosis is not blocked, avoid over-penalizing confidence to Low solely
+    # because auxiliary checks are non-PASS.
+    if (
+        likely_cause == "mix_shift_composition"
+        and confidence.get("level") == "Low"
+        and mix_shift_pct >= MIX_SHIFT_INVESTIGATE_THRESHOLD
+    ):
+        confidence = {
+            "level": "Medium",
+            "reasoning": (
+                "Medium confidence: mix-shift is a clear compositional signal "
+                f"({mix_shift_pct:.1f}% contribution), while per-segment behavior remains stable."
+            ),
+            "would_upgrade_if": (
+                "all validation checks pass and historical precedent confirms a repeatable "
+                "portfolio-shift pattern"
+            ),
+            "would_downgrade_if": (
+                "mix-shift contribution drops below 30% or segment-level deltas show "
+                "behavioral regression"
+            ),
+        }
+
+    # ── Decision status contract ──
+    decision_status = "diagnosed"
+    unresolved_overlap = _is_unresolved_overlap(primary_hypothesis)
+    if unresolved_overlap:
+        decision_status = "insufficient_evidence"
+        if confidence["level"] == "High":
+            confidence["level"] = "Medium"
+        confidence["reasoning"] = (
+            "Insufficient evidence for definitive attribution: multiple "
+            "overlapping causes remain unresolved."
+        )
+        if "unresolved overlap" not in primary_hypothesis.get("description", "").lower():
+            primary_hypothesis["description"] = (
+                f"{primary_hypothesis.get('description', '').rstrip()} "
+                "Unresolved overlap between candidate causes prevents a single-cause conclusion."
+            ).strip()
+
+    trust_gate_failed = trust_gate_result.get("status") == "fail"
+
     # ── Build action items with owners ──
-    action_items = _build_action_items(
-        all_checks, confidence["level"], decomposition,
-        effective_co_movement, primary_hypothesis, confidence,
-    )
+    if trust_gate_failed:
+        original_severity = aggregate.get("severity", "P2")
+        if "original_severity" not in aggregate:
+            aggregate["original_severity"] = original_severity
+        aggregate["severity"] = "blocked"
+        aggregate["severity_override_reason"] = (
+            f"Severity overridden from {original_severity} to blocked: "
+            "decision_status is 'blocked_by_data_quality'"
+        )
+        decision_status = "blocked_by_data_quality"
+        reason = trust_gate_result.get("reason", "trust gate failed")
+        primary_hypothesis = {
+            "dimension": None,
+            "segment": None,
+            "contribution_pct": 0.0,
+            "description": (
+                "Diagnosis blocked by data quality gate. "
+                f"Reason: {reason}. Definitive root-cause attribution is not allowed until "
+                "the trust gate passes."
+            ),
+            "category": "data_quality",
+            "archetype": "blocked_by_data_quality",
+            "is_positive": False,
+        }
+        confidence = {
+            "level": "Low",
+            "reasoning": (
+                "Low confidence by contract: trust gate failed, so definitive diagnosis is blocked."
+            ),
+            "would_upgrade_if": "trust gate status changes from fail to pass",
+            "would_downgrade_if": None,
+        }
+        action_items = [
+            {
+                "action": (
+                    "Resolve trust-gate failure (freshness/completeness) and rerun diagnosis before "
+                    "root-cause attribution."
+                ),
+                "owner": "Search Platform team",
+            }
+        ]
+    else:
+        action_items = _build_action_items(
+            all_checks, confidence["level"], decomposition,
+            effective_co_movement, primary_hypothesis, confidence,
+        )
+        if unresolved_overlap:
+            action_items.append({
+                "action": (
+                    "Run targeted follow-up decomposition and event checks to resolve overlapping causes "
+                    "before taking single-cause action."
+                ),
+                "owner": "Search Quality DS",
+            })
 
     # ── Assemble the full diagnosis report ──
     result = {
         "aggregate": aggregate,
         "primary_hypothesis": primary_hypothesis,
         "confidence": confidence,
+        "decision_status": decision_status,
+        "trust_gate_result": trust_gate_result,
         "validation_checks": all_checks,
         "dimensional_breakdown": decomposition.get("dimensional_breakdown", {}),
         "mix_shift": decomposition.get("mix_shift", {}),
@@ -1475,7 +1616,7 @@ def run_diagnosis(
     verification_warnings = verify_diagnosis(result)
     result["verification_warnings"] = verification_warnings
 
-    return result
+    return normalize_diagnosis_payload(result)
 
 
 def _get_top_segment_contribution(decomposition: Dict[str, Any]) -> float:
@@ -1517,6 +1658,14 @@ def parse_args() -> argparse.Namespace:
         help="Path to JSON file with step-change result (from anomaly.py)"
     )
     parser.add_argument(
+        "--co-movement-json", default=None,
+        help="Path to JSON file with co-movement result (from anomaly.py)"
+    )
+    parser.add_argument(
+        "--trust-gate-json", default=None,
+        help="Path to JSON file with trust-gate result (from anomaly.py data_quality check)"
+    )
+    parser.add_argument(
         "--cause-day", type=int, default=None,
         help="Day index of the proposed cause event"
     )
@@ -1551,10 +1700,34 @@ def main():
             print(json.dumps({"error": f"Step-change file not found: {args.step_change_json}"}))
             sys.exit(1)
 
+    # Optionally load co-movement result
+    co_movement_result = None
+    if args.co_movement_json:
+        cm_path = Path(args.co_movement_json)
+        if cm_path.exists():
+            with open(cm_path) as f:
+                co_movement_result = json.load(f)
+        else:
+            print(json.dumps({"error": f"Co-movement file not found: {args.co_movement_json}"}))
+            sys.exit(1)
+
+    # Optionally load trust-gate result
+    trust_gate_result = None
+    if args.trust_gate_json:
+        tg_path = Path(args.trust_gate_json)
+        if tg_path.exists():
+            with open(tg_path) as f:
+                trust_gate_result = json.load(f)
+        else:
+            print(json.dumps({"error": f"Trust-gate file not found: {args.trust_gate_json}"}))
+            sys.exit(1)
+
     # Run the full diagnosis
     result = run_diagnosis(
         decomposition=decomposition,
         step_change_result=step_change_result,
+        co_movement_result=co_movement_result,
+        trust_gate_result=trust_gate_result,
         cause_date_index=args.cause_day,
         metric_change_date_index=args.metric_change_day,
     )

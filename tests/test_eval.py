@@ -8,7 +8,7 @@ The eval framework has two parts:
 2. Eval runner (Python) — loads specs, runs diagnosis, evaluates with LLM-as-judge
 
 These tests verify:
-- All 5 scoring spec YAML files exist and parse correctly
+- All scoring spec YAML files exist and parse correctly
 - Every spec has the required fields for LLM-as-judge evaluation
 - Rubric weights sum to 100 and individual criteria points match dimension weight
 - The eval runner can load specs, score a mock diagnosis, and aggregate results
@@ -23,13 +23,14 @@ from pathlib import Path
 EVAL_DIR = Path(__file__).parent.parent / "eval"
 SPECS_DIR = EVAL_DIR / "scoring_specs"
 
-# All 5 eval cases — expanded from 3 to 5 during Socratic rubric design
+# Eval cases covered by deterministic scoring specs
 ALL_CASE_FILES = [
     "case1_single_cause.yaml",
     "case2_ai_adoption_trap.yaml",
     "case3_multi_cause.yaml",
     "case4_mix_shift.yaml",
     "case5_false_alarm.yaml",
+    "case6_data_quality_gate.yaml",
 ]
 
 
@@ -38,7 +39,7 @@ ALL_CASE_FILES = [
 # ──────────────────────────────────────────────────
 
 class TestScoringSpecsExist:
-    """Verify that all 5 scoring spec YAML files are present."""
+    """Verify that all eval scoring spec YAML files are present."""
 
     @pytest.mark.parametrize("case_file", ALL_CASE_FILES)
     def test_scoring_spec_exists(self, case_file):
@@ -234,6 +235,15 @@ class TestCaseSpecificContent:
         root = spec["must_find"]["root_cause"].lower()
         assert "no significant" in root or "normal" in root or "within" in root
 
+    def test_case6_is_data_quality_block(self):
+        """Case 6 (S8) should enforce trust-gate blocking behavior."""
+        spec = self._load_spec("case6_data_quality_gate.yaml")
+        assert spec["case"]["scenario"] == "S8"
+        assert spec["case"]["archetype"] == "blocked_by_data_quality"
+        assert spec["case"]["pass_threshold"] == "2/3 GREEN"
+        root = spec["must_find"]["root_cause"].lower()
+        assert "blocked" in root and "data quality" in root
+
 
 # ──────────────────────────────────────────────────
 # Test Group 4: Eval Runner
@@ -256,7 +266,7 @@ class TestEvalRunner:
         spec.loader.exec_module(module)
 
     def test_load_scoring_specs(self):
-        """load_scoring_specs() should return a list of all 5 spec dicts."""
+        """load_scoring_specs() should return all scoring spec dicts."""
         import importlib.util
         runner_path = EVAL_DIR / "run_eval.py"
         spec = importlib.util.spec_from_file_location("run_eval", runner_path)
@@ -264,7 +274,9 @@ class TestEvalRunner:
         spec.loader.exec_module(module)
 
         specs = module.load_scoring_specs()
-        assert len(specs) == 5, f"Expected 5 specs, got {len(specs)}"
+        assert len(specs) == len(ALL_CASE_FILES), (
+            f"Expected {len(ALL_CASE_FILES)} specs, got {len(specs)}"
+        )
         # Verify each has case info
         for s in specs:
             assert "case" in s
@@ -465,6 +477,291 @@ class TestEvalRunner:
         # Should NOT get GREEN with a hedging diagnosis
         assert result["grade"] != "GREEN" or result["total_score"] < 80
 
+    def test_case3_requires_insufficient_evidence_decision_status(self):
+        """S7 eval contract should reject diagnosed decision_status."""
+        import importlib.util
+        runner_path = EVAL_DIR / "run_eval.py"
+        spec = importlib.util.spec_from_file_location("run_eval", runner_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        specs = module.load_scoring_specs()
+        case3_spec = next(s for s in specs if s["case"]["scenario"] == "S7")
+
+        diagnosis = {
+            "aggregate": {
+                "metric": "click_quality_value",
+                "direction": "down",
+                "relative_delta_pct": -9.4,
+                "severity": "P1",
+            },
+            "primary_hypothesis": {
+                "dimension": "tenant_tier",
+                "segment": "standard",
+                "contribution_pct": 52.0,
+                "description": (
+                    "Multiple overlapping causes detected: AI rollout effect and tenant mix-shift."
+                ),
+            },
+            "confidence": {
+                "level": "Medium",
+                "reasoning": "Overlap remains unresolved.",
+                "would_upgrade_if": "Resolve overlap with targeted checks.",
+                "would_downgrade_if": "Lose cross-metric confirmation.",
+            },
+            "decision_status": "diagnosed",
+            "validation_checks": [
+                {"check": "logging_artifact", "status": "PASS", "detail": "No step-change"},
+                {"check": "decomposition_completeness", "status": "PASS", "detail": "92% explained"},
+                {"check": "temporal_consistency", "status": "PASS", "detail": "Consistent"},
+                {"check": "mix_shift", "status": "INVESTIGATE", "detail": "Significant mix-shift"},
+            ],
+            "dimensional_breakdown": {
+                "tenant_tier": {"segments": [{"segment_value": "standard", "baseline_mean": 0.28, "current_mean": 0.25}]},
+                "ai_enablement": {"segments": [{"segment_value": "ai_on", "baseline_mean": 0.24, "current_mean": 0.20}]},
+            },
+            "mix_shift": {"mix_shift_contribution_pct": 41.0},
+            "action_items": [
+                "Investigate tenant churn and AI rollout interactions (Search Quality DS)",
+                "Audit rollout timeline for AI exposure changes (AI team)",
+            ],
+        }
+
+        from tools.formatter import format_diagnosis_output
+
+        formatted = format_diagnosis_output(diagnosis)
+        result = module.score_single_run(case3_spec, diagnosis, formatted)
+
+        assert any(v.get("rule") == "decision_status_contract" for v in result.get("violations", []))
+
+    def test_case3_accepts_insufficient_evidence_decision_status(self):
+        """S7 eval contract should accept insufficient_evidence decision_status."""
+        import importlib.util
+        runner_path = EVAL_DIR / "run_eval.py"
+        spec = importlib.util.spec_from_file_location("run_eval", runner_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        specs = module.load_scoring_specs()
+        case3_spec = next(s for s in specs if s["case"]["scenario"] == "S7")
+
+        diagnosis = {
+            "aggregate": {
+                "metric": "click_quality_value",
+                "direction": "down",
+                "relative_delta_pct": -9.4,
+                "severity": "P1",
+            },
+            "primary_hypothesis": {
+                "dimension": "tenant_tier",
+                "segment": "standard",
+                "contribution_pct": 52.0,
+                "description": (
+                    "Multiple overlapping causes detected: AI rollout effect and tenant mix-shift."
+                ),
+            },
+            "confidence": {
+                "level": "Medium",
+                "reasoning": "Overlap remains unresolved.",
+                "would_upgrade_if": "Resolve overlap with targeted checks.",
+                "would_downgrade_if": "Lose cross-metric confirmation.",
+            },
+            "decision_status": "insufficient_evidence",
+            "validation_checks": [
+                {"check": "logging_artifact", "status": "PASS", "detail": "No step-change"},
+                {"check": "decomposition_completeness", "status": "PASS", "detail": "92% explained"},
+                {"check": "temporal_consistency", "status": "PASS", "detail": "Consistent"},
+                {"check": "mix_shift", "status": "INVESTIGATE", "detail": "Significant mix-shift"},
+            ],
+            "dimensional_breakdown": {
+                "tenant_tier": {"segments": [{"segment_value": "standard", "baseline_mean": 0.28, "current_mean": 0.25}]},
+                "ai_enablement": {"segments": [{"segment_value": "ai_on", "baseline_mean": 0.24, "current_mean": 0.20}]},
+            },
+            "mix_shift": {"mix_shift_contribution_pct": 41.0},
+            "action_items": [
+                "Investigate tenant churn and AI rollout interactions (Search Quality DS)",
+                "Audit rollout timeline for AI exposure changes (AI team)",
+            ],
+        }
+
+        from tools.formatter import format_diagnosis_output
+
+        formatted = format_diagnosis_output(diagnosis)
+        result = module.score_single_run(case3_spec, diagnosis, formatted)
+
+        assert not any(v.get("rule") == "decision_status_contract" for v in result.get("violations", []))
+
+    def test_case6_requires_blocked_by_data_quality_decision_status(self):
+        """S8 eval contract should reject diagnosed decision_status."""
+        import importlib.util
+        runner_path = EVAL_DIR / "run_eval.py"
+        spec = importlib.util.spec_from_file_location("run_eval", runner_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        specs = module.load_scoring_specs()
+        case6_spec = next(s for s in specs if s["case"]["scenario"] == "S8")
+
+        diagnosis = {
+            "aggregate": {
+                "metric": "click_quality_value",
+                "direction": "down",
+                "relative_delta_pct": -1.2,
+                "severity": "normal",
+            },
+            "primary_hypothesis": {
+                "dimension": None,
+                "segment": None,
+                "contribution_pct": 0.0,
+                "description": "Diagnosis blocked by data quality gate.",
+                "category": "data_quality",
+                "archetype": "blocked_by_data_quality",
+            },
+            "confidence": {
+                "level": "Low",
+                "reasoning": "Trust gate failed.",
+                "would_upgrade_if": "trust gate passes",
+                "would_downgrade_if": None,
+            },
+            "decision_status": "diagnosed",
+            "validation_checks": [
+                {"check": "logging_artifact", "status": "HALT", "detail": "Step-change"},
+                {"check": "decomposition_completeness", "status": "PASS", "detail": "Complete"},
+                {"check": "temporal_consistency", "status": "PASS", "detail": "Consistent"},
+                {"check": "mix_shift", "status": "PASS", "detail": "Low mix-shift"},
+            ],
+            "dimensional_breakdown": {},
+            "mix_shift": {"mix_shift_contribution_pct": 0.0},
+            "action_items": [
+                "Resolve trust-gate failure and rerun diagnosis (Search Platform team)",
+            ],
+            "trust_gate_result": {
+                "status": "fail",
+                "reason": "freshness too stale",
+            },
+        }
+
+        from tools.formatter import format_diagnosis_output
+
+        formatted = format_diagnosis_output(diagnosis)
+        result = module.score_single_run(case6_spec, diagnosis, formatted)
+        assert any(v.get("rule") == "decision_status_contract" for v in result.get("violations", []))
+
+    def test_case6_accepts_blocked_by_data_quality_decision_status(self):
+        """S8 eval contract should accept blocked_by_data_quality decision_status."""
+        import importlib.util
+        runner_path = EVAL_DIR / "run_eval.py"
+        spec = importlib.util.spec_from_file_location("run_eval", runner_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        specs = module.load_scoring_specs()
+        case6_spec = next(s for s in specs if s["case"]["scenario"] == "S8")
+
+        diagnosis = {
+            "aggregate": {
+                "metric": "click_quality_value",
+                "direction": "down",
+                "relative_delta_pct": -1.2,
+                "severity": "normal",
+            },
+            "primary_hypothesis": {
+                "dimension": None,
+                "segment": None,
+                "contribution_pct": 0.0,
+                "description": "Diagnosis blocked by data quality gate.",
+                "category": "data_quality",
+                "archetype": "blocked_by_data_quality",
+            },
+            "confidence": {
+                "level": "Low",
+                "reasoning": "Trust gate failed.",
+                "would_upgrade_if": "trust gate passes",
+                "would_downgrade_if": None,
+            },
+            "decision_status": "blocked_by_data_quality",
+            "validation_checks": [
+                {"check": "logging_artifact", "status": "HALT", "detail": "Step-change"},
+                {"check": "decomposition_completeness", "status": "PASS", "detail": "Complete"},
+                {"check": "temporal_consistency", "status": "PASS", "detail": "Consistent"},
+                {"check": "mix_shift", "status": "PASS", "detail": "Low mix-shift"},
+            ],
+            "dimensional_breakdown": {},
+            "mix_shift": {"mix_shift_contribution_pct": 0.0},
+            "action_items": [
+                "Resolve trust-gate failure and rerun diagnosis (Search Platform team)",
+            ],
+            "trust_gate_result": {
+                "status": "fail",
+                "reason": "freshness too stale",
+            },
+        }
+
+        from tools.formatter import format_diagnosis_output
+
+        formatted = format_diagnosis_output(diagnosis)
+        result = module.score_single_run(case6_spec, diagnosis, formatted)
+        assert not any(v.get("rule") == "decision_status_contract" for v in result.get("violations", []))
+
+    def test_case4_penalizes_low_confidence_for_clear_mix_shift(self):
+        """S9 should not remain GREEN when compositional signal is clear but confidence is Low."""
+        import importlib.util
+        runner_path = EVAL_DIR / "run_eval.py"
+        spec = importlib.util.spec_from_file_location("run_eval", runner_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        specs = module.load_scoring_specs()
+        case4_spec = next(s for s in specs if s["case"]["scenario"] == "S9")
+
+        diagnosis = {
+            "aggregate": {
+                "metric": "click_quality_value",
+                "direction": "down",
+                "relative_delta_pct": -0.9,
+                "severity": "P2",
+            },
+            "primary_hypothesis": {
+                "dimension": "tenant_tier",
+                "segment": "standard",
+                "contribution_pct": 60.0,
+                "description": "Traffic composition change (mix-shift) is the primary driver.",
+                "category": "mix_shift",
+                "archetype": "mix_shift",
+            },
+            "confidence": {
+                "level": "Low",
+                "reasoning": "Unnecessarily conservative despite clear compositional signal.",
+                "would_upgrade_if": "n/a",
+                "would_downgrade_if": None,
+            },
+            "decision_status": "diagnosed",
+            "validation_checks": [
+                {"check": "logging_artifact", "status": "PASS", "detail": "No step-change"},
+                {"check": "decomposition_completeness", "status": "PASS", "detail": "95% explained"},
+                {"check": "temporal_consistency", "status": "PASS", "detail": "Consistent"},
+                {"check": "mix_shift", "status": "INVESTIGATE", "detail": "Mix-shift >=30%"},
+            ],
+            "dimensional_breakdown": {
+                "tenant_tier": {
+                    "segments": [
+                        {"segment_value": "standard", "baseline_mean": 0.28, "current_mean": 0.27}
+                    ]
+                }
+            },
+            "mix_shift": {"mix_shift_contribution_pct": 60.0},
+            "action_items": [
+                "Monitor tenant onboarding mix and keep composition dashboard up to date (Search Quality DS)",
+            ],
+        }
+
+        from tools.formatter import format_diagnosis_output
+
+        formatted = format_diagnosis_output(diagnosis)
+        result = module.score_single_run(case4_spec, diagnosis, formatted)
+        assert any(v.get("rule") == "underconfident_mix_shift" for v in result.get("violations", []))
+        assert result["grade"] in {"YELLOW", "RED"}
+
 
 # ──────────────────────────────────────────────────
 # Test Group 5: LLM-as-Judge Prompt Construction
@@ -511,3 +808,55 @@ class TestJudgePromptConstruction:
         prompt = module.build_judge_prompt(specs[0], "mock output")
 
         assert "json" in prompt.lower() or "JSON" in prompt
+
+
+class TestStressPipelineDecisionStatus:
+    """Stress-test pathway should preserve decision_status contract signals."""
+
+    def test_s7_pipeline_returns_insufficient_evidence(self):
+        from eval.run_stress_test import load_synthetic_data, run_pipeline_for_scenario
+
+        rows = load_synthetic_data()
+        diagnosis, _formatted = run_pipeline_for_scenario(rows, "S7")
+        assert diagnosis.get("decision_status") == "insufficient_evidence"
+
+    def test_s8_pipeline_returns_blocked_by_data_quality(self):
+        from eval.run_stress_test import load_synthetic_data, run_pipeline_for_scenario
+
+        rows = load_synthetic_data()
+        diagnosis, _formatted = run_pipeline_for_scenario(rows, "S8")
+        assert diagnosis.get("decision_status") == "blocked_by_data_quality"
+
+    def test_s8_pipeline_sets_blocked_severity(self):
+        from eval.run_stress_test import load_synthetic_data, run_pipeline_for_scenario
+
+        rows = load_synthetic_data()
+        diagnosis, _formatted = run_pipeline_for_scenario(rows, "S8")
+        assert diagnosis.get("aggregate", {}).get("severity") == "blocked"
+
+
+class TestStressArtifact:
+    def test_build_stress_artifact_shape(self):
+        from eval.run_stress_test import build_stress_artifact
+
+        sample_results = [
+            {
+                "case": "S9",
+                "label": "Mix-shift",
+                "score": 88.0,
+                "grade": "GREEN",
+                "run_scores": [88, 88, 88],
+                "run_grades": ["GREEN", "GREEN", "GREEN"],
+                "majority": {"verdict": "GREEN", "green_count": 3, "required_greens": 2, "avg_score": 88.0},
+                "decision_status": "diagnosed",
+                "confidence": "Medium",
+                "severity": "P2",
+                "violations": [{"rule": "example_rule", "deduction": 10}],
+            }
+        ]
+
+        artifact = build_stress_artifact(sample_results)
+        assert artifact["summary"]["total_cases"] == 1
+        assert artifact["summary"]["green"] == 1
+        assert artifact["cases"][0]["case"] == "S9"
+        assert artifact["cases"][0]["violation_rules"] == ["example_rule"]

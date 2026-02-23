@@ -62,6 +62,14 @@ Extract from the user's description:
 
 If any input is missing, ask the user explicitly. Do not guess.
 
+Canonical metric fields are:
+- `click_quality_value`
+- `search_quality_success_value`
+- `ai_trigger`
+- `ai_success`
+
+Legacy aliases (`dlctr_value`, `qsr_value`, `sain_trigger`, `sain_success`) are accepted via the v1 bridge.
+
 ### 1b. Data Quality Gate
 
 Run the data quality check FIRST. Bad data makes all analysis unreliable.
@@ -196,7 +204,7 @@ simultaneous causes? (Common in Enterprise Search -- e.g., AI rollout + tenant c
 Use the decomposition output (save as JSON first) as input to diagnose.py:
 
 ```bash
-python3 tools/diagnose.py --input {decomposition_result_json}
+python3 tools/diagnose.py --input {decomposition_result_json} --co-movement-json {co_movement_result_json} --trust-gate-json {trust_gate_result_json}
 ```
 
 This runs all 4 checks automatically:
@@ -219,8 +227,20 @@ python3 tools/anomaly.py --input {data_file} --check step_change --metric {metri
 Then pass the result to diagnose.py:
 
 ```bash
-python3 tools/diagnose.py --input {decomposition_result_json} --step-change-json {step_change_result_json}
+python3 tools/diagnose.py --input {decomposition_result_json} --step-change-json {step_change_result_json} --co-movement-json {co_movement_result_json} --trust-gate-json {trust_gate_result_json}
 ```
+
+### 3d. Decision Status Contract
+
+Always read `decision_status` from diagnose output:
+
+- `diagnosed`
+- `blocked_by_data_quality` (trust gate failed; definitive RCA is blocked)
+- `insufficient_evidence` (overlapping causes unresolved)
+
+Contract reminders:
+- In overlap scenarios like `S7`, expect `insufficient_evidence` unless overlap is resolved.
+- In trust-gate-fail scenarios like `S8`, expect `blocked_by_data_quality` and stop definitive attribution.
 
 ### 3c. Confidence Assignment
 

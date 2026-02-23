@@ -91,6 +91,46 @@ class TestShortReport:
         report = generate_short_report(SAMPLE_DIAGNOSIS)
         assert "PASS" in report
 
+    def test_high_mix_shift_frames_compositional_driver(self):
+        diagnosis = dict(SAMPLE_DIAGNOSIS)
+        diagnosis["mix_shift"] = {"mix_shift_contribution_pct": 60.0}
+        diagnosis["primary_hypothesis"] = dict(SAMPLE_DIAGNOSIS["primary_hypothesis"])
+        diagnosis["primary_hypothesis"]["description"] = (
+            "Traffic composition change (mix-shift) is the primary driver."
+        )
+
+        slack = generate_slack_message(diagnosis).lower()
+        assert "compositional change dominates" in slack
+        assert "behavioral change dominates" not in slack
+
+    def test_blocked_by_data_quality_uses_blocked_severity_language(self):
+        diagnosis = dict(SAMPLE_DIAGNOSIS)
+        diagnosis["aggregate"] = dict(SAMPLE_DIAGNOSIS["aggregate"])
+        diagnosis["aggregate"]["severity"] = "blocked"
+        diagnosis["decision_status"] = "blocked_by_data_quality"
+        diagnosis["trust_gate_result"] = {
+            "status": "fail",
+            "reason": "freshness too stale",
+        }
+        diagnosis["primary_hypothesis"] = {
+            "category": "data_quality",
+            "archetype": "blocked_by_data_quality",
+            "description": "Diagnosis blocked by data quality gate.",
+        }
+        diagnosis["action_items"] = [
+            {
+                "action": "Resolve trust-gate failure and rerun diagnosis",
+                "owner": "Search Platform team",
+            }
+        ]
+
+        slack = generate_slack_message(diagnosis).lower()
+        report = generate_short_report(diagnosis).lower()
+
+        assert "severity: blocked" in slack
+        assert "diagnosis blocked by data quality gate" in slack
+        assert "blocked pending data quality recovery" in report
+
 
 class TestFormatDiagnosisOutput:
     def test_returns_both_formats(self):
