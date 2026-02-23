@@ -1302,6 +1302,7 @@ def run_diagnosis(
     cause_date_index: Optional[int] = None,
     metric_change_date_index: Optional[int] = None,
     has_historical_precedent: bool = False,
+    connector_investigator: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Run the full diagnosis pipeline on decomposition output.
 
@@ -1337,10 +1338,14 @@ def run_diagnosis(
             If None, defaults to 0 (no temporal check possible).
         has_historical_precedent: Whether the diagnosis matches a known
             past incident pattern. True enables High confidence.
+        connector_investigator: Optional callable that runs additional bounded
+            connector-level checks. Called with (primary_hypothesis, decomposition).
+            Used only for eligible diagnosed cases with Medium/Low confidence.
 
     Returns:
         Dict with: aggregate, primary_hypothesis, confidence, decision_status,
         validation_checks, dimensional_breakdown, mix_shift, action_items.
+        If connector_investigator is provided, includes connector_investigation.
     """
     # ── Defaults for optional parameters ──
     if step_change_result is None:
@@ -1597,6 +1602,61 @@ def run_diagnosis(
                 "owner": "Search Quality DS",
             })
 
+    connector_investigation: Optional[Dict[str, Any]] = None
+    connector_rejected = False
+    if connector_investigator is not None:
+        connector_investigation = {
+            "ran": False,
+            "verdict": "skipped",
+            "reason": (
+                "Skipped connector investigation: requires decision_status='diagnosed' "
+                "with Medium/Low confidence."
+            ),
+            "queries": [],
+            "evidence": [],
+        }
+        should_run_connector = (
+            decision_status == "diagnosed"
+            and confidence["level"] in {"Medium", "Low"}
+        )
+        if should_run_connector:
+            investigation = connector_investigator(primary_hypothesis, decomposition)
+            if not isinstance(investigation, dict):
+                raise TypeError("connector_investigator must return a dict")
+            connector_investigation = dict(investigation)
+            connector_investigation.setdefault("ran", True)
+            connector_investigation.setdefault(
+                "reason", "connector investigation completed"
+            )
+            connector_investigation.setdefault("queries", [])
+            connector_investigation.setdefault("evidence", [])
+
+            if connector_investigation.get("verdict") == "rejected":
+                connector_rejected = True
+                decision_status = "insufficient_evidence"
+                confidence = {
+                    "level": "Low",
+                    "reasoning": (
+                        "Low confidence: connector investigation rejected the "
+                        "primary diagnosis hypothesis."
+                    ),
+                    "would_upgrade_if": (
+                        "connector investigation confirms the primary hypothesis"
+                    ),
+                    "would_downgrade_if": None,
+                }
+
+    if connector_rejected and not any(
+        "connector" in item.get("action", "").lower() for item in action_items
+    ):
+        action_items.append({
+            "action": (
+                "Connector evidence rejected the hypothesis. Investigate connector-"
+                "specific telemetry and data quality before acting on this diagnosis."
+            ),
+            "owner": "Search Quality DS",
+        })
+
     # ── Assemble the full diagnosis report ──
     result = {
         "aggregate": aggregate,
@@ -1609,6 +1669,8 @@ def run_diagnosis(
         "mix_shift": decomposition.get("mix_shift", {}),
         "action_items": action_items,
     }
+    if connector_investigation is not None:
+        result["connector_investigation"] = connector_investigation
 
     # ── v1.4: Post-diagnosis verification ──
     # Run coherence checks on the completed diagnosis. Advisory mode —

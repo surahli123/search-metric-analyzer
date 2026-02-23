@@ -186,6 +186,18 @@ class TestConnectorInvestigatorContracts:
         assert result["decision_status"] == "insufficient_evidence"
         assert result["confidence"]["level"] == "Low"
 
+    def test_connector_rejection_downgrades_diagnosis(self):
+        result = run_diagnosis(
+            decomposition=decomp_medium_confidence(),
+            co_movement_result={"likely_cause": "ranking_relevance_regression"},
+            connector_investigator=fake_rejecting_inv,
+        )
+        assert result["decision_status"] == "insufficient_evidence"
+        assert result["confidence"]["level"] == "Low"
+        assert any(
+            "connector" in a["action"].lower() for a in result["action_items"]
+        )
+
 
 # ======================================================================
 # Edge-case tests: Validation check combinations
