@@ -1,0 +1,177 @@
+# data/knowledge/evaluation_methods.yaml
+# LLM-as-Judge evaluation knowledge for diagnostic reasoning.
+# Source: "Cheat at Search with LLMs" (Doug Turnbull, Maven, Oct 2025)
+# Reference: UMBRELLA (Lin et al.), arxiv.org/html/2406.06519v1
+# WHY: When SMA validates a diagnosis, understanding evaluation methodology
+# prevents misattributing measurement artifacts as real quality changes.
+# A metric movement caused by judge drift is NOT the same as a ranking regression.
+
+evaluation_approaches:
+  pointwise:
+    name: "UMBRELLA"
+    description: >
+      Pointwise relevance labeling adapted from Microsoft Bing's UMBRELLA
+      framework (Lin et al.). Each query-document pair receives an independent
+      relevance grade. The e-commerce adaptation uses Pydantic structured output
+      instead of the original raw-text "##final score" format.
+    scale:
+      original: "0-3 integer (0=nothing to do with query, 1=related but does not answer, 2=somewhat answers, 3=dedicated to query and contains exact answer)"
+      ecommerce_mapped: "0-2 grades (0=Irrelevant, 1=Partial, 2=Exact). Labels 1 and 2 from original both map to grade 1."
+    accuracy:
+      # From WANDS dataset, 1000-sample test set, GPT-4.1
+      agreement_rate: 0.733
+      sample_size: 1000
+      model_used: "gpt-4.1"
+      dataset: "WANDS (Wayfair)"
+      note: "733 of 1000 judgments matched human labelers exactly"
+    prompt_structure: >
+      Two-step chain-of-thought: (1) Consider search intent and how well
+      content matches, (2) Decide final score. Uses descriptive string labels
+      as constrained output rather than raw integers. Also captures interpreted
+      search_intent for reasoning transparency.
+    calibration_notes: >
+      The original UMBRELLA includes a trustworthiness step (T) for passage
+      ranking. This was removed for e-commerce because product trustworthiness
+      differs from passage trustworthiness. The "dedicated to query and contains
+      exact answer" label resembles QA more than product search. These domain
+      adaptations mean accuracy numbers are not directly comparable to the
+      original UMBRELLA paper.
+    strengths:
+      - "Produces reusable numeric grades directly usable for NDCG, DCG, MRR"
+      - "Single LLM call per query-document pair (cost-efficient)"
+      - "Well-studied framework with published baselines"
+    weaknesses:
+      - "Noisy and inconsistent -- harder labeling task for both humans and LLMs"
+      - "Requires more capable (expensive) model due to task difficulty"
+      - "~27% disagreement with human labelers on exact grade match"
+      - "Grade boundaries are subjective (what separates 'related' from 'somewhat answers'?)"
+
+  pairwise:
+    name: "Pairwise Preference with Double-Check"
+    description: >
+      Compare two results for a query and choose which is more relevant
+      (LHS vs RHS). Simpler decision than assigning absolute grades.
+      Uses swap-based double-checking: run the same pair with LHS/RHS swapped,
+      and only trust judgments where both orderings agree. Disagreements are
+      marked "unknown" to filter noise.
+    accuracy:
+      # From WANDS dataset, pairwise on product name attribute, GPT-4.1-mini
+      single_attribute_results:
+        product_name: {precision: 0.73, coverage: 0.84}
+        product_description: {precision: 0.67, coverage: 0.75}
+        product_classification: {precision: 0.81, coverage: 0.89}
+        all_in_one_prompt: {precision: 0.74, coverage: 0.81}
+      # Combined via decision tree over individual attribute judges
+      combined_decision_tree:
+        name_desc_class: {precision: 0.908, coverage: 0.75}
+        name_desc_class_features: {precision: 0.904, coverage: 0.79}
+      decision_tree_accuracy: 0.882
+      model_used: "gpt-4.1-mini"
+      note: "Simpler task allows cheaper model. Individual judges combined via decision tree outperform single all-in-one prompt."
+    prompt_structure: >
+      Simple binary choice: given query and two products, output "lhs" or "rhs".
+      Each attribute (name, description, classification, features) gets its own
+      separate judge prompt. Double-check by swapping LHS/RHS and comparing.
+      Individual preferences become features in a decision tree that predicts
+      ground-truth preference.
+    calibration_notes: >
+      Coverage represents swap-agreement rate (how often LHS-first and RHS-first
+      give same answer). Lower coverage = more position-sensitive judgments filtered
+      out. The precision/coverage tradeoff is tunable via confidence threshold
+      (default 80%). Can convert pairwise preferences to pointwise scores via
+      Elo rating system.
+    strengths:
+      - "Easier task with fewer degrees of freedom (binary choice vs multi-grade)"
+      - "Cheaper model suffices (gpt-4.1-mini vs gpt-4.1)"
+      - "Built-in consistency check via LHS/RHS swap detects position bias"
+      - "Individual attribute judges reveal WHICH features drive relevance"
+      - "Combined decision tree achieves 90.8% precision"
+    weaknesses:
+      - "O(n^2) comparisons needed: 10 results = 45 pairs (90 with double-check)"
+      - "Cannot directly compute DCG/NDCG without converting to pointwise (via Elo)"
+      - "Coverage loss from filtering inconsistent judgments (25% dropped at 80% threshold)"
+
+# WHY these pitfalls matter: When SMA sees a metric change, it needs to
+# distinguish "the search system actually got worse" from "our measurement
+# changed." Each pitfall below is a way measurement can fool you.
+measurement_pitfalls:
+  - name: unlabeled_not_irrelevant
+    description: >
+      In research datasets like WANDS, unlabeled results are assumed irrelevant
+      (grade=0). In production, unlabeled simply means "not yet judged."
+      A new result with no label is NOT necessarily bad -- it just has no evidence.
+    metric_impact: >
+      NDCG computed with unlabeled=0 assumption will undercount quality when
+      new (unlabeled) relevant results appear in rankings. A ranking improvement
+      that surfaces previously-unseen relevant content can paradoxically show
+      NDCG decrease if those results lack labels.
+    diagnostic_check: >
+      When metric drops after a ranking change, check what fraction of top-K
+      results are unlabeled. If unlabeled rate increased, the "drop" may be
+      a measurement gap, not a quality regression.
+
+  - name: judge_calibration_shift
+    description: >
+      LLM judges can drift in calibration across model versions, prompt changes,
+      or even API updates. The same query-document pair may receive different
+      grades after a model upgrade. The UMBRELLA adaptation already removed
+      trustworthiness (T) and changed label semantics from the original paper,
+      showing how prompt changes shift calibration.
+    metric_impact: >
+      A/B test metrics computed with LLM-judge labels may show movement that
+      reflects judge drift rather than actual ranking quality change. Comparing
+      metrics across time periods with different judge versions is unreliable.
+    diagnostic_check: >
+      Maintain a fixed "golden set" of pre-labeled query-document pairs. Re-judge
+      the golden set whenever the judge model or prompt changes. If golden-set
+      agreement shifts, recalibrate before trusting new metric values.
+
+  - name: position_bias_in_judgment
+    description: >
+      In pairwise evaluation, LLMs may prefer whichever option is presented
+      first (or second), independent of actual relevance. The course addresses
+      this by swapping LHS/RHS and filtering disagreements. Coverage rates of
+      0.75-0.89 mean 11-25% of pairwise judgments are position-sensitive.
+    metric_impact: >
+      If position bias is not controlled, pairwise evaluation systematically
+      favors one side. This biases Elo scores derived from pairwise preferences,
+      which in turn biases any pointwise labels derived from Elo.
+    diagnostic_check: >
+      Always run pairwise with swap-based double-check. Monitor the coverage
+      rate (swap-agreement). If coverage drops significantly below baseline
+      (~0.84 for product name), the judge may be struggling with that attribute
+      or query type.
+
+  - name: conservative_judge_bias
+    description: >
+      LLM judges tend to be conservative, preferring middle grades over extreme
+      ones. In the UMBRELLA results, ~27% disagreements include cases where the
+      LLM rated a human-labeled "Partial" (1) as "Irrelevant" (0), suggesting
+      the judge is stricter than human labelers on borderline cases.
+    metric_impact: >
+      Conservative bias systematically underrates borderline-relevant results.
+      NDCG computed from conservative judge labels will be lower than NDCG
+      from human labels, even for identical rankings. This creates a persistent
+      negative offset in automated metrics vs human evaluation.
+    diagnostic_check: >
+      Compare grade distributions between judge and human labels. If the judge
+      assigns significantly more 0s and fewer 1s/2s than humans, apply a
+      calibration correction or interpret absolute metric values with the known
+      bias offset.
+
+# WHY diagnostic_implications: Maps evaluation knowledge to specific SMA
+# workflow steps so the agent knows WHEN to apply this knowledge.
+diagnostic_implications:
+  step_1e_context: >
+    During domain context enrichment, evaluation method knowledge helps identify
+    whether a metric movement is a MEASUREMENT artifact or a REAL quality change.
+    If the team recently changed their LLM judge prompt, model version, or label
+    schema, flag judge_calibration_shift as a candidate explanation before
+    investigating ranking changes.
+  step_3_validation: >
+    During diagnosis validation, cross-check the evaluation method used to
+    compute the metric. If labels came from an LLM judge, verify: (1) the judge
+    version has not changed in the analysis window, (2) unlabeled results are
+    handled correctly (not assumed irrelevant), (3) pairwise evaluations used
+    swap-based debiasing. A diagnosis that ignores measurement methodology
+    may be treating a measurement artifact as a system problem.

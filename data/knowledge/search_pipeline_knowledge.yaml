@@ -1,0 +1,215 @@
+# data/knowledge/search_pipeline_knowledge.yaml
+# Search pipeline component knowledge for diagnostic reasoning.
+# Source: "Cheat at Search with LLMs" (Doug Turnbull, Maven, Oct 2025)
+# WHY: The SMA knows WHAT metric patterns look like (co-movement table).
+# This file provides the "because..." reasoning — understanding HOW pipeline
+# components interact so Claude can explain WHY metrics moved.
+
+pipeline_components:
+  query_understanding:
+    function: "Extract structured attributes (category, material, color, brand) from raw query text"
+    stage: pre_retrieval
+    approaches:
+      - name: "rule_based"
+        cost_tier: low
+        best_for: "Known, stable mappings managed by PMs/merchandisers"
+        limitation: "Does not generalize — requires manual maintenance"
+      - name: "historical_data"
+        cost_tier: low
+        best_for: "Head queries with enough click data to learn patterns"
+        limitation: "Zero coverage on tail queries"
+      - name: "ml_classifier"
+        cost_tier: medium
+        best_for: "Generalizing from training data to torso queries"
+        limitation: "Needs labeled data; cannot extract entities before classification"
+      - name: "prompt_based_llm"
+        cost_tier: high
+        best_for: "Zero/few-shot classification, entity extraction, rule incorporation"
+        limitation: "Latency (~300ms), cost, non-determinism across runs"
+    failure_modes:
+      - name: "misclassification_to_wrong_category"
+        description: "LLM assigns wrong category (e.g., 'bathroom vanity knobs' -> Vanities instead of Hardware). Boost pushes wrong products up."
+        metric_signature: { click_quality: down, search_quality_success: down }
+        diagnostic_checks:
+          - "Compare per-query NDCG delta — look for large negative outliers"
+          - "Check classifier precision on impacted vs non-impacted queries"
+        affected_query_segment: "Ambiguous queries spanning multiple categories"
+      - name: "hallucinated_category_combination"
+        description: "LLM returns category/subcategory pair not in taxonomy. No docs match, boost has zero or wrong effect."
+        metric_signature: { click_quality: down, search_quality_success: variable }
+        diagnostic_checks:
+          - "Validate predicted pairs exist in product taxonomy"
+          - "Use fully-qualified leaf classifications to eliminate illegal combos"
+        affected_query_segment: "Queries where category and subcategory are ambiguous"
+
+  query_corrections:
+    function: "Expand or correct queries via synonym generation, spelling fixes, or alt-labels"
+    stage: pre_retrieval
+    approaches:
+      - name: "llm_synonym_expansion"
+        cost_tier: high
+        best_for: "Bridging vocabulary gap (e.g., 'midcentury' -> 'mid-century')"
+        limitation: "Hypernyms, hyponyms, and alt-labels mixed — hard to control"
+      - name: "alt_label_matching"
+        cost_tier: low
+        best_for: "Different spellings of same concept"
+        limitation: "Only covers spelling variants, not semantic relationships"
+    failure_modes:
+      - name: "harmful_synonym_expansion"
+        description: "Synonyms dilute precision (e.g., 'wood' -> 'timber'). High per-query variance — some improve, others degrade."
+        metric_signature: { click_quality: variable, search_quality_success: variable }
+        diagnostic_checks:
+          - "Win/loss analysis: sort queries by NDCG delta, inspect top losers"
+          - "Check per-query variance — high variance = uncontrolled change"
+        affected_query_segment: "Queries where synonym introduces semantic drift"
+      - name: "low_net_improvement"
+        description: "Tiny average NDCG gain but wins and losses cancel out. Change is noisy, not beneficial."
+        metric_signature: { click_quality: stable, search_quality_success: stable }
+        diagnostic_checks:
+          - "Count queries harmed vs helped — if roughly equal, do not ship"
+        affected_query_segment: "Broad vocabulary queries with many near-synonyms"
+
+  content_classification:
+    function: "Enrich product docs with structured attributes (room, material, item type) via LLM"
+    stage: indexing
+    approaches:
+      - name: "zero_shot_llm_classifier"
+        precision_range: [0.75, 0.86]  # gpt-4.1-nano to gpt-4.1 (Lesson 06)
+        coverage_range: [0.43, 0.51]   # gpt-4.1 to gpt-4.1-mini
+        cost_tier: medium
+        best_for: "Classifying products without training data"
+        limitation: "Coverage limited by fallback; precision varies by model size"
+      - name: "constrained_plus_unconstrained"
+        cost_tier: medium
+        best_for: "Item type classification with self-validation via embedding similarity"
+        limitation: "Requires threshold tuning (e.g., 0.50 cosine similarity cutoff)"
+      - name: "batch_api_classification"
+        cost_tier: low
+        best_for: "Offline bulk classification with significant cost savings"
+        limitation: "Results available ~24 hours later"
+    failure_modes:
+      - name: "low_ceiling_attribute"
+        description: "Attribute shows minimal NDCG uplift even with perfect classifier. Not discriminative for the query set."
+        metric_signature: { click_quality: stable, search_quality_success: stable }
+        diagnostic_checks:
+          - "Run perfect classifier experiment — if lift < 0.005, consider abandoning"
+        affected_query_segment: "Queries where the attribute is non-discriminative"
+      - name: "item_type_vocabulary_mismatch"
+        description: "Constrained label doesn't match unconstrained free-text. Low embedding similarity signals bad classification."
+        metric_signature: { click_quality: down, search_quality_success: down }
+        diagnostic_checks:
+          - "Compute similarity between constrained and unconstrained item types"
+          - "Filter products below similarity threshold (e.g., 0.50)"
+        affected_query_segment: "Niche products not in the constrained vocabulary"
+
+  ranking:
+    function: "Combine scoring signals (BM25, attribute boosts, corrections) into final relevance score"
+    stage: ranking
+    approaches:
+      - name: "bm25_baseline"
+        cost_tier: low
+        best_for: "Lexical match baseline — strong on exact product name matches"
+        limitation: "No semantic understanding; misses vocabulary gap"
+      - name: "multi_attribute_boosting"
+        cost_tier: medium
+        best_for: "Combining BM25 with category/material/item-type boosts"
+        limitation: "Additive model misses signal interactions"
+      - name: "random_search_optimization"
+        cost_tier: medium
+        best_for: "Finding optimal boost weights across ranking signals"
+        limitation: "May overfit to eval set"
+    failure_modes:
+      - name: "boost_weight_imbalance"
+        description: "One signal dominates. Ablation shows removing it barely changes NDCG or high values degrade it."
+        metric_signature: { click_quality: down, search_quality_success: down }
+        diagnostic_checks:
+          - "Ablation: vary each boost 0-10 independently, measure NDCG sensitivity"
+          - "Classification boost hurt at high values in course data"
+        affected_query_segment: "All queries (systemic ranking issue)"
+      - name: "missing_signal_interactions"
+        description: "Additive model cannot express conditional logic (e.g., boost category ONLY when name matches). Needs interaction terms."
+        metric_signature: { click_quality: down, search_quality_success: down }
+        diagnostic_checks:
+          - "Compare additive vs interaction model NDCG"
+          - "Check if best boost for a signal is near zero — may need interaction"
+        affected_query_segment: "Queries requiring conditional relevance logic"
+
+  vector_search:
+    function: "Use embedding similarity for semantic retrieval and hybrid re-ranking"
+    stage: retrieval
+    approaches:
+      - name: "bag_of_docs_embedding"
+        cost_tier: medium
+        best_for: "Learning query-doc similarity from relevance judgments without fine-tuning"
+        limitation: "Requires relevance labels; limited by judgment coverage"
+      - name: "two_tower_model"
+        cost_tier: high
+        best_for: "Fine-tuned encoders learning domain-specific similarity"
+        limitation: "Needs large training set; stock models have query/doc asymmetry"
+      - name: "hybrid_retrieval_arms"
+        cost_tier: high
+        best_for: "Filtered vector search combined with lexical interaction signals"
+        limitation: "Chicken-and-egg: need good candidates to interact with lexical signals"
+    failure_modes:
+      - name: "vector_lexical_mismatch"
+        description: "Stock model places queries and docs in different subspaces. Limited semantic match without fine-tuning."
+        metric_signature: { click_quality: variable, search_quality_success: variable }
+        diagnostic_checks:
+          - "Compare stock embedding NDCG vs bag-of-docs NDCG"
+        affected_query_segment: "Queries with very different vocabulary from product descriptions"
+      - name: "top_k_truncation_loss"
+        description: "Hybrid retrieves only top-K (e.g., 100) per arm, missing relevant docs found with full scoring."
+        metric_signature: { click_quality: down, search_quality_success: down }
+        diagnostic_checks:
+          - "Compare hybrid NDCG to full-scoring interaction NDCG"
+          - "Increase K and measure recovery"
+        affected_query_segment: "Broad queries with relevant docs spread across embedding space"
+
+# WHY cross-component: Failures cascade downstream.
+# These chains diagnose multi-metric drops with a single root cause.
+causal_chains:
+  - trigger_component: "query_understanding"
+    trigger_failure: "misclassification_to_wrong_category"
+    downstream_effects:
+      - component: "ranking"
+        effect: "Category boost pushes wrong products up"
+      - component: "vector_search"
+        effect: "Filtered arm excludes relevant candidates"
+    metric_explanation: "QU misclassification -> wrong category boost -> click quality drops. High per-query NDCG variance is the signature."
+  - trigger_component: "content_classification"
+    trigger_failure: "item_type_vocabulary_mismatch"
+    downstream_effects:
+      - component: "ranking"
+        effect: "Item type signal is noisy — low pairwise accuracy"
+      - component: "query_understanding"
+        effect: "Query-side item type matches wrong product-side labels"
+    metric_explanation: "Bad content labels -> ranking noise -> gradual degradation across all queries (not one segment)."
+  - trigger_component: "query_corrections"
+    trigger_failure: "harmful_synonym_expansion"
+    downstream_effects:
+      - component: "ranking"
+        effect: "BM25 scores inflated for irrelevant docs matching synonyms"
+    metric_explanation: "Bad synonyms -> irrelevant BM25 matches -> variable per-query impact. Average looks flat but variance is the danger."
+
+# WHY benchmarks: Reference numbers give concrete anchors to judge
+# whether an observed metric is in expected range or anomalous.
+benchmarks:
+  bm25_ndcg: { value: 0.541, source: "Lesson 02, BM25 Win-Loss notebook (WANDS dataset)" }
+  bm25_plus_synonyms_ndcg: { value: 0.546, source: "Lesson 02 synonym expansion" }
+  query_class_baseline_ndcg: { value: 0.561, source: "Lesson 04 (~0.50 prec, 100% coverage)" }
+  query_class_unknown_ndcg: { value: 0.559, source: "Lesson 04 (~0.55 prec, 88% coverage)" }
+  query_class_fully_qualified_ndcg: { value: 0.562, source: "Lesson 04 (~0.66 prec, 75% coverage)" }
+  query_class_list_ndcg: { value: 0.566, source: "Lesson 04 (~0.66 jaccard, 90% coverage)" }
+  perfect_classifier_ndcg: { value: 0.575, source: "Lesson 04 perfect classifier experiment" }
+  multi_attribute_ranking_ndcg: { value: 0.586, source: "Lesson 07 random search optimization" }
+  bag_of_docs_ndcg: { value: 0.628, source: "Lesson 08 MiniLM bag-of-docs vectors" }
+  hybrid_interaction_ndcg: { value: 0.665, source: "Lesson 08 embedding*attribute interactions (full)" }
+  hybrid_realistic_ndcg: { value: 0.654, source: "Lesson 08 top-K retrieval arm constraints" }
+  content_classifier_precision:
+    # Room classification on furniture products (Lesson 06)
+    gpt_4_1_nano: { precision: 0.75, coverage: 0.47 }
+    gpt_4_1_mini: { precision: 0.83, coverage: 0.51 }
+    gpt_4o: { precision: 0.84, coverage: 0.48 }
+    gpt_4_1: { precision: 0.86, coverage: 0.43 }
+    source: "Lesson 06 room classification experiment"
+  llm_inference_latency_ms: { value: 300, source: "Lesson 01 (Andrew Kornilov benchmark)" }
