@@ -5,6 +5,38 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## v1.5.4 — Minimal Multi-Agent Bridge Spike (2026-02-23)
+
+Forward-port + completion pass for the v1.5 minimal connector bridge.
+
+### Connector Investigator Spike
+- `tools/connector_investigator.py`
+  - adds bounded connector investigation helper (`max_queries=3`, `timeout_seconds=120`)
+  - returns deterministic `confirmed|rejected` verdict payloads with query/evidence traces
+- `tools/diagnose.py`
+  - adds optional `connector_investigator` hook in `run_diagnosis()`
+  - executes only when `decision_status=diagnosed` and confidence is `Medium|Low`
+  - connector rejection downgrades to `decision_status=insufficient_evidence` and `confidence=Low`
+  - preserves trust-gate and overlap contracts:
+    - trust-gate fail -> `blocked_by_data_quality`
+    - `aggregate.severity=blocked` with `aggregate.original_severity` preserved
+    - unresolved overlap -> `insufficient_evidence`
+
+### Stress-Path Spike Switch
+- `eval/run_stress_test.py`
+  - adds `--enable-connector-spike` CLI flag
+  - wires a bounded local connector runner into diagnosis calls when enabled
+
+### Tests + Docs
+- `tests/test_connector_investigator.py`
+  - contract coverage for max-query bounds and timeout rejection behavior
+- `tests/test_diagnose.py`
+  - connector gating + rejection downgrade coverage
+- `tests/test_eval.py` and `tests/test_tool_entrypoints.py`
+  - connector spike CLI flag parsing/help coverage
+- `README.md`
+  - records connector investigator spike contract and stress CLI usage
+
 ## v1.5.3 — Blocked Severity Semantics + Calibration Tightening (2026-02-23)
 
 Focused continuation to finalize blocked-by-data-quality semantics, tighten

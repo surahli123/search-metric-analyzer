@@ -17,6 +17,10 @@ A diagnostic tool for Enterprise Search metric movements. Built for Senior Data 
   - S8 is always `blocked_by_data_quality`.
 - Eval scoring enforces `decision_status` contract checks (notably S7/S8 behavior).
 - Synthetic pipeline is canonical in `generators/*`; `tools/*` generator scripts are wrappers only.
+- Connector Investigator spike contract:
+  - runs only for `Medium`/`Low` diagnosed cases
+  - bounded to max 3 checks with a 2-minute timeout budget
+  - may downgrade `decision_status` to `insufficient_evidence` on rejection
 
 ## What It Does
 
@@ -47,6 +51,7 @@ pytest tests/ -v
 
 # Run eval stress test (5 scenarios)
 python3 eval/run_stress_test.py
+python3 eval/run_stress_test.py --enable-connector-spike
 
 # Run individual tools
 python3 tools/decompose.py --input data.csv --metric click_quality_value
