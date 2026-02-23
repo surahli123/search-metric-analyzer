@@ -31,6 +31,11 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+try:
+    from tools.schema import normalize_rows
+except ModuleNotFoundError:
+    from schema import normalize_rows
+
 
 # ---------------------------------------------------------------------------
 # Constants — thresholds come from the diagnostic workflow design
@@ -103,13 +108,30 @@ def check_data_quality(rows: List[Dict[str, float]]) -> Dict[str, Any]:
             "reason": "No data rows provided",
             "avg_completeness": 0.0,
             "avg_freshness_min": 0.0,
+            "avg_completeness_pct": 0.0,
+            "avg_freshness_lag_min": 0.0,
         }
+
+    normalized_rows = normalize_rows(rows)
+
+    def _read_float(row: Dict[str, Any], key: str, default: float = 0.0) -> float:
+        try:
+            return float(row.get(key, default))
+        except (TypeError, ValueError):
+            return default
 
     # Compute averages across all rows — a single bad row shouldn't fail
     # the gate, but systemic issues (avg below threshold) should.
     # Use .get() with defaults to handle rows missing these fields gracefully
-    avg_completeness = sum(r.get("data_completeness", 0.0) for r in rows) / len(rows)
-    avg_freshness = sum(r.get("data_freshness_min", 0.0) for r in rows) / len(rows)
+    avg_completeness = (
+        sum(_read_float(r, "data_completeness", 0.0) for r in normalized_rows)
+        / len(normalized_rows)
+    )
+    avg_freshness = (
+        sum(_read_float(r, "data_freshness_min", 0.0) for r in normalized_rows)
+        / len(normalized_rows)
+    )
+    avg_completeness_pct = avg_completeness * 100.0
 
     # Check hard failure thresholds first (order matters: fail > warn > pass)
     if avg_completeness < COMPLETENESS_FAIL_THRESHOLD:
@@ -121,6 +143,8 @@ def check_data_quality(rows: List[Dict[str, float]]) -> Dict[str, Any]:
             ),
             "avg_completeness": avg_completeness,
             "avg_freshness_min": avg_freshness,
+            "avg_completeness_pct": avg_completeness_pct,
+            "avg_freshness_lag_min": avg_freshness,
         }
 
     if avg_freshness > FRESHNESS_FAIL_THRESHOLD:
@@ -132,6 +156,8 @@ def check_data_quality(rows: List[Dict[str, float]]) -> Dict[str, Any]:
             ),
             "avg_completeness": avg_completeness,
             "avg_freshness_min": avg_freshness,
+            "avg_completeness_pct": avg_completeness_pct,
+            "avg_freshness_lag_min": avg_freshness,
         }
 
     # Check warning thresholds — borderline data, proceed with caution
@@ -151,6 +177,8 @@ def check_data_quality(rows: List[Dict[str, float]]) -> Dict[str, Any]:
             "reason": "; ".join(warnings),
             "avg_completeness": avg_completeness,
             "avg_freshness_min": avg_freshness,
+            "avg_completeness_pct": avg_completeness_pct,
+            "avg_freshness_lag_min": avg_freshness,
         }
 
     # All clear — data is trustworthy
@@ -159,6 +187,8 @@ def check_data_quality(rows: List[Dict[str, float]]) -> Dict[str, Any]:
         "reason": "Data quality checks passed",
         "avg_completeness": avg_completeness,
         "avg_freshness_min": avg_freshness,
+        "avg_completeness_pct": avg_completeness_pct,
+        "avg_freshness_lag_min": avg_freshness,
     }
 
 
@@ -531,15 +561,8 @@ def main() -> None:
 
     # --- Data Quality Check ---
     if args.check in ("all", "data_quality"):
-        # Convert string values to float for quality check
-        quality_rows = [
-            {
-                "data_completeness": _parse_float(r.get("data_completeness", "0")),
-                "data_freshness_min": _parse_float(r.get("data_freshness_min", "0")),
-            }
-            for r in rows
-        ]
-        results["data_quality"] = check_data_quality(quality_rows)
+        # check_data_quality() performs normalization and alias handling internally.
+        results["data_quality"] = check_data_quality(rows)
 
     # --- Step-Change Detection ---
     if args.check in ("all", "step_change"):

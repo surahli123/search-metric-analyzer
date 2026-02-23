@@ -613,6 +613,8 @@ def _check_must_not_do_violations(
     hypothesis_desc = diagnosis.get("primary_hypothesis", {}).get("description", "").lower()
     confidence_level = diagnosis.get("confidence", {}).get("level", "Unknown")
     severity = diagnosis.get("aggregate", {}).get("severity", "P2")
+    decision_status = diagnosis.get("decision_status", "diagnosed")
+    mix_shift_pct = float(diagnosis.get("mix_shift", {}).get("mix_shift_contribution_pct", 0.0))
     report_text = formatted.get("short_report", "").lower()
     slack_text = formatted.get("slack_message", "").lower()
     combined = f"{hypothesis_desc} {report_text} {slack_text}"
@@ -675,15 +677,59 @@ def _check_must_not_do_violations(
                     )
                     if missing_dims and relevant_dim_missing:
                         violated = True
+                elif "underconfident_mix_shift" in rule_name:
+                    violated = (
+                        str(decision_status).strip() == "diagnosed"
+                        and mix_shift_pct >= 30.0
+                        and str(confidence_level).strip().lower() == "low"
+                    )
 
                 if violated:
+                    deduction = 15 if "underconfident_mix_shift" in rule_name else 10
                     violations.append({
                         "rule": rule_name,
                         "reason": reason,
-                        "deduction": 10,
+                        "deduction": deduction,
                     })
 
     return violations
+
+
+# ──────────────────────────────────────────────────
+# Decision Status Contract Check
+# ──────────────────────────────────────────────────
+
+def _check_decision_status_contract(
+    spec: Dict[str, Any],
+    diagnosis: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """Validate diagnosis decision_status against scenario contract.
+
+    Contract defaults to "diagnosed" unless a scenario requires otherwise:
+    - S7: "insufficient_evidence" (unresolved overlap case)
+    - S8: "blocked_by_data_quality" (trust-gate failure case)
+    """
+    scenario = str(spec.get("case", {}).get("scenario", "")).strip()
+    expected_by_scenario = {
+        "S7": "insufficient_evidence",
+        "S8": "blocked_by_data_quality",
+    }
+    expected_status = expected_by_scenario.get(scenario, "diagnosed")
+    actual_status = str(diagnosis.get("decision_status", "diagnosed")).strip()
+
+    if actual_status == expected_status:
+        return []
+
+    return [
+        {
+            "rule": "decision_status_contract",
+            "reason": (
+                f"Scenario {scenario or 'unknown'} requires decision_status='{expected_status}', "
+                f"got '{actual_status}'."
+            ),
+            "deduction": 10,
+        }
+    ]
 
 
 # ──────────────────────────────────────────────────
@@ -728,6 +774,7 @@ def score_single_run(
 
     # Check for must_not_do violations (each deducts 10 points)
     violations = _check_must_not_do_violations(spec, diagnosis, formatted)
+    violations.extend(_check_decision_status_contract(spec, diagnosis))
     total_deduction = sum(v["deduction"] for v in violations)
 
     # Final score: raw minus deductions, floored at 0
@@ -814,6 +861,26 @@ def aggregate_runs(
         "avg_score": sum(scores) / max(len(scores), 1),
         "min_score": min(scores) if scores else 0,
         "max_score": max(scores) if scores else 0,
+    }
+
+
+def run_three_run_majority(
+    spec: Dict[str, Any],
+    diagnosis: Dict[str, Any],
+    formatted: Dict[str, str],
+    runs: int = 3,
+) -> Dict[str, Any]:
+    """Execute scoring runs and aggregate with majority verdict."""
+    run_count = max(3, runs)
+    run_results = [
+        score_single_run(spec, diagnosis, formatted)
+        for _ in range(run_count)
+    ]
+    majority = aggregate_runs(run_results, spec["case"]["pass_threshold"])
+    return {
+        "run_count": run_count,
+        "run_results": run_results,
+        "majority": majority,
     }
 
 
@@ -940,6 +1007,10 @@ def parse_args() -> argparse.Namespace:
         "--list-cases", action="store_true",
         help="List all available eval cases and exit"
     )
+    parser.add_argument(
+        "--runs", type=int, default=3,
+        help="Number of scoring runs (minimum 3 for majority verdict)"
+    )
     return parser.parse_args()
 
 
@@ -981,8 +1052,12 @@ def main():
 
         results = {}
         for spec in specs:
-            score = score_single_run(spec, diagnosis, formatted)
-            results[spec["case"]["scenario"]] = score
+            results[spec["case"]["scenario"]] = run_three_run_majority(
+                spec=spec,
+                diagnosis=diagnosis,
+                formatted=formatted,
+                runs=args.runs,
+            )
 
         print(json.dumps(results, indent=2))
     else:

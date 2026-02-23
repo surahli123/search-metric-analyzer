@@ -31,6 +31,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+try:
+    from tools.schema import normalize_metric_name, normalize_rows
+except ModuleNotFoundError:
+    from schema import normalize_metric_name, normalize_rows
+
 
 # ──────────────────────────────────────────────────
 # Severity classification thresholds
@@ -121,6 +126,10 @@ def compute_aggregate_delta(
         Dict with baseline_mean, current_mean, absolute_delta,
         relative_delta_pct, severity, direction, error.
     """
+    metric_field = normalize_metric_name(metric_field)
+    baseline_rows = normalize_rows(baseline_rows)
+    current_rows = normalize_rows(current_rows)
+
     # Guard: we need data in both periods to compute a delta
     if not baseline_rows or not current_rows:
         return {"error": "Empty input: need both baseline and current rows"}
@@ -187,6 +196,10 @@ def decompose_by_dimension(
         Dict with segments list, each containing segment_value, baseline_mean,
         current_mean, delta, contribution_pct.
     """
+    metric_field = normalize_metric_name(metric_field)
+    baseline_rows = normalize_rows(baseline_rows)
+    current_rows = normalize_rows(current_rows)
+
     # Group rows by segment value for both periods
     baseline_groups = _group_by(baseline_rows, dimension)
     current_groups = _group_by(current_rows, dimension)
@@ -278,6 +291,10 @@ def compute_mix_shift(
     Flag threshold: 30% or more mix-shift contribution triggers a flag,
     per design doc validation check #4.
     """
+    metric_field = normalize_metric_name(metric_field)
+    baseline_rows = normalize_rows(baseline_rows)
+    current_rows = normalize_rows(current_rows)
+
     # Group by dimension for both periods
     baseline_groups = _group_by(baseline_rows, dimension)
     current_groups = _group_by(current_rows, dimension)
@@ -386,6 +403,9 @@ def run_decomposition(
         Dict with aggregate, dimensional_breakdown, mix_shift results.
         JSON-serializable for Claude Code to read.
     """
+    rows = normalize_rows(rows)
+    metric_field = normalize_metric_name(metric_field)
+
     # Default dimensions cover the key Enterprise Search segmentation axes
     if dimensions is None:
         dimensions = [

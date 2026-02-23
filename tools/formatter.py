@@ -38,6 +38,11 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+try:
+    from tools.schema import normalize_diagnosis_payload
+except ModuleNotFoundError:
+    from schema import normalize_diagnosis_payload
+
 
 # ──────────────────────────────────────────────────
 # Constants — severity to emoji mapping
@@ -50,6 +55,7 @@ SEVERITY_EMOJI = {
     "P0": "\U0001f534",  # Red circle
     "P1": "\U0001f7e1",  # Yellow circle
     "P2": "\U0001f535",  # Blue circle
+    "blocked": "\U0001f6ab",  # Prohibited
 }
 
 # Default emoji when severity is unknown or not provided
@@ -142,9 +148,14 @@ def _get_metric_name(diagnosis: Dict[str, Any]) -> str:
         diagnosis: Full diagnosis dict.
 
     Returns:
-        Metric name string (e.g., "dlctr_value"). Defaults to "metric".
+        Metric name string (e.g., "click_quality_value"). Defaults to "metric".
     """
     return diagnosis.get("aggregate", {}).get("metric", "metric")
+
+
+def _get_decision_status(diagnosis: Dict[str, Any]) -> str:
+    """Return diagnosis decision status."""
+    return diagnosis.get("decision_status", "diagnosed")
 
 
 def _get_confidence_level(diagnosis: Dict[str, Any]) -> str:
@@ -207,6 +218,22 @@ def _build_tldr(diagnosis: Dict[str, Any]) -> str:
     Returns:
         TL;DR string, max 3 sentences. No hedging, no passive voice.
     """
+    decision_status = _get_decision_status(diagnosis)
+    if decision_status == "blocked_by_data_quality":
+        reason = diagnosis.get("trust_gate_result", {}).get("reason", "trust gate failed")
+        return (
+            "Diagnosis blocked by data quality gate. "
+            f"Reason: {reason}. "
+            "Resolve trust-gate failures before definitive root-cause attribution."
+        )
+
+    if decision_status == "insufficient_evidence":
+        return (
+            "Movement detected but evidence is insufficient for a definitive root cause. "
+            "Overlapping candidate causes remain unresolved. "
+            "Run targeted follow-up checks before taking irreversible action."
+        )
+
     # Sentence 1: What happened
     metric = _get_metric_name(diagnosis)
     direction = _get_direction(diagnosis)
@@ -320,9 +347,13 @@ def _build_key_findings(diagnosis: Dict[str, Any]) -> str:
     mix_shift = diagnosis.get("mix_shift", {})
     mix_pct = mix_shift.get("mix_shift_contribution_pct", 0)
     if mix_pct > 0:
+        if mix_pct >= 30:
+            mix_context = "compositional change dominates"
+        else:
+            mix_context = "behavioral change dominates"
         findings.append(
             f"- Mix-shift accounts for {mix_pct:.0f}% of movement "
-            f"(behavioral change dominates)"
+            f"({mix_context})"
         )
 
     # Finding 3: Overall delta with baseline context
@@ -457,6 +488,15 @@ def _build_business_impact(diagnosis: Dict[str, Any]) -> str:
     Returns:
         Business impact paragraph.
     """
+    decision_status = _get_decision_status(diagnosis)
+    if decision_status == "blocked_by_data_quality":
+        reason = diagnosis.get("trust_gate_result", {}).get("reason", "trust gate failed")
+        return (
+            "Diagnosis is blocked pending data quality recovery. "
+            f"Trust gate failure reason: {reason}. "
+            "Restore freshness/completeness and rerun diagnosis before escalation."
+        )
+
     severity = _get_severity(diagnosis)
     delta = _get_delta_pct(diagnosis)
     metric = _get_metric_name(diagnosis)
@@ -537,6 +577,7 @@ def generate_slack_message(diagnosis: Dict[str, Any]) -> str:
     Returns:
         Formatted Slack message string (5-15 non-empty lines).
     """
+    diagnosis = normalize_diagnosis_payload(diagnosis)
     severity = _get_severity(diagnosis)
     emoji = _get_severity_emoji(severity)
     metric = _get_metric_name(diagnosis)
@@ -602,6 +643,7 @@ def generate_short_report(diagnosis: Dict[str, Any]) -> str:
     Returns:
         Formatted markdown report string.
     """
+    diagnosis = normalize_diagnosis_payload(diagnosis)
     # Extract all the data we need
     metric = _get_metric_name(diagnosis)
     severity = _get_severity(diagnosis)
@@ -730,6 +772,7 @@ def format_diagnosis_output(diagnosis: Dict[str, Any]) -> Dict[str, str]:
     Returns:
         Dict with "slack_message" and "short_report" keys, both strings.
     """
+    diagnosis = normalize_diagnosis_payload(diagnosis)
     return {
         "slack_message": generate_slack_message(diagnosis),
         "short_report": generate_short_report(diagnosis),

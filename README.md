@@ -2,6 +2,26 @@
 
 A diagnostic tool for Enterprise Search metric movements. Built for Senior Data Scientists debugging why search quality metrics moved — and whether they should care.
 
+## v1 Contract Highlights
+
+- Canonical metric schema: `click_quality_value`, `search_quality_success_value`, `ai_trigger`, `ai_success`.
+- One-release legacy alias bridge: `dlctr_value`, `qsr_value`, `sain_trigger`, `sain_success`.
+- Trust gate is contract-enforced: trust-gate fail blocks definitive diagnosis.
+- Diagnosis output includes `decision_status`:
+  - `diagnosed`
+  - `blocked_by_data_quality`
+  - `insufficient_evidence`
+- Synthetic validator uses noise-tolerant scenario signatures (S0-S12) instead of strict exact-delta matching.
+- Hard scenario contracts:
+  - S7 cannot resolve to single-cause high confidence.
+  - S8 is always `blocked_by_data_quality`.
+- Eval scoring enforces `decision_status` contract checks (notably S7/S8 behavior).
+- Synthetic pipeline is canonical in `generators/*`; `tools/*` generator scripts are wrappers only.
+- Connector Investigator spike contract:
+  - runs only for `Medium`/`Low` diagnosed cases
+  - bounded to max 3 checks with a 2-minute timeout budget
+  - may downgrade `decision_status` to `insufficient_evidence` on rejection
+
 ## What It Does
 
 When a search metric moves, this tool runs a 4-step diagnostic pipeline:
@@ -31,11 +51,12 @@ pytest tests/ -v
 
 # Run eval stress test (5 scenarios)
 python3 eval/run_stress_test.py
+python3 eval/run_stress_test.py --enable-connector-spike
 
 # Run individual tools
-python3 tools/decompose.py --input data.csv --metric dlctr_value
-python3 tools/anomaly.py --input data.csv --metric dlctr_value
-python3 tools/diagnose.py --input diagnosis.json
+python3 tools/decompose.py --input data.csv --metric click_quality_value
+python3 tools/anomaly.py --input data.csv --metric click_quality_value --check data_quality
+python3 tools/diagnose.py --input decomposition.json --co-movement-json co_movement.json --trust-gate-json trust_gate.json
 python3 tools/formatter.py --input diagnosis.json
 ```
 
@@ -53,12 +74,16 @@ Search_Metric_Analyzer/
 │   ├── anomaly.py                     # Step-change detection, co-movement matching
 │   ├── diagnose.py                    # Archetype recognition, confidence scoring
 │   ├── formatter.py                   # Slack message + short report generation
-│   ├── generate_synthetic_data.py     # Synthetic data generator (13 scenarios)
-│   └── validate_scenarios.py          # Scenario validation utilities
+│   ├── schema.py                      # Canonical schema normalization + alias bridge
+│   ├── generate_synthetic_data.py     # Wrapper -> generators/generate_synthetic_data.py
+│   └── validate_scenarios.py          # Wrapper -> generators/validate_scenarios.py
+├── generators/
+│   ├── generate_synthetic_data.py     # Canonical synthetic data generator (S0-S12)
+│   └── validate_scenarios.py          # Canonical synthetic validator
 ├── eval/
 │   ├── run_stress_test.py             # Full pipeline eval (5 scenarios, scored)
 │   └── scoring_specs/                 # Per-scenario scoring rubrics (YAML)
-├── tests/                             # 433 unit tests
+├── tests/                             # 484 unit tests
 ├── skills/
 │   └── search-metric-analyzer.md      # Claude Code skill file
 ├── templates/                         # CSV templates for input data
@@ -69,10 +94,10 @@ Search_Metric_Analyzer/
 
 | Metric | What It Measures |
 |--------|-----------------|
-| **LCTR** |Long Click-Through Rate — (position-weighted or non position-weighted) click quality |
-| **Main Search Metric** | Query Success Rate — composite of click quality + AI answer quality |
-| **AI Search Trigger** | How often AI answers are shown (detection rate) |
-| **AI Search Success** | How often shown AI answers satisfy users (quality rate) |
+| **`click_quality_value`** | Click quality / long-click effectiveness |
+| **`search_quality_success_value`** | Composite quality signal across click and AI-answer success |
+| **`ai_trigger`** | How often AI answers are shown |
+| **`ai_success`** | How often shown AI answers satisfy users |
 
 ## Archetypes
 
@@ -80,25 +105,17 @@ The diagnostic engine recognizes these failure patterns:
 
 | Archetype | Co-Movement Signature | What It Means |
 |-----------|----------------------|---------------|
-| `ranking_regression` | LCTR down, Main Metric down, AI Search Quality stable | Ranking model degraded |
-| `ai_adoption` | LCTR down, Main Metric stable/up, AI Search Quality up | AI answers working (positive) |
+| `ranking_regression` | Click Quality down, Search Quality Success down, AI metrics stable | Ranking model degraded |
+| `ai_adoption` | Click Quality down, Search Quality Success stable/up, AI metrics up | AI answers working (positive) |
 | `broad_degradation` | All metrics down | System-wide issue |
-| `query_understanding` | DLCTR/QSR/AI Search trigger down, AI Search success stable | Query interpretation layer degraded |
-| `sain_regression` | AI Search Quality metrics down, LCTR stable | AI answer quality issue |
+| `query_understanding` | Click Quality/Search Quality Success/AI trigger down, AI success stable | Query interpretation layer degraded |
+| `sain_regression` | AI metrics down, Click Quality stable | AI answer quality issue |
 | `mix_shift` | Movement explained by traffic composition | Not a quality change |
 | `false_alarm` | All metrics within noise | No action needed |
 
 ## Eval Results
 
-5 synthetic scenarios, all GREEN (avg 91.2/100):
-
-| Case | Scenario | Score | Grade |
-|------|----------|-------|-------|
-| S4 | Ranking regression | 85 | GREEN |
-| S5 | AI adoption trap | 100 | GREEN |
-| S7 | Multi-cause overlap | 85 | GREEN |
-| S9 | Mix-shift | 96 | GREEN |
-| S0 | False alarm (stable) | 90 | GREEN |
+Use `python3 eval/run_stress_test.py` to run the 5-case stress eval with 3-run majority reporting and explicit per-case `decision_status`.
 
 ## Tech Stack
 

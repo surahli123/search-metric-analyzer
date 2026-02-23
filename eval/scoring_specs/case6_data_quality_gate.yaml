@@ -1,0 +1,76 @@
+# eval/scoring_specs/case6_data_quality_gate.yaml
+# Case 6: S8 — Trust-gate failure should block definitive diagnosis
+# Archetype: blocked_by_data_quality
+# Pass criteria: 2/3 GREEN (focus is contract-safe restraint)
+
+case:
+  name: "Data quality gate block (trust gate fail)"
+  scenario: "S8"
+  archetype: "blocked_by_data_quality"
+  purpose: "Can the tool block definitive RCA when trust-gate data quality fails?"
+  pass_threshold: "2/3 GREEN"
+
+rubric:
+  root_cause_accuracy:
+    weight: 40
+    criteria:
+      - description: "Identifies trust-gate failure as the reason diagnosis is blocked"
+        points: 20
+      - description: "States that definitive root-cause attribution is deferred until data quality is fixed"
+        points: 10
+      - description: "Attributes the issue to data quality gating, not product behavior change"
+        points: 10
+
+  confidence_calibration:
+    weight: 25
+    criteria:
+      - description: "Does NOT assign P0/P1 severity while trust gate is failed"
+        points: 10
+      - description: "Confidence level is Low under trust-gate failure"
+        points: 10
+      - description: "Avoids overconfident certainty while blocked by data quality"
+        points: 5
+
+  investigation_completeness:
+    weight: 20
+    criteria:
+      - description: "Runs data quality checks and surfaces the failing trust-gate signal"
+        points: 10
+      - description: "Still includes baseline decomposition context for triage"
+        points: 5
+      - description: "Runs mix-shift check but does not use it for definitive RCA while blocked"
+        points: 5
+
+  actionability:
+    weight: 15
+    criteria:
+      - description: "Recommends resolving trust-gate freshness/completeness before RCA"
+        points: 8
+      - description: "Assigns an owner for the data quality remediation action"
+        points: 4
+      - description: "TL;DR states that diagnosis is blocked pending data quality recovery"
+        points: 3
+
+must_find:
+  root_cause: "Diagnosis blocked by data quality gate due to trust-gate failure"
+  semantic_match: true
+  mechanism: "Definitive root-cause attribution is deferred until trust gate passes"
+
+must_check_dimensions:
+  - tenant_tier
+
+must_not_do:
+  - recommend_rollback: "Do not recommend rollback while data quality gate is failing"
+  - assign_p0_or_p1: "Do not escalate to P0/P1 without trustworthy data"
+  - label_as_regression: "Do not claim a definitive behavioral regression while blocked"
+
+output_quality:
+  has_tldr: true
+  confidence_stated: true
+  confidence_level: "Low"
+  actionable_recommendation: true
+  no_anti_patterns: true
+
+scoring:
+  pass: 60
+  green: 80

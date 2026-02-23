@@ -241,6 +241,17 @@ class TestDataQualityEdgeCases:
         assert result["avg_completeness"] == 1.0
         assert result["avg_freshness_min"] == 0.0
 
+    def test_accepts_completeness_pct_and_freshness_lag_min_aliases(self):
+        """CSV-style trust-gate fields should be accepted directly."""
+        result = check_data_quality(
+            [{"completeness_pct": 99.7, "freshness_lag_min": 30}]
+        )
+        assert result["status"] == "pass"
+        assert result["avg_completeness"] == pytest.approx(0.997, abs=0.001)
+        assert result["avg_freshness_min"] == pytest.approx(30.0, abs=0.001)
+        assert result["avg_completeness_pct"] == pytest.approx(99.7, abs=0.001)
+        assert result["avg_freshness_lag_min"] == pytest.approx(30.0, abs=0.001)
+
 
 # ======================================================================
 # EDGE-CASE TESTS — Step-Change Detection
