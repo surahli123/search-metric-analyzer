@@ -18,6 +18,7 @@ import argparse
 import sys
 from pathlib import Path
 from datetime import datetime, timezone
+from typing import Any, Callable, Dict, Optional
 
 # ── Setup paths ──────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -26,6 +27,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from tools.decompose import run_decomposition
 from tools.anomaly import detect_step_change, match_co_movement_pattern, check_data_quality
 from tools.diagnose import run_diagnosis
+from tools.connector_investigator import ConnectorInvestigator
 from tools.formatter import format_diagnosis_output
 from eval.run_eval import load_scoring_specs, run_three_run_majority
 
@@ -103,6 +105,20 @@ def _write_stress_artifact(path: Path, artifact: dict) -> None:
     with path.open("w") as f:
         json.dump(artifact, f, indent=2, sort_keys=True)
         f.write("\n")
+
+
+def _build_connector_spike_runner() -> Callable[[dict, dict], Dict[str, Any]]:
+    """Create a bounded local connector-investigation adapter for stress runs."""
+    investigator = ConnectorInvestigator(max_queries=3, timeout_seconds=120)
+
+    def _execute_query_stub(query: str) -> Dict[str, Any]:
+        # Local deterministic stub for the same-day spike path.
+        return {"ok": True, "query": query, "row_count": 1}
+
+    def _run(primary_hypothesis: dict, _decomposition: dict) -> Dict[str, Any]:
+        return investigator.run(primary_hypothesis, _execute_query_stub)
+
+    return _run
 
 
 def load_synthetic_data() -> list[dict]:
@@ -197,7 +213,11 @@ def compute_metric_direction(rows: list[dict], metric: str) -> str:
         return "stable"
 
 
-def run_pipeline_for_scenario(rows: list[dict], scenario_id: str) -> tuple[dict, dict]:
+def run_pipeline_for_scenario(
+    rows: list[dict],
+    scenario_id: str,
+    connector_investigator: Optional[Callable[[dict, dict], Dict[str, Any]]] = None,
+) -> tuple[dict, dict]:
     """Run the full diagnostic pipeline on a single scenario's data.
 
     Pipeline: decompose -> anomaly (step-change + co-movement) -> diagnose -> format
@@ -273,6 +293,7 @@ def run_pipeline_for_scenario(rows: list[dict], scenario_id: str) -> tuple[dict,
         step_change_result=step_change,
         co_movement_result=co_movement,
         trust_gate_result=dq_result,
+        connector_investigator=connector_investigator,
     )
     print(f"        Hypothesis: {diagnosis['primary_hypothesis']['description'][:80]}...")
     print(f"        Confidence: {diagnosis['confidence']['level']}")
@@ -290,7 +311,10 @@ def run_pipeline_for_scenario(rows: list[dict], scenario_id: str) -> tuple[dict,
     return diagnosis, formatted
 
 
-def run_eval(artifact_json: Path | None = None):
+def run_eval(
+    artifact_json: Path | None = None,
+    enable_connector_spike: bool = False,
+):
     """Run the full eval stress-test across configured scenarios."""
     print("=" * 60)
     print("  SEARCH METRIC ANALYZER — EVAL STRESS TEST")
@@ -305,6 +329,11 @@ def run_eval(artifact_json: Path | None = None):
     specs = load_scoring_specs()
     spec_by_file = {s.get("_source_file", ""): s for s in specs}
     print(f"Loaded {len(specs)} scoring specs")
+
+    connector_runner = None
+    if enable_connector_spike:
+        connector_runner = _build_connector_spike_runner()
+        print("Connector spike enabled: bounded local connector investigation is active.")
 
     # Run each eval case
     results = []
@@ -328,7 +357,11 @@ def run_eval(artifact_json: Path | None = None):
 
         try:
             # Run the pipeline
-            diagnosis, formatted = run_pipeline_for_scenario(all_rows, sid)
+            diagnosis, formatted = run_pipeline_for_scenario(
+                all_rows,
+                sid,
+                connector_investigator=connector_runner,
+            )
 
             # Score with 3-run majority verdict
             run_pack = run_three_run_majority(
@@ -504,10 +537,18 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional path to write machine-readable stress results JSON",
     )
+    parser.add_argument(
+        "--enable-connector-spike",
+        action="store_true",
+        help="Enable bounded connector-investigator spike for Medium/Low diagnoses",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
     artifact_path = Path(args.artifact_json) if args.artifact_json else None
-    results = run_eval(artifact_json=artifact_path)
+    results = run_eval(
+        artifact_json=artifact_path,
+        enable_connector_spike=args.enable_connector_spike,
+    )

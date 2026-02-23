@@ -16,6 +16,7 @@ These tests verify:
 
 import yaml
 import json
+import sys
 import pytest
 from pathlib import Path
 
@@ -860,3 +861,18 @@ class TestStressArtifact:
         assert artifact["summary"]["green"] == 1
         assert artifact["cases"][0]["case"] == "S9"
         assert artifact["cases"][0]["violation_rules"] == ["example_rule"]
+
+
+class TestStressSpikeFlag:
+    """Connector-spike CLI flag should parse without errors."""
+
+    def test_stress_test_accepts_connector_spike_flag(self, monkeypatch):
+        from eval import run_stress_test
+
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["run_stress_test.py", "--enable-connector-spike"],
+        )
+        args = run_stress_test.parse_args()
+        assert args.enable_connector_spike is True
