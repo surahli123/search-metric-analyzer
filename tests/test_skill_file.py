@@ -216,6 +216,30 @@ class TestSkillFileKnowledgeReferences:
         assert (KNOWLEDGE_DIR / "metric_definitions.yaml").exists()
         assert (KNOWLEDGE_DIR / "historical_patterns.yaml").exists()
 
+    def test_references_search_pipeline_knowledge(self, content):
+        assert "search_pipeline_knowledge.yaml" in content, (
+            "Must reference data/knowledge/search_pipeline_knowledge.yaml"
+        )
+
+    def test_references_evaluation_methods(self, content):
+        assert "evaluation_methods.yaml" in content, (
+            "Must reference data/knowledge/evaluation_methods.yaml"
+        )
+
+    def test_references_architecture_tradeoffs(self, content):
+        assert "architecture_tradeoffs.yaml" in content, (
+            "Must reference data/knowledge/architecture_tradeoffs.yaml"
+        )
+
+    def test_new_knowledge_files_exist(self):
+        """All 3 new search domain knowledge files must exist on disk."""
+        assert (KNOWLEDGE_DIR / "search_pipeline_knowledge.yaml").exists(), \
+            "search_pipeline_knowledge.yaml not found"
+        assert (KNOWLEDGE_DIR / "evaluation_methods.yaml").exists(), \
+            "evaluation_methods.yaml not found"
+        assert (KNOWLEDGE_DIR / "architecture_tradeoffs.yaml").exists(), \
+            "architecture_tradeoffs.yaml not found"
+
 
 class TestSkillFileFourStepWorkflow:
     """Verify all 4 diagnostic steps are encoded in the skill file."""

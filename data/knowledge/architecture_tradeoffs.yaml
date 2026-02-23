@@ -1,0 +1,218 @@
+# data/knowledge/architecture_tradeoffs.yaml
+# Cost optimization and architecture tradeoff knowledge for diagnostic reasoning.
+# Source: "Cheat at Search with LLMs" (Doug Turnbull, Maven, Oct 2025)
+# WHY: When the SMA sees metric changes alongside cost/latency shifts,
+# this knowledge explains whether quality-cost tradeoffs are intentional
+# or indicate a regression from optimization gone wrong.
+
+cost_optimization_patterns:
+  model_tiering:
+    # WHY: Most common cost lever — swap expensive model for a cheaper one.
+    description: >
+      Replace an expensive LLM (e.g. gpt-4o) with a cheaper model (e.g. gpt-4.1-nano)
+      for query understanding tasks like category classification. Prompt and schema
+      stay the same; only the model changes.
+    quality_tradeoff: >
+      Course benchmark: gpt-4o achieved NDCG=0.566, ~0.66 precision, 0.90 coverage.
+      gpt-4.1-nano dropped to NDCG=0.554, ~0.51 precision, 0.99 coverage. Cheaper
+      model classifies more queries but gets more wrong. Net NDCG loss: -0.012.
+    failure_modes:
+      - name: "precision_collapse"
+        description: >
+          Cheaper model produces more incorrect classifications. Precision drops
+          from ~0.66 to ~0.51 while coverage stays high — the system confidently
+          classifies queries into WRONG categories, worse than not classifying.
+        metric_signature:
+          click_quality: down
+          latency: down
+          classification_precision: down
+          classification_coverage: stable
+        diagnostic_check: >
+          Compare classification precision before/after model swap. If coverage
+          is stable but precision dropped, the cheaper model is confidently wrong.
+      - name: "tail_query_degradation"
+        description: >
+          Cheap model handles common queries fine but fails on tail queries
+          requiring deeper reasoning (e.g. "sheffield home bath set" needing
+          cross-category knowledge). Regression hides in the long tail.
+        metric_signature:
+          click_quality: variable
+          latency: down
+          search_quality_success: down
+        diagnostic_check: >
+          Segment NDCG delta by query frequency tier. If head queries are stable
+          but tail queries regressed, the cheaper model lacks reasoning depth.
+
+  batch_processing:
+    # WHY: Offline LLM enrichment trades freshness for cost/latency savings.
+    description: >
+      Pre-compute LLM query enrichments in batch rather than at query time.
+      Course evaluated 480 queries per run against WANDS dataset. In production,
+      batch means enriching a query log periodically and serving cached results.
+    quality_tradeoff: >
+      Avoids per-query LLM latency and amortizes cost across scheduled runs.
+      However, novel queries not in the batch get no enrichment, and queries
+      with time-sensitive intent may get stale classifications.
+    failure_modes:
+      - name: "cold_start_gap"
+        description: >
+          Queries not in the pre-computed batch fall back to baseline BM25
+          (NDCG=0.541 in course benchmarks), creating a two-tier quality
+          experience: enriched queries get boosted results, novel queries do not.
+        metric_signature:
+          click_quality: variable
+          latency: stable
+          zero_result_rate: stable
+        diagnostic_check: >
+          Segment metrics by enriched vs not-enriched queries. If quality is
+          high for enriched but baseline for novel, batch coverage is too narrow.
+      - name: "stale_enrichment"
+        description: >
+          Classifications from a prior batch no longer match current catalog
+          or user intent. Seasonal categories added after last batch run
+          cause queries to be misclassified or unclassified.
+        metric_signature:
+          click_quality: down
+          latency: stable
+          search_quality_success: down
+        diagnostic_check: >
+          Compare batch run timestamp to catalog change log. If catalog changed
+          significantly since last batch, staleness is the likely root cause.
+
+  semantic_caching:
+    # WHY: Course used intfloat/e5-small-v2 embeddings with 0.95 threshold
+    # to serve cached LLM results for semantically similar queries.
+    description: >
+      Cache LLM enrichment results keyed by query embedding vectors. On new
+      query, compute embedding and check cache above a similarity threshold
+      (course used 0.95 cosine sim with intfloat/e5-small-v2). On cache hit,
+      reuse the cached LLM result without calling the LLM again.
+    quality_tradeoff: >
+      Course benchmark: 100% hit rate on should-match queries, 0% false
+      positives on should-not-match queries. Key insight: "prefer precision
+      — cache misses are bad but not catastrophic; resolving to the WRONG
+      info need IS catastrophic."
+    failure_modes:
+      - name: "false_cache_hit"
+        description: >
+          Threshold too low causes different info needs to share cached
+          enrichment. Course example: "red tennis shoes" vs "pink tennis
+          shoes" — similar embeddings but different intent. Catastrophic.
+        metric_signature:
+          click_quality: down
+          latency: down
+          search_quality_success: down
+        diagnostic_check: >
+          Sample cache-hit pairs and verify intent match. Look for cases
+          where cached and incoming queries differ on a key attribute
+          (color, size, brand). Check if threshold change correlates.
+      - name: "numerical_attribute_confusion"
+        description: >
+          Embedding models struggle with queries differing only in numerical
+          attributes. "Red shoes size 9" vs "size 10" have high embedding
+          similarity despite different info needs. Course tested this directly.
+        metric_signature:
+          click_quality: down
+          latency: stable
+          search_quality_success: variable
+        diagnostic_check: >
+          Audit cache hits where queries differ only in numerical values.
+          Consider excluding numerical-attribute queries from caching.
+      - name: "cache_staleness"
+        description: >
+          After LLM/prompt/schema update, cache still serves old results.
+          Quality improvements from model upgrades are invisible to queries
+          hitting stale cache entries.
+        metric_signature:
+          click_quality: variable
+          latency: stable
+          search_quality_success: variable
+        diagnostic_check: >
+          After any LLM/prompt change, check if cache was invalidated.
+          If cache-miss queries perform BETTER than cache-hit, cache is stale.
+
+  constraint_reduction:
+    # WHY: "Hallucinate + embedding lookup" removes Literal constraint from prompt,
+    # cutting tokens by 94%. Let LLM hallucinate, then resolve via embeddings.
+    description: >
+      Remove explicit output constraints (e.g. Literal list of ~100 classifications)
+      from prompt. Let LLM generate unconstrained "hallucinated" labels, then resolve
+      to real values via embedding lookup (course used all-MiniLM-L6-v2). Prompt
+      replaced constraint list with a few examples and "be creative, cast a wide net."
+    quality_tradeoff: >
+      Prompt shrank from ~5,996 to ~380 input tokens (94% reduction). With
+      gpt-4.1-nano at $0.10/1M tokens, cost dropped from ~$5.76 to ~$0.02 per
+      480-query run (~99.7% reduction). NDCG held at 0.562 (vs 0.566 constrained).
+      Jaccard was low (0.40) but recall was 0.89 — wide net catches relevant categories.
+    failure_modes:
+      - name: "embedding_resolution_error"
+        description: >
+          Hallucinated label maps to wrong real classification via embedding lookup.
+          Example: "Barnyard Style Doors" embeds close to wrong real category.
+          Error is silent — system confidently returns wrong classification.
+        metric_signature:
+          click_quality: down
+          latency: stable
+          classification_precision: down
+        diagnostic_check: >
+          Sample hallucinated-to-real mappings and verify correctness. Compare
+          per-query NDCG between constrained and hallucinated approaches.
+      - name: "hallucination_drift"
+        description: >
+          After LLM update, hallucinated label vocabulary shifts, causing
+          embedding lookup to resolve differently. Unlike constrained Literal
+          outputs, hallucinated outputs have no guardrails against drift.
+        metric_signature:
+          click_quality: variable
+          latency: stable
+          search_quality_success: variable
+        diagnostic_check: >
+          After LLM update, compare hallucinated label distributions before/after.
+          If vocabulary shifted, embedding resolution may have changed silently.
+
+token_economics:
+  # WHY: Concrete cost numbers help SMA assess cost-quality tradeoff magnitude.
+  model_comparison:
+    - model: "gpt-4o"
+      relative_cost: "$2.00 per 1M input tokens"
+      quality_delta: "NDCG=0.566, precision ~0.66, baseline reference"
+    - model: "gpt-4.1-nano"
+      relative_cost: "$0.10 per 1M input tokens (20x cheaper than gpt-4o)"
+      quality_delta: "NDCG=0.554 same prompt (-0.012 NDCG), precision ~0.51"
+  component_costs:
+    - component: "list_of_classifications_prompt"
+      typical_tokens: 5996
+      cost_note: >
+        Full Literal list of ~100 classifications to gpt-4o.
+        At $2/1M tokens: ~$5.76 per 480-query run.
+    - component: "hallucinate_prompt"
+      typical_tokens: 380
+      cost_note: >
+        Unconstrained prompt to gpt-4.1-nano (no Literal list).
+        At $0.10/1M tokens: ~$0.02 per 480-query run (99.7% reduction).
+    - component: "embedding_lookup"
+      typical_tokens: 0
+      cost_note: >
+        Local model (all-MiniLM-L6-v2) resolves hallucinated labels.
+        No LLM token cost — only compute for encoding and dot-product search.
+    - component: "semantic_cache_check"
+      typical_tokens: 0
+      cost_note: >
+        Local model (intfloat/e5-small-v2) computes query embedding.
+        No LLM cost on cache hit. On miss, falls through to full LLM call.
+
+diagnostic_implications:
+  step_2d_evidence: >
+    When ranking hypotheses for a quality regression, check if a cost optimization
+    was recently deployed. Model tiering (NDCG -0.012), constraint reduction
+    (Jaccard drop but recall preserved), or cache threshold changes can explain
+    metric movements. Simultaneous cost decrease + quality decrease is a strong
+    signal of intentional optimization gone wrong. Use metric_signature fields
+    to match observed patterns to specific optimization types.
+  step_4_synthesis: >
+    Distinguish intentional tradeoffs from unintended regressions. If quality drop
+    matches expected range from token_economics (e.g. -0.012 NDCG for model tiering),
+    frame as "optimization performing as expected." If drop exceeds expected range,
+    flag as "optimization regression requiring investigation." Always report cost
+    savings alongside quality impact. Course lesson: Jaccard precision can mislead
+    — recall and NDCG better measure whether cost optimization preserved quality.

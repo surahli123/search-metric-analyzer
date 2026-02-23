@@ -29,6 +29,9 @@ Before starting, confirm these resources are available:
 - **Knowledge files** (domain-encoded YAML):
   - `data/knowledge/metric_definitions.yaml` -- metric formulas, relationships, baselines, co-movement diagnostic table
   - `data/knowledge/historical_patterns.yaml` -- seasonal patterns, past incidents, diagnostic shortcuts
+  - `data/knowledge/search_pipeline_knowledge.yaml` -- pipeline components, failure modes, causal chains, benchmarks
+  - `data/knowledge/evaluation_methods.yaml` -- LLM-as-Judge methodology, measurement pitfalls, calibration
+  - `data/knowledge/architecture_tradeoffs.yaml` -- cost optimization patterns, token economics, failure modes
 - **Output templates** (markdown):
   - `templates/slack_message.md` -- Slack message structure
   - `templates/short_report.md` -- 1-page report structure
@@ -122,6 +125,14 @@ Draw on knowledge from `data/knowledge/historical_patterns.yaml`:
 - Does this match any known seasonal pattern (end-of-quarter, onboarding wave)?
 - Are there diagnostic shortcuts that apply (connector health failure, model fallback spike)?
 
+Also consult `data/knowledge/search_pipeline_knowledge.yaml` for:
+- Which pipeline component's failure modes match the observed metric signature?
+- Do the causal chains explain why multiple metrics moved together?
+
+And check `data/knowledge/evaluation_methods.yaml` for:
+- Could this be a measurement artifact (judge calibration shift, unlabeled-not-irrelevant)?
+- Did the evaluation methodology change recently (model version, prompt, label schema)?
+
 ### 1f. Triage Output
 
 Report to the user:
@@ -177,6 +188,10 @@ it reflects decades of Enterprise Search debugging experience:
 
 For each hypothesis, check its expected data signature against the decomposition results.
 Reference `data/knowledge/metric_definitions.yaml` for expected patterns.
+Consult `data/knowledge/search_pipeline_knowledge.yaml` failure modes and causal chains to
+identify which pipeline component could explain the observed pattern.
+For cost-related hypotheses, check `data/knowledge/architecture_tradeoffs.yaml` to distinguish
+intentional cost optimization tradeoffs from unintended regressions.
 
 **Quick mode:** Stop after investigating the top 2 hypotheses. Skip to Step 4.
 **Standard mode:** Investigate all hypotheses. Use the evidence to rank them.
