@@ -774,3 +774,80 @@ class TestValidateSpanFields:
             }
             passed, _ = validate_span_fields(span)
             assert passed is True, f"Swimlane '{swimlane}' should be valid"
+
+
+# =============================================================================
+# TestEmitDeterministicSpan — trace/helpers.py
+# =============================================================================
+
+class TestEmitDeterministicSpan:
+    """Tests for the convenience helper that emits deterministic spans."""
+
+    def test_emits_span_when_trace_provided(self):
+        from trace.helpers import emit_deterministic_span
+        from trace.collector import InvestigationTrace
+
+        trace = InvestigationTrace(question="test")
+        emit_deterministic_span(
+            trace,
+            tool="core.anomaly.check_data_quality",
+            decision="data_quality_status",
+            value="pass",
+            human_summary="Data quality: pass",
+            agent_context="data_quality=pass, completeness=99.1",
+        )
+        spans = trace.spans_for_stage("UNDERSTAND")
+        assert len(spans) == 1
+        assert spans[0]["decision"] == "data_quality_status"
+        assert spans[0]["swimlane"] == "deterministic"
+        assert spans[0]["code_enforced"] is True
+
+    def test_noop_when_trace_is_none(self):
+        from trace.helpers import emit_deterministic_span
+
+        # Should not raise — silently no-ops
+        emit_deterministic_span(
+            None,
+            tool="core.anomaly.check_data_quality",
+            decision="data_quality_status",
+            value="pass",
+            human_summary="Data quality: pass",
+            agent_context="data_quality=pass",
+        )
+
+    def test_custom_stage(self):
+        from trace.helpers import emit_deterministic_span
+        from trace.collector import InvestigationTrace
+
+        trace = InvestigationTrace(question="test")
+        emit_deterministic_span(
+            trace,
+            tool="core.diagnose.archetype_recognition",
+            decision="archetype",
+            value="mix_shift",
+            human_summary="Archetype: mix_shift",
+            agent_context="archetype=mix_shift",
+            stage="HYPOTHESIZE",
+        )
+        spans = trace.spans_for_stage("HYPOTHESIZE")
+        assert len(spans) == 1
+        assert spans[0]["stage"] == "HYPOTHESIZE"
+
+    def test_includes_inputs_outputs_when_provided(self):
+        from trace.helpers import emit_deterministic_span
+        from trace.collector import InvestigationTrace
+
+        trace = InvestigationTrace(question="test")
+        emit_deterministic_span(
+            trace,
+            tool="core.decompose.compute_aggregate_delta",
+            decision="metric_direction",
+            value="down",
+            human_summary="CQ down 6.2%",
+            agent_context="direction=down, delta=-6.2",
+            inputs={"metric": "click_quality_value", "row_count": 500},
+            outputs={"direction": "down", "delta_pct": -6.2},
+        )
+        span = trace.spans_for_stage("UNDERSTAND")[0]
+        assert span["inputs"]["metric"] == "click_quality_value"
+        assert span["outputs"]["delta_pct"] == -6.2
