@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Search Metric Analysis Agent — Tech Talk Script</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.0/mermaid.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300;8..60,400;8..60,600;8..60,700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FAFAF8;
+    --text: #1a1a1a;
+    --text-muted: #5a5a5a;
+    --accent: #1565C0;
+    --accent-light: #E3F2FD;
+    --border: #e0ddd8;
+    --section-bg: #ffffff;
+    --stage-understand: #E3F2FD;
+    --stage-hypothesize: #F3E5F5;
+    --stage-dispatch: #FFF3E0;
+    --stage-synthesize: #E8F5E9;
+    --red: #C62828;
+    --red-light: #FFEBEE;
+    --green: #2E7D32;
+    --green-light: #E8F5E9;
+    --yellow: #F9A825;
+    --yellow-light: #FFF9C4;
+    --note-bg: #F5F0E8;
+    --note-border: #D4C5A9;
+    --script-bg: #F8F6F0;
+    --script-border: #C9BFA6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.75;
+    font-size: 18px;
+  }
+
+  .page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* Header */
+  header {
+    text-align: center;
+    padding: 60px 0 40px;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 48px;
+  }
+  header h1 {
+    font-family: 'Source Serif 4', serif;
+    font-size: 2.4em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  header h2 {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1.1em;
+    font-weight: 400;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+  }
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+  .meta-item {
+    text-align: center;
+    padding: 12px;
+    background: var(--section-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .meta-label {
+    font-size: 0.7em;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .meta-value {
+    font-weight: 600;
+    font-size: 0.85em;
+  }
+
+  /* Sections */
+  .section {
+    margin-bottom: 56px;
+  }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-number {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75em;
+    font-weight: 500;
+    background: var(--accent);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+  }
+  .section-title {
+    font-family: 'Source Serif 4', serif;
+    font-size: 1.6em;
+    font-weight: 600;
+  }
+  .section-time {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8em;
+    color: var(--text-muted);
+    background: var(--yellow-light);
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+
+  /* Script blocks (what to say) */
+  .script-block {
+    background: var(--script-bg);
+    border-left: 3px solid var(--script-border);
+    padding: 20px 24px;
+    margin: 16px 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 1.1em;
+  }
+  .script-block p { margin-bottom: 12px; }
+  .script-block p:last-child { margin-bottom: 0; }
+
+  /* Stage notes (presenter instructions) */
+  .stage-note {
+    background: var(--note-bg);
+    border: 1px solid var(--note-border);
+    padding: 14px 18px;
+    margin: 16px 0;
+    border-radius: 6px;
+    font-size: 0.95em;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+  .stage-note::before {
+    content: '🎬 ';
+    font-style: normal;
+  }
+
+  /* Diagram containers */
+  .diagram-container {
+    background: var(--section-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    margin: 24px 0;
+    overflow-x: auto;
+  }
+  .diagram-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75em;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .diagram-label::before { content: '📊'; }
+  .diagram-label .reserve-badge {
+    background: var(--yellow-light);
+    color: var(--yellow);
+    font-size: 0.85em;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .mermaid {
+    display: flex;
+    justify-content: center;
+  }
+
+  /* Emphasis elements */
+  .key-point {
+    background: var(--red-light);
+    border-left: 3px solid var(--red);
+    padding: 14px 18px;
+    margin: 16px 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .key-point strong { color: var(--red); }
+
+  .finger-point {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    margin: 20px 0;
+  }
+  .finger-emoji {
+    font-size: 2em;
+    line-height: 1;
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+  .finger-content h4 {
+    font-family: 'Source Serif 4', serif;
+    font-size: 1.2em;
+    font-size: 1.15em;
+    margin-bottom: 6px;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.9em;
+  }
+  th {
+    background: #f5f3ee;
+    font-weight: 600;
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+
+  /* Ask blocks */
+  .ask-block {
+    background: var(--accent-light);
+    border: 1px solid #90CAF9;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 20px 0;
+  }
+  .ask-block h4 {
+    font-family: 'Source Serif 4', serif;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .ask-question {
+    font-weight: 600;
+    font-size: 1.15em;
+    margin: 10px 0;
+  }
+
+  /* Feedback form */
+  .feedback-form {
+    background: var(--section-bg);
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    padding: 28px;
+    margin: 24px 0;
+  }
+  .feedback-form h3 {
+    font-family: 'Source Serif 4', serif;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+  .feedback-q {
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    font-size: 1.05em;
+    border-bottom: 1px solid var(--border);
+  }
+  .feedback-q:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+  .feedback-q strong { color: var(--accent); }
+
+  /* Delivery notes */
+  .do-list, .dont-list {
+    padding: 20px 24px;
+    border-radius: 8px;
+    margin: 16px 0;
+  }
+  .do-list {
+    background: var(--green-light);
+    border-left: 3px solid var(--green);
+  }
+  .dont-list {
+    background: var(--red-light);
+    border-left: 3px solid var(--red);
+  }
+  .do-list h4 { color: var(--green); margin-bottom: 8px; }
+  .dont-list h4 { color: var(--red); margin-bottom: 8px; }
+  .do-list li, .dont-list li {
+    margin-bottom: 6px;
+    margin-left: 16px;
+  }
+
+  /* Timing bar */
+  .timing-bar {
+    display: flex;
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 16px 0;
+    height: 40px;
+    font-size: 0.75em;
+    font-weight: 600;
+  }
+  .timing-bar > div {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    text-align: center;
+    padding: 0 6px;
+  }
+
+  /* Appendix */
+  .appendix {
+    margin-top: 56px;
+    padding-top: 32px;
+    border-top: 2px solid var(--border);
+  }
+  .appendix h3 {
+    font-family: 'Source Serif 4', serif;
+    font-size: 1.2em;
+    margin-bottom: 16px;
+    color: var(--text-muted);
+  }
+
+  /* Print */
+  @media print {
+    body { font-size: 11px; }
+    .page { padding: 0; max-width: 100%; }
+    .section { page-break-inside: avoid; }
+    .diagram-container { page-break-inside: avoid; }
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 40px 0;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>Search Metric Analysis Agent</h1>
+  <h2>Tech Talk + Demo — Presentation Script</h2>
+  <div class="meta-grid">
+    <div class="meta-item">
+      <div class="meta-label">Audience</div>
+      <div class="meta-value">Search Eng TL, IC, EM, PM</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Duration</div>
+      <div class="meta-value">45 min</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Goal</div>
+      <div class="meta-value">Get SME feedback</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Tone</div>
+      <div class="meta-value">Peer review, not pitch</div>
+    </div>
+  </div>
+</header>
+
+<!-- TIMING VISUAL -->
+<div style="margin-bottom: 48px;">
+  <p style="font-weight: 600; margin-bottom: 8px; font-size: 0.85em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Timing</p>
+  <div class="timing-bar">
+    <div style="flex: 2; background: #78909C;">Problem 2m</div>
+    <div style="flex: 5; background: #1565C0;">Architecture + Tokens 5m</div>
+    <div style="flex: 15; background: #7B1FA2;">Demo 15m</div>
+    <div style="flex: 5; background: #C62828;">Honest Assessment 5m</div>
+    <div style="flex: 3; background: #E65100;">Asks 3m</div>
+    <div style="flex: 1; background: #2E7D32;">Next 1m</div>
+    <div style="flex: 14; background: #37474F;">Discussion 14m</div>
+  </div>
+</div>
+
+<!-- ==================== SECTION 1 ==================== -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">01</span>
+    <span class="section-title">The Problem</span>
+    <span class="section-time">2 min</span>
+  </div>
+
+  <div class="stage-note">Open conversationally. No slides yet — just talk.</div>
+
+  <div class="script-block">
+    <p>"Thanks for making time. I'm going to show you something we've been building, and I need your honest reaction — especially where it gets things wrong.</p>
+    <p>Here's the problem. Metric investigation is genuinely complex. Even experienced engineers — people who know these systems inside out — can spend hours to days on a single drop. It crosses sub-domains, it requires checking experiments, denominators, cohort shifts, deployment timing, all against tables that are documented unevenly or not at all. QSR alone is a composite of Confluence 40%, Jira 40%, 3P 20% — and a drop could originate in any of those layers, or in the interaction between them.</p>
+    <p>The complexity isn't about anyone being slow. It's that the search space is huge and the data relationships are subtle. When SAIN coverage drops while success rate rises, that's a selection effect — and recognizing it requires domain knowledge that takes time to build and apply.</p>
+    <p>The question we've been exploring: <strong>can an agent system automate the structured legwork — the denominator decomposition, the experiment coincidence checks, the standard playbook hypotheses — so experienced engineers spend their time on the hard thinking instead of writing the same baseline SQL for the 50th time?</strong></p>
+    <p>Not replacing investigation. Producing a first draft for you to review. I'm going to show you how it works, then I'm going to show you where it breaks, because that's where I need your expertise."</p>
+  </div>
+</div>
+
+<!-- ==================== SECTION 2 ==================== -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">02</span>
+    <span class="section-title">How It Works + Token Efficiency</span>
+    <span class="section-time">5 min</span>
+  </div>
+
+  <div class="stage-note">Show Diagram 1. Keep brisk — map their mental model to the architecture, don't teach investigation.</div>
+
+  <div class="diagram-container">
+    <div class="diagram-label">Diagram 1 — Pipeline Architecture</div>
+    <pre class="mermaid">
+flowchart TD
+    Q["🔍 User Question\n'QSR dropped 1.2pp on FPS this week'"]
+
+    subgraph U["1 · UNDERSTAND"]
+        U1["Route by complexity\nIdentify metric, surface, time range"]
+    end
+
+    subgraph K["📚 Knowledge Layer"]
+        direction LR
+        K1["Playbooks"]
+        K2["SEV Archive"]
+        K3["Metric Registry"]
+        K4["Domain Digests"]
+        K5["Corrections Index"]
+        K6["Schema Catalog"]
+    end
+
+    subgraph H["2 · HYPOTHESIZE"]
+        H1["Is this drop real? → Split num vs denom\n→ Check experiments → Generate theories"]
+    end
+
+    subgraph D["3 · INVESTIGATE"]
+        direction LR
+        D1["🤖 Sub-Agent\nTheory 1"]
+        D2["🤖 Sub-Agent\nTheory 2"]
+        D3["🤖 Sub-Agent\nTheory 3"]
+    end
+
+    subgraph S["4 · SYNTHESIZE"]
+        S1["Compare findings → Score confidence\n→ Write report"]
+    end
+
+    MEM["💾 Memory\nLearnings feed\nnext investigation"]
+
+    OUT["📊 Report + Transparency Log"]
+
+    Q --> U
+    K -.-> U
+    K -.-> H
+    K -.-> D
+    U --> H --> D --> S
+    S --> OUT
+    S --> MEM
+    MEM -.-> H
+
+    style U fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1
+    style H fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#4A148C
+    style D fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#BF360C
+    style S fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#1B5E20
+    style K fill:#FCE4EC,stroke:#AD1457,stroke-width:1px
+    style Q fill:#E1F5FE,stroke:#0277BD,stroke-width:2px
+    style OUT fill:#FFEBEE,stroke:#C62828,stroke-width:2px
+    style MEM fill:#FFF9C4,stroke:#F9A825,stroke-width:2px
+    </pre>
+  </div>
+
+  <div class="script-block">
+    <p>"The system follows a four-stage pipeline that mirrors how you'd actually investigate:</p>
+    <p><strong>UNDERSTAND</strong> — Takes the input, figures out which metric, which surface, what time range, how big the movement is. Routes the question by complexity. Think of it as the first 10 minutes of your investigation — when you're getting oriented.</p>
+    <p><strong>HYPOTHESIZE</strong> — Generates hypotheses about what caused the movement. This isn't random — it runs an significance check first (is this drop even real, or normal variance?), does a numerator-vs-denominator split, checks if an experiment launched at the same time, then generates specific hypotheses from our domain playbooks plus first-principles reasoning. If you've investigated SAIN coverage drops, you know the usual suspects — the system knows them too, because we encoded them.</p>
+    <p><strong>DISPATCH</strong> — Sends each hypothesis to a sub-agent that runs SQL, checks the data, and produces a finding with a verdict: SUPPORTED, REJECTED, or INCONCLUSIVE. Multiple hypotheses investigated in parallel.</p>
+    <p><strong>SYNTHESIZE</strong> — Takes all the findings, reconciles them, picks the winning explanation, assigns a confidence grade, and writes a report with a PM summary, detailed analysis, confidence assessment, and recommended next steps.</p>
+    <p><strong>And here's the part that makes it get smarter over time: memory.</strong></p>
+    <p>The system has two memory layers. <strong>Global memory</strong> — stored in global.md — accumulates investigation learnings. Every time the system completes an investigation, SYNTHESIZE writes around 5 learnings: things like 'SAIN selection effect causes apparent coverage drops when success rate rises' or 'check DLC interaction when SAIN moves on 3P surface.' Next investigation, HYPOTHESIZE reads those learnings and uses them to generate better hypotheses. The system learns from its own work.</p>
+    <p><strong>Personal memory</strong> tracks individual users — what domain you typically work in, which surfaces and metrics you care about, and what you've investigated before. If you're the engineer who always looks at Ranking metrics on Desktop, the system knows that. It uses this to adjust hypothesis priority and knowledge loading — your domain focus shapes what gets investigated first and what context gets loaded.</p>
+    <p>Personal memory is earlier-stage than global memory — it's partially working but not as mature. Global memory is the fully operational layer; personal memory is the personalization layer we're still building out.</p>
+    <p>Both layers feed into the knowledge stack alongside the static sources — Confluence-sourced domain digests, the corrections index, playbooks, SEV archive. The difference is that memory <em>grows</em> with use. The static knowledge tells the system what search metrics are and how they work. Global memory tells the system what it's learned from past investigations. Personal memory tells the system what <em>you</em> specifically care about.</p>
+    <p>I'll show you what this looks like in practice in the demo — and then I'll tell you why it worries me."</p>
+  </div>
+
+  <div class="script-block">
+    <p>"That's the clean version. Before I show you a real one, let me address something I know is on people's minds."</p>
+  </div>
+</div>
+
+<!-- ==================== SECTION 2B ==================== -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">02B</span>
+    <span class="section-title">Token Efficiency</span>
+    <span class="section-time">cont.</span>
+  </div>
+
+  <div class="stage-note">Address the elephant in the room — token costs. This audience shares limited Cursor and in-house agent budgets. Be direct.</div>
+
+  <div class="script-block">
+    <p>"I know token budget is a real concern — we all share limited Cursor and in-house coding agent capacity. Yes, building this agent burned tokens. But <em>running</em> it is architecturally designed to be efficient. Three things:</p>
+    <p><strong>Tiered routing, not one-size-fits-all.</strong> Not every question gets the full treatment. The system routes by complexity before anything expensive loads. Simple questions get 5K tokens and metric-registry only. Complex SEV investigations get the full knowledge stack — playbooks, SEV archive, corrections index. You pay for what you need.</p>
+    <p><strong>Selective knowledge loading.</strong> The system doesn't dump everything into context. It loads domain knowledge based on the metric family and complexity tier. Fast-changing domains like Third-Party Connectors are always-loaded — because the cost of stale context is higher than the token cost. More stable domains are demand-loaded only when relevant.</p>
+    <p><strong>Pre-scoped sub-agent context.</strong> The Lead Agent reads the full knowledge modules — corrections.yaml at around 400 lines, global.md at around 270 lines — during HYPOTHESIZE. But sub-agents don't get the full dump. They receive only curated excerpts relevant to their specific hypothesis. A typical sub-agent investigation uses about 17K-32K tokens against a 55K budget. There's headroom, not waste.</p>
+    <p>The architecture is designed so a standard investigation is efficient, and only complex multi-hypothesis SEV investigations use the full token budget — which is appropriate because those are the investigations that take your engineers the longest to do manually."</p>
+  </div>
+
+  <div class="script-block">
+    <p>"Now let me show you a real one."</p>
+  </div>
+</div>
+
+<!-- ==================== SECTION 3 ==================== -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">03</span>
+    <span class="section-title">Live Demo</span>
+    <span class="section-time">15 min</span>
+  </div>
+
+  <div class="stage-note">Run a live investigation OR walk through Session 118. A failed live demo will distract — if live, pick a recent metric movement you already know the answer to.</div>
+
+  <div class="script-block">
+    <p><strong>Option A (live):</strong> "I'm going to run this against [specific recent metric movement]. Let's see what it does."</p>
+    <p><strong>Option B (walkthrough):</strong> "This is Session 118 — an investigation into a QSR movement we did as a test case. Let me walk you through what the system produced."</p>
+  </div>
+
+  <p style="margin: 16px 0; font-weight: 600;">Key things to highlight during demo:</p>
+
+  <p><strong>1. The hypothesis set</strong> — "Here's what it generated. it checked whether the numerator or denominator drove the change, tested whether the drop is statistically real. Then it generated specific hypotheses for [X]. I want you to look at this list and think: <em>would you have tested these same things? What's missing?</em>"</p>
+
+  <div class="stage-note">If someone asks how hypothesis generation actually works internally, show Diagram 2:</div>
+
+  <div class="diagram-container">
+    <div class="diagram-label">Diagram 2 — HYPOTHESIZE Internal Flow <span class="reserve-badge">Reserve — show if asked</span></div>
+    <pre class="mermaid">
+flowchart TD
+    INPUT["📝 Structured Question from UNDERSTAND"]
+
+    subgraph GATE["⚖️ GATE: Statistical Significance Check"]
+        HN["Is movement within\nnormal variance?"]
+        HN_R["REJECTED — movement is real"]
+        HN_NR["NOT REJECTED\n⚠️ May stop investigation"]
+    end
+
+    subgraph ALWAYS["🔬 Always-On Tests — run SQL here"]
+        direction LR
+        H0["Numerator vs\nDenominator Split"]
+        HE["Experiment\nCoincidence Check"]
+        TS["Drop Pattern\nAnalysis"]
+    end
+
+    subgraph GENERATE["💡 Hypothesis Generation"]
+        direction TB
+        CT["Data-Driven Triggers"]
+        PB["Playbook Branches\n~70% of root causes"]
+        FP["First-Principles\n~10% novel tail"]
+        CC["Gap Check"]
+    end
+
+    OUTPUT["📋 Hypothesis Cards → DISPATCH"]
+
+    INPUT --> GATE
+    HN --> HN_R
+    HN --> HN_NR
+    HN_R --> ALWAYS
+    H0 --> GENERATE
+    HE --> GENERATE
+    TS --> GENERATE
+    CT --> CC
+    PB --> CC
+    FP --> CC
+    CC --> OUTPUT
+
+    style GATE fill:#FFCDD2,stroke:#C62828,stroke-width:2px
+    style ALWAYS fill:#E8EAF6,stroke:#283593,stroke-width:2px
+    style GENERATE fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
+    style HN_NR fill:#FFCDD2,stroke:#B71C1C,stroke-width:2px
+    style OUTPUT fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px
+    </pre>
+    <p style="margin-top: 12px; font-size: 0.85em; color: var(--text-muted);">⚠️ This stage runs SQL to check significance, split numerator/denominator, and rule out experiments. ~40% of investigation happens here, not in DISPATCH.</p>
+  </div>
+
+  <p><strong>2. A sub-agent finding</strong> — "Here's what the sub-agent found. It ran these SQL queries, got these results, and concluded [verdict]. Does this match how you'd interpret this data?"</p>
+
+  <p><strong>3. The final report</strong> — "Here's the synthesis. PM summary at the top, detailed analysis, confidence grade [X]. Root cause conclusion: [Y]."</p>
+
+  <p><strong>4. The memory write</strong> — "Now watch what happens at the end. The system writes learnings to global.md — here are the 5 learnings from this investigation. [Read them out loud.] These feed into the next investigation's hypothesis generation. This is how the system accumulates domain knowledge from its own work.</p>
+
+  <p>And notice — this investigation was run by [user/you], who typically investigates [domain]. The system's personal memory layer tracked that, which influenced which hypotheses got prioritized and which knowledge got loaded first. If a different engineer with a different domain focus ran the same question, the hypothesis ordering might look different — the system adapts to who's asking, not just what's being asked. Personal memory is still early-stage, but the intent is that the system learns both <em>what search metrics do</em> and <em>what each engineer cares about</em>.</p>
+
+  <p>But memory is also where risk builds up — I'll get to that."</p>
+
+  <p><strong>5. The trace output</strong> — "This is new. For the first time, we can see the full decision chain — what UNDERSTAND classified, why these hypotheses were generated, what context each sub-agent received, and how SYNTHESIZE framed the conclusion. Before this, all of that was invisible."</p>
+
+  <div class="script-block" style="border-left-color: var(--red); background: #FFF8F6;">
+    <p>"So — quick gut check before I go deeper. For those of you who know this metric area: <strong>does this conclusion look right? And if not, where did it go wrong?</strong>"</p>
+  </div>
+
+  <div class="stage-note">Take 2-3 minutes of initial reactions. Don't be defensive. Write down what people say. This is the most valuable part of the presentation.</div>
+</div>
+
+<!-- ==================== SECTION 4 ==================== -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">04</span>
+    <span class="section-title">The Honest Assessment</span>
+    <span class="section-time">5 min</span>
+  </div>
+
+  <div class="stage-note">This is where you build credibility. You're not selling — you're showing rigorous self-assessment.</div>
+
+  <div class="script-block">
+    <p>"Okay, let me tell you what we know about where this breaks. We ran a formal audit — 20 structured questions across all four stages, reviewed at an IC9 architect level. Here's what we found.</p>
+    <p><strong>The overall verdict: the investigation logic is strong, but the control architecture is inverted.</strong>"</p>
+  </div>
+
+  <div class="diagram-container">
+    <div class="diagram-label">Diagram 3 — The Inverse Enforcement Problem</div>
+    <pre class="mermaid">
+flowchart TD
+    subgraph PIPELINE["Pipeline Flow — Enforcement vs Consequence"]
+        direction TB
+        
+        subgraph U_BOX["UNDERSTAND"]
+            U_ENF["Enforcement: 🟢🟢🟢🟢"]
+            U_CON["Consequence: ⚠️ Low"]
+            U_DET["Traced: 2 of 8 decisions"]
+        end
+
+        subgraph H_BOX["HYPOTHESIZE"]
+            H_ENF["Enforcement: 🟢🟢🟡🟡"]
+            H_CON["Consequence: ⚠️⚠️ Medium"]
+            H_DET["Traced: partial"]
+        end
+
+        subgraph D_BOX["DISPATCH"]
+            D_ENF["Enforcement: 🟡🔴🔴🔴"]
+            D_CON["Consequence: ⚠️⚠️⚠️ High"]
+            D_DET["Traced: 3 of 11 decisions"]
+        end
+
+        subgraph S_BOX["SYNTHESIZE"]
+            S_ENF["Enforcement: 🔴🔴🔴🔴"]
+            S_CON["Consequence: ⚠️⚠️⚠️⚠️ Critical"]
+            S_DET["Traced: 4 of 26 decisions"]
+        end
+
+        U_BOX --> H_BOX --> D_BOX --> S_BOX
+    end
+
+    subgraph PROBLEM["🔴 The Inversion"]
+        direction LR
+        P1["Enforcement decreases ↘️"]
+        P2["Consequence increases ↗️"]
+        P3["These should be reversed"]
+    end
+
+    style U_BOX fill:#C8E6C9,stroke:#2E7D32,stroke-width:2px
+    style H_BOX fill:#FFF9C4,stroke:#F9A825,stroke-width:2px
+    style D_BOX fill:#FFE0B2,stroke:#E65100,stroke-width:2px
+    style S_BOX fill:#FFCDD2,stroke:#C62828,stroke-width:2px
+    style PROBLEM fill:#FFEBEE,stroke:#B71C1C,stroke-width:2px
+    </pre>
+  </div>
+
+  <div class="script-block">
+    <p>"The system gets <em>less careful</em> as the stakes get <em>higher</em>. The stage that produces the report you'd act on has zero code enforcement and about 50% compliance on its own mandatory checks. That's the central problem.</p>
+    <p><strong>Three specific things that worry me most:</strong>"</p>
+  </div>
+
+  <!-- Finger 1 -->
+  <div class="finger-point">
+    <div class="finger-emoji">☝️</div>
+    <div class="finger-content">
+      <h4>One: The Invisible Decision Chain</h4>
+    </div>
+  </div>
+
+  <div class="diagram-container">
+    <div class="diagram-label">Diagram 4 — The Invisible Decision Chain</div>
+    <pre class="mermaid">
+flowchart LR
+    subgraph U["UNDERSTAND"]
+        UD["🎯 metric_direction\nWhich way is bad?"]
+    end
+
+    subgraph H["HYPOTHESIZE"]
+        HD["💡 hypothesis inclusion\nWhat gets tested?"]
+    end
+
+    subgraph D["DISPATCH"]
+        DD["📦 context construction\nWhat evidence can\nbe found?"]
+    end
+
+    subgraph S["SYNTHESIZE"]
+        SD["📝 narrative selection\nWhat conclusion\nis presented?"]
+    end
+
+    UD -->|"wrong direction\npropagates"| HD
+    HD -->|"missing hypothesis\nis permanent"| DD
+    DD -->|"wrong context =\nwrong evidence"| SD
+    SD -->|"polishes error into\nconvincing report"| OUT
+
+    OUT["⚠️ Engineer acts\non wrong conclusion"]
+
+    T1["❌ Untraced"] -.-> UD
+    T2["❌ Untraced"] -.-> HD
+    T3["❌ Untraced"] -.-> DD
+    T4["❌ Untraced"] -.-> SD
+
+    style U fill:#E3F2FD,stroke:#1565C0,stroke-width:2px
+    style H fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
+    style D fill:#FFF3E0,stroke:#E65100,stroke-width:2px
+    style S fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px
+    style OUT fill:#FFCDD2,stroke:#B71C1C,stroke-width:3px
+    style T1 fill:#FFCDD2,stroke:#E53935,stroke-width:1px
+    style T2 fill:#FFCDD2,stroke:#E53935,stroke-width:1px
+    style T3 fill:#FFCDD2,stroke:#E53935,stroke-width:1px
+    style T4 fill:#FFCDD2,stroke:#E53935,stroke-width:1px
+    </pre>
+  </div>
+
+  <div class="script-block">
+    <p>"Each stage has one highest-leverage decision that was completely untraced. In UNDERSTAND, it's which direction is 'bad' for the metric. In HYPOTHESIZE, it's which hypotheses make the cut. In DISPATCH, it's what context each sub-agent receives. In SYNTHESIZE, it's how to frame the root cause narrative.</p>
+    <p>These four decisions form a chain — each inherits all upstream errors. If the first one is wrong, the system constructs a <em>convincing wrong answer</em> at the end. Before this audit, we couldn't see any of them. Now we can trace all four — that's what the new tracing shows."</p>
+  </div>
+
+  <!-- Finger 2 -->
+  <div class="finger-point">
+    <div class="finger-emoji">✌️</div>
+    <div class="finger-content">
+      <h4>Two: The One-Shot Constraint</h4>
+    </div>
+  </div>
+
+  <div class="script-block">
+    <p>"The system generates hypotheses once. If the right root cause isn't in that initial set, the investigation fails. There's no mechanism to go back and try different hypotheses.</p>
+    <p>Every Search engineer knows the feeling of 'my first theory was wrong, let me try something else.' This system can't do that yet."</p>
+  </div>
+
+  <!-- Finger 3 -->
+  <div class="finger-point">
+    <div class="finger-emoji">🤟</div>
+    <div class="finger-content">
+      <h4>Three: The Evidence Bottleneck</h4>
+    </div>
+  </div>
+
+  <div class="diagram-container">
+    <div class="diagram-label">Diagram 5 — Evidence Bottleneck</div>
+    <pre class="mermaid">
+flowchart TD
+    Q["🔍 User Question\nrich, ambiguous"]
+    QB["📝 Structured Question\nsome context lost"]
+    HB["📋 One Hypothesis Card\nnarrowed to single theory"]
+    CTX["📦 Sub-Agent Context\nfurther narrowed by\nuntraced info selection"]
+    SQL["💻 SQL Queries"]
+    RES["📊 results/*.json\nRAW DATA"]
+    FIND["📄 finding.md\n1st interpretation — sub-agent"]
+    RPT["📋 report.md\n2nd interpretation — lead agent"]
+
+    Q -->|"context lost"| QB
+    QB -->|"scope narrowed"| HB
+    HB -->|"context filtered"| CTX
+    CTX --> SQL
+    SQL --> RES
+    RES -->|"interpreted by\nsub-agent"| FIND
+    FIND -->|"interpreted again\nby lead agent"| RPT
+
+    RES -.-|"❌ SYNTHESIZE does\nNOT read this"| RPT
+
+    subgraph DANGER["⚠️ Critical Gap"]
+        D1["Report = interpretation\nof an interpretation"]
+        D2["No cross-check against\nground truth data"]
+    end
+
+    RPT -.-> DANGER
+
+    style Q fill:#E3F2FD,stroke:#1565C0,stroke-width:2px
+    style RES fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px
+    style FIND fill:#FFF3E0,stroke:#E65100,stroke-width:2px
+    style RPT fill:#FFEBEE,stroke:#C62828,stroke-width:2px
+    style DANGER fill:#FFCDD2,stroke:#B71C1C,stroke-width:2px
+    </pre>
+  </div>
+
+  <div class="script-block">
+    <p>"SYNTHESIZE reads the sub-agent's <em>narrative summary</em> of query results — not the raw data itself. The final report is an interpretation of an interpretation. If a sub-agent subtly misreads the data — confuses correlation with causation, misreads the direction of a metric — SYNTHESIZE can't catch it because it never sees the numbers directly."</p>
+  </div>
+
+  <div class="stage-note">Pause. Let this land.</div>
+
+  <div class="script-block">
+    <p>"And one more — connected to the memory system I showed you in the demo."</p>
+  </div>
+
+  <!-- Finger 4 -->
+  <div class="finger-point">
+    <div class="finger-emoji">🖖</div>
+    <div class="finger-content">
+      <h4>Four: The Memory Time Bomb</h4>
+    </div>
+  </div>
+
+  <div class="script-block">
+    <p>"Remember those 5 learnings the system wrote to global.md? That's a powerful feature — the system accumulates domain knowledge from its own investigations. But right now, the implementation is dangerous at scale.</p>
+    <p>Learnings are append-only. No expiration — something written six months ago carries the same weight as yesterday's learning. No confidence score — a learning from a HIGH-confidence investigation and a LOW-confidence one look identical. No scope boundary — a learning about SAIN on FPS could get applied to SAIN on a completely different surface.</p>
+    <p>And the user gate — where you approve the writes — is illusory safety. You're approving learnings you can't meaningfully evaluate because you'd need to re-run the investigation to verify them.</p>
+    <p>The real risk is a feedback loop: if the system writes an over-generalized learning, it biases future hypotheses. Future investigations converge on expected patterns. More confirmatory learnings get written. Cycle repeats. At our current scale — dozens of investigations — this is manageable. At hundreds of investigations, global.md becomes a self-reinforcing echo chamber where the system increasingly finds what it expects to find.</p>
+    <p>We have a design for fixing this — metadata on every learning (timestamp, confidence, scope, investigation ID), periodic review triggers for old learnings, and eventually a quality scoring system. But it's not built yet, and I want you to know that."</p>
+  </div>
+
+  <div class="script-block">
+    <p>"I'm telling you this because I don't want you to evaluate this as a finished product. It's a strong prototype. The investigation logic works. The domain knowledge is real — it knows about SAIN decomposition patterns, denominator effects, experiment attribution, the things you all deal with. And the memory system means it genuinely gets smarter over time. But it has structural gaps that matter, and I need people who actually investigate search metrics to tell me which gaps matter <em>most</em>."</p>
+  </div>
+</div>
+
+<!-- ==================== SECTION 5 ==================== -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">05</span>
+    <span class="section-title">Where I Need Your Expertise</span>
+    <span class="section-time">3 min</span>
+  </div>
+
+  <div class="stage-note">Transition from presentation to discussion. Frame specific, answerable questions — not "what do you think?"</div>
+
+  <div class="script-block">
+    <p>"I have three specific areas where your expertise would change the quality of this system. I'm not asking for general feedback — I have specific questions."</p>
+  </div>
+
+  <div class="ask-block">
+    <h4>Ask #1: Help Me Find the Right Confluence Docs</h4>
+    <p>The agent's domain knowledge comes from Confluence documentation synthesized into digests across six sub-domains. The quality of the agent's investigation is directly bounded by the quality of those source docs.</p>
+    <p>Here's my problem: I know our documentation hygiene is... uneven. Some Confluence pages are current. Some haven't been updated in a year. Some critical knowledge was never written down at all. And I don't always know which is which — you do.</p>
+    <p class="ask-question">"For your domain, which Confluence docs are the source of truth? If you were onboarding a senior engineer to investigate metric movements in your area, which 3-5 pages would you send them to first?"</p>
+    <p>Just as important: <strong>which docs are stale?</strong> If a doc looks current but the system behavior has changed, the agent will confidently apply outdated knowledge. That's worse than having no doc at all.</p>
+    <p>And: <strong>what's never been documented?</strong> The investigation patterns, the known gotchas, the 'when you see X, always check Y first' — the stuff that lives in your head or in Slack threads but not in any Confluence page. Even a bullet list in a new page gives me something to synthesize.</p>
+    <p>This matters especially for Third-Party Connectors, where the domain moves fast enough that even recent docs may be out of date. The more accurate the source docs, the better the agent investigates — and improving these docs benefits your whole team, not just the agent.</p>
+  </div>
+
+  <div class="ask-block">
+    <h4>Ask #2: Evidence Interpretation</h4>
+    <p>Show a sub-agent finding — the evidence table, the verdict.</p>
+    <p class="ask-question">"When you look at this sub-agent's interpretation of the data, does it match how you'd read the same results? Where would you disagree?"</p>
+    <p>"The most dangerous failure mode we identified is 'hallucinated evidence' — the sub-agent reports numbers that don't exactly match the raw query output. But the subtler problem is <em>correct numbers, wrong interpretation</em>. That's a domain expertise problem, and I can't evaluate it without people who know what these metrics actually mean."</p>
+  </div>
+
+  <div class="ask-block">
+    <h4>Ask #3: Evaluation Test Cases</h4>
+    <p class="ask-question">"How should we measure whether this system is giving good answers?"</p>
+    <p>"We're looking at our SEV archive — 24 historical incidents where we know what the root cause was. The plan is to replay those through the system and compare.</p>
+    <p><strong>Are there specific past investigations that would be good test cases?</strong> Ones where the root cause was surprising, or where the investigation took a wrong turn before finding the right answer? Those are exactly the cases that will stress-test this system."</p>
+  </div>
+</div>
+
+<!-- ==================== SECTION 6 ==================== -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">06</span>
+    <span class="section-title">What's Next</span>
+    <span class="section-time">1 min</span>
+  </div>
+
+  <div class="stage-note">1 minute max. Show the roadmap diagram and hit the three bullets. Don't narrate — let the diagram speak.</div>
+
+  <div class="diagram-container">
+    <div class="diagram-label">Diagram 6 — Fix Roadmap</div>
+    <pre class="mermaid">
+flowchart TD
+    subgraph DONE["✅ Already Done"]
+        direction TB
+        D1["🔍 Full Invisible Decision\nchain tracing — all 4 stages"]
+        D2["📋 Hypothesis card\nschema improvements"]
+        D3["⚙️ Question routing\ndefault to Complex"]
+        D4["💡 Contrarian hypothesis\n+ hypothesis threshold"]
+        D5["📦 Sub-agent context\nuser question +\nsignificance result"]
+        D6["📝 Unexpected Findings\n(side observations)"]
+    end
+
+    subgraph NEXT["🔨 Next 2 Weeks"]
+        direction TB
+        N1["🔒 Code-enforce\nSYNTHESIZE"]
+        N2["🔄 First feedback loop\nVerification step"]
+        N3["🔢 Narrative-to-data\nverification"]
+        N4["📊 Report quality\nscoring"]
+    end
+
+    subgraph NEED["🙏 Need Your Help"]
+        direction TB
+        H1["📚 Confluence docs\nWhich are authoritative?\nWhich are stale?"]
+        H2["📋 Test cases with\nknown ground truth"]
+        H3["👀 Report review\nvolunteers"]
+        H4["🧠 Missing knowledge\nUndocumented gotchas\nand patterns"]
+    end
+
+    DONE --> NEXT --> NEED
+
+    style DONE fill:#C8E6C9,stroke:#2E7D32,stroke-width:2px
+    style NEXT fill:#FFF9C4,stroke:#F9A825,stroke-width:2px
+    style NEED fill:#E3F2FD,stroke:#1565C0,stroke-width:2px
+    </pre>
+  </div>
+
+  <div class="script-block">
+    <p>"<strong>Already done:</strong> Full decision chain tracing across all four stages — you saw this in the demo. Schema improvements for hypothesis tracking.</p>
+    <p><strong>Next two weeks:</strong> Code enforcement on SYNTHESIZE — the stuff that's currently 50% compliance becomes 100%. Sub-agent context improvements. Narrative-to-data verification — automated check that the numbers in the report match the actual query results.</p>
+    <p><strong>What I need from you:</strong> Point me to the authoritative Confluence docs for your domain — and flag which ones are stale or missing entirely. Past investigations that would make good test cases — especially ones where the root cause was non-obvious. And volunteers who'd be willing to review 2-3 agent-generated reports and tell me where they're wrong — takes about 20 minutes each. That human calibration is the most valuable thing for building a reliable eval.</p>
+    <p>I'll share a feedback form after this, and I'm happy to do 1:1 deep dives with anyone who has specific domain feedback — especially on Ranking, Third-Party Connectors, and Query Understanding, where the Confluence coverage is thinnest."</p>
+  </div>
+</div>
+
+<!-- ==================== SECTION 7 ==================== -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">07</span>
+    <span class="section-title">Discussion</span>
+    <span class="section-time">14 min</span>
+  </div>
+
+  <div class="stage-note">Open the floor. Keep Diagram 7 ready — show if someone asks about the full scope of findings.</div>
+
+  <div class="diagram-container">
+    <div class="diagram-label">Diagram 7 — Audit Results Summary <span class="reserve-badge">Reserve — show if asked</span></div>
+    <pre class="mermaid">
+flowchart TD
+    subgraph AUDIT["Full Pipeline Audit Results"]
+        direction TB
+        
+        subgraph U_AUDIT["UNDERSTAND 8/10"]
+            U1["8 decisions · 7 failure modes"]
+            U3["Key: Question Routing Trap"]
+        end
+
+        subgraph H_AUDIT["HYPOTHESIZE 9/10"]
+            H1["13 decisions · 9 failure modes"]
+            H3["Key: One-Shot Constraint\n+ anchoring bias"]
+        end
+
+        subgraph D_AUDIT["DISPATCH 8.5/10"]
+            D1["11 decisions · 11 failure modes"]
+            D3["Key: Sub-agent info\nselection untraced"]
+        end
+
+        subgraph S_AUDIT["SYNTHESIZE A-"]
+            S1["26 decisions · 14 failure modes"]
+            S3["Key: Zero enforcement\n~50% compliance"]
+        end
+    end
+
+    subgraph CROSS["Cross-Stage Patterns"]
+        direction LR
+        C1["🔴 Inverse Enforcement"]
+        C2["👁️ 4 Invisible Decisions"]
+        C3["🔄 0 Feedback Loops"]
+        C4["📉 Evidence Bottleneck"]
+        C5["💣 Memory Time Bomb"]
+    end
+
+    subgraph NUMBERS["Totals"]
+        direction LR
+        N1["41 failure modes\n3 CRITICAL"]
+        N2["~55 decisions\n~47 prompt-only"]
+        N3["6 implicit\nmodel biases"]
+    end
+
+    AUDIT --> CROSS --> NUMBERS
+
+    style U_AUDIT fill:#E3F2FD,stroke:#1565C0,stroke-width:2px
+    style H_AUDIT fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
+    style D_AUDIT fill:#FFF3E0,stroke:#E65100,stroke-width:2px
+    style S_AUDIT fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px
+    style CROSS fill:#FFEBEE,stroke:#B71C1C,stroke-width:2px
+    style NUMBERS fill:#F5F5F5,stroke:#616161,stroke-width:1px
+    </pre>
+  </div>
+
+  <p style="font-weight: 600; margin: 16px 0 8px;">Seed questions if the room is quiet:</p>
+
+  <div class="script-block">
+    <p>"For the TLs — when your team investigates a metric drop, what's the first Confluence page they go to? And when was the last time it was updated?"</p>
+  </div>
+  <div class="script-block">
+    <p>"For the ICs who've investigated [specific recent incident] — if you'd seen this system's report, would you have trusted it? What would have made you suspicious?"</p>
+  </div>
+  <div class="script-block">
+    <p>"For PMs — the report has a PM summary at the top. Is that the right level of detail? What would you need to see to act on it?"</p>
+  </div>
+  <div class="script-block">
+    <p>"For anyone — what's a gotcha in your domain that trips up people who don't know the system? The kind of thing that's never been written down but everyone on the team knows? That's exactly what this agent is missing."</p>
+  </div>
+</div>
+
+<hr>
+
+<!-- ==================== FEEDBACK FORM ==================== -->
+<div class="section">
+  <div class="feedback-form">
+    <h3>📝 Feedback Form — share after talk</h3>
+    <div class="feedback-q">
+      <strong>1. Confluence docs:</strong> For your domain, what are the 3-5 authoritative Confluence pages for understanding metric movements? Are any of them stale?
+    </div>
+    <div class="feedback-q">
+      <strong>2. Missing knowledge:</strong> What investigation patterns or known gotchas in your domain have never been documented in Confluence? Even a bullet list helps.
+    </div>
+    <div class="feedback-q">
+      <strong>3. Interpretation quality:</strong> On a scale of 1-5, how much would you trust the sub-agent's interpretation of query results in the domain you know best? What would increase your trust?
+    </div>
+    <div class="feedback-q">
+      <strong>4. Test cases:</strong> Can you name 1-2 past investigations (SEV or non-SEV) that would be good stress tests? Especially ones where the root cause was non-obvious.
+    </div>
+    <div class="feedback-q">
+      <strong>5. Report trust:</strong> If this report landed in your inbox for a metric movement in your area, what's the first thing you'd check to decide whether to trust it?
+    </div>
+  </div>
+</div>
+
+<hr>
+
+<!-- ==================== DELIVERY NOTES ==================== -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number" style="background: #616161;">REF</span>
+    <span class="section-title">Delivery Notes</span>
+  </div>
+
+  <div class="do-list">
+    <h4>✅ Do</h4>
+    <ul>
+      <li><strong>Be specific.</strong> Use real metric names (QSR, SAIN, DLC, FPS), real incident examples, real SQL patterns. This audience lives in specifics.</li>
+      <li><strong>Show vulnerability.</strong> The audit findings are your credibility — you know what's broken. Search engineers respect that more than a polished demo.</li>
+      <li><strong>Take notes visibly.</strong> When someone gives you a hypothesis gap, write it down where they can see. It signals you're actually listening.</li>
+      <li><strong>Let the demo speak.</strong> If it got something wrong — even better. Debug it live with the room.</li>
+    </ul>
+  </div>
+
+  <div class="dont-list">
+    <h4>❌ Don't</h4>
+    <ul>
+      <li><strong>Don't oversell.</strong> Never say "this replaces investigation." Say "this produces a first draft for you to review."</li>
+      <li><strong>Don't be vague about limitations.</strong> "We're still improving it" is weak. "SYNTHESIZE has 50% compliance — here's our plan to fix that" is strong.</li>
+      <li><strong>Don't show 30 slides.</strong> Minimize slides, maximize demo and discussion time.</li>
+      <li><strong>Don't defend when criticized.</strong> "This hypothesis set is missing X" is a win, not an attack. Say "that's exactly what I need" and write it down.</li>
+      <li><strong>Don't ask "what do you think?"</strong> Ask "is this right?" and "what's missing?" — specific questions get specific answers.</li>
+    </ul>
+  </div>
+
+  <p style="margin-top: 20px; font-weight: 600;">Timing discipline:</p>
+  <p>If running long, cut in this order: Section 6 first (show diagram, skip narration — email next steps), then trim Section 1 (they know the problem — go to 1 min). <strong>Never cut from the demo or discussion.</strong> If behind by Section 4, tighten to three fingers (drop Memory Time Bomb — save for discussion if asked).</p>
+
+  <p style="margin-top: 20px; font-weight: 600;">Diagram flow — always show:</p>
+  <p>1 (Pipeline) → 3 (Inverse Enforcement) → 4 (Invisible Chain) → 5 (Evidence Bottleneck) → 6 (Roadmap)</p>
+  <p style="color: var(--text-muted);">Reserve: 2 (HYPOTHESIZE flow), 7 (Audit summary) — show if asked during discussion.</p>
+</div>
+
+<!-- ==================== APPENDIX ==================== -->
+<div class="appendix">
+  <h3>Key Numbers to Have Ready</h3>
+  <table>
+    <thead>
+      <tr><th>Metric</th><th>Value</th><th>Source</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Total failure modes catalogued</td><td>41 across all stages</td><td>Full audit</td></tr>
+      <tr><td>CRITICAL/Terminal failure modes</td><td>3 (HF1, DF4, SF-9)</td><td>Audit Q4 per stage</td></tr>
+      <tr><td>SYNTHESIZE mandatory compliance</td><td>~50% (Session 118)</td><td>Session 118 empirical</td></tr>
+      <tr><td>Required report sections present</td><td>73% (8 of 11)</td><td>Session 118 empirical</td></tr>
+      <tr><td>Harness decisions traced (UNDERSTAND)</td><td>2 of 8</td><td>Audit Q1</td></tr>
+      <tr><td>Structural feedback loops</td><td>0 confirmed</td><td>Cross-stage analysis</td></tr>
+      <tr><td>Playbook coverage estimate</td><td>70% match, 20% partial, 10% novel</td><td>Agent self-assessment</td></tr>
+      <tr><td>Agent self-audit quality</td><td>A- to A across 20 questions</td><td>IC9 review</td></tr>
+      <tr><td>Code-enforced decisions (DISPATCH+SYNTH)</td><td>0</td><td>Audit finding</td></tr>
+      <tr><td>Implicit model biases identified</td><td>6 (in HYPOTHESIZE)</td><td>Audit Q2</td></tr>
+      <tr><td>Sub-agent token utilization</td><td>~17K-32K of ~55K budget</td><td>DISPATCH review Q3e</td></tr>
+      <tr><td>Domain sub-areas covered</td><td>6</td><td>Architecture</td></tr>
+    </tbody>
+  </table>
+</div>
+
+</div><!-- /page -->
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    themeVariables: { fontSize: '16px' },
+    theme: 'neutral',
+    flowchart: {
+      useMaxWidth: true,
+      htmlLabels: true,
+      curve: 'basis',
+      padding: 12,
+      nodeSpacing: 30,
+      rankSpacing: 40
+    },
+    themeVariables: {
+      fontFamily: 'DM Sans, sans-serif',
+      fontSize: '13px'
+    }
+  });
+</script>
+</body>
+</html>

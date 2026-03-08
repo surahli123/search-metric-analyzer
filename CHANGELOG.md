@@ -5,6 +5,37 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## v2.0-alpha.2 — Holistic Redesign Wave 1: Trace + Contracts (2026-03-07)
+
+Wave 1 of the v2.0 holistic redesign. IC9-reviewed architectural plan, new trace
+system and stage contracts with 11 domain-aware business rules. No existing code
+touched — all pure additive.
+
+### Added
+- `trace/` module (4 files)
+  - `TraceSpan` and `SeamSpan` TypedDicts with dual-audience design (human_summary + agent_context)
+  - `InvestigationTrace` collector with emit, emit_seam, token-budgeted `agent_context_for()`, JSON roundtrip
+  - Trace completeness validation — checks all 4 IC9 Invisible Decisions are traced
+- `contracts/` module (6 files)
+  - Stage contracts: `UnderstandResult`, `HypothesisSet`, `FindingSet`, `SynthesisReport`
+  - `MixShiftResult` TypedDict — first-class mix-shift representation (Amendment 3)
+  - `seam_validator.py` — 11 business rules across 4 stages, tiered gate system, CLI interface
+  - Key domain rules: AI-CQ co-movement consistency (Amendment 2), mix-shift consideration, P0 proportionality
+- `tests/test_trace.py` — 57 tests for trace module
+- `tests/test_contracts.py` — 87 tests for contracts module
+- `docs/research/IC9_review_FULL_PIPELINE_assessment.md` — IC9 audit reference
+- `docs/research/openai-harness-engineering-notes.md` — harness engineering reference stub
+- `docs/talks/` — tech talk scripts (HTML + Markdown)
+- `docs/plans/2026-03-07-v2-holistic-redesign.md` — v2 design doc
+- `reviews/v2-plan-review/` — IC9-calibrated review (DS Lead, PM Lead, Principal AI Eng + synthesis)
+- `.worktrees/` added to `.gitignore` for isolated development
+
+### Fixed
+- `rule_effect_size_proportionality` — changed from substring to word-boundary regex matching to prevent false positives ("minority", "smaller")
+- Updated `validate_seam` signature in design doc to match implementation (`stage: str` instead of `schema_class: Type`)
+
+---
+
 ## v2.0-alpha.1 — Phase 2.1 Foundation: Multi-Agent Orchestrator (2026-03-07)
 
 Phase 2.1 foundation layer: typed schemas, orchestrator skeleton, and contract
