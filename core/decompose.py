@@ -378,6 +378,7 @@ def run_decomposition(
     baseline_period: str = "baseline",
     current_period: str = "current",
     period_field: str = "period",
+    trace: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Run the full decomposition pipeline on a dataset.
 
@@ -398,6 +399,9 @@ def run_decomposition(
         baseline_period: Value of period_field for baseline rows
         current_period: Value of period_field for current rows
         period_field: Column name containing period labels
+        trace: Optional InvestigationTrace instance. When provided, key decisions
+               are recorded as trace spans (IC9 Invisible Decisions). When None,
+               no tracing occurs and output is identical.
 
     Returns:
         Dict with aggregate, dimensional_breakdown, mix_shift results.
@@ -417,8 +421,29 @@ def run_decomposition(
     baseline = [r for r in rows if r.get(period_field) == baseline_period]
     current = [r for r in rows if r.get(period_field) == current_period]
 
+    # Lazy import: only needed when trace is provided, keeps core/ decoupled
+    # from trace/ at module level (no import at top of file)
+    from trace.helpers import emit_deterministic_span
+
     # Step 1: Headline delta -- "Click Quality dropped 6.25% WoW"
     aggregate = compute_aggregate_delta(baseline, current, metric_field)
+
+    # Trace IC9 Invisible Decision #1: metric_direction
+    # WHY this matters: the direction of the metric movement is the very first
+    # decision in the pipeline. If this is wrong, every downstream hypothesis
+    # and diagnosis will be based on incorrect framing. Previously this was
+    # implicit (computed but never recorded). Now it's an explicit trace span.
+    if aggregate.get("error") is None:
+        emit_deterministic_span(
+            trace,
+            tool="core.decompose.compute_aggregate_delta",
+            decision="metric_direction",
+            value=aggregate.get("direction", "unknown"),
+            human_summary=f"{metric_field} moved {aggregate.get('direction', '?')} by {aggregate.get('relative_delta_pct', 0):.1f}%",
+            agent_context=f"metric={metric_field}, direction={aggregate.get('direction')}, severity={aggregate.get('severity')}, delta_pct={aggregate.get('relative_delta_pct', 0):.1f}",
+            inputs={"metric": metric_field, "baseline_count": aggregate.get("baseline_count", 0)},
+            outputs={"direction": aggregate.get("direction"), "severity": aggregate.get("severity")},
+        )
 
     # Step 2: Decompose by each dimension -- "The drop is in standard tier"
     dimensional: Dict[str, Any] = {}
@@ -450,6 +475,36 @@ def run_decomposition(
             if top_contribution > max_contribution:
                 max_contribution = top_contribution
                 dominant_dimension = dim_name
+
+    # Trace: which dimension best explains the movement
+    # This helps reviewers see why the pipeline focused on a particular
+    # dimension for drill-down. If the dominant dimension is wrong,
+    # the analyst wastes time investigating the wrong axis.
+    if aggregate.get("error") is None and dominant_dimension is not None:
+        emit_deterministic_span(
+            trace,
+            tool="core.decompose.decompose_by_dimension",
+            decision="dominant_dimension",
+            value=dominant_dimension,
+            human_summary=f"Dominant dimension: {dominant_dimension} (top segment explains {max_contribution:.1f}%)",
+            agent_context=f"dominant_dimension={dominant_dimension}, max_contribution_pct={max_contribution:.1f}",
+        )
+
+    # Trace: was mix-shift significant?
+    # Mix-shift is the "false alarm detector" — if most of the movement is
+    # compositional, the analyst shouldn't treat it as a quality regression.
+    # Recording this decision makes it auditable.
+    if aggregate.get("error") is None:
+        mix_flag = mix_shift.get("flag") if mix_shift else None
+        mix_pct = mix_shift.get("mix_shift_contribution_pct", 0) if mix_shift else 0
+        emit_deterministic_span(
+            trace,
+            tool="core.decompose.compute_mix_shift",
+            decision="mix_shift_significance",
+            value=mix_flag or "not_significant",
+            human_summary=f"Mix-shift: {mix_pct:.1f}% of movement ({mix_flag or 'not flagged'})",
+            agent_context=f"mix_shift_pct={mix_pct:.1f}, flag={mix_flag}",
+        )
 
     return {
         "aggregate": aggregate,
