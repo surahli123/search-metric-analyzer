@@ -77,7 +77,8 @@ def rule_data_quality_not_failed(result: Dict, **kwargs) -> Optional[str]:
     than to produce a misleading diagnosis.
     """
     if result.get("data_quality_status") == "fail":
-        return "Data quality check FAILED — investigation cannot proceed with unreliable data"
+        return ("Data quality check FAILED — investigation cannot proceed with unreliable data. "
+                "Recheck the data source: verify completeness > 95% and freshness < 60 minutes before retrying.")
     return None
 
 
@@ -88,10 +89,12 @@ def rule_metric_direction_set(result: Dict, **kwargs) -> Optional[str]:
     Now it's a required field that appears in the trace.
     """
     if not result.get("metric_direction"):
-        return "metric_direction is empty — IC9 Invisible Decision #1 must be explicitly traced"
+        return ("metric_direction is empty — IC9 Invisible Decision #1 must be explicitly traced. "
+                "Set metric_direction to one of {up, down, stable} based on the aggregate delta.")
     valid = {"up", "down", "stable"}
     if result.get("metric_direction") not in valid:
-        return f"metric_direction must be one of {valid}, got '{result.get('metric_direction')}'"
+        return (f"metric_direction must be one of {valid}, got '{result.get('metric_direction')}'. "
+                f"Set to one of the valid values based on the aggregate delta direction.")
     return None
 
 
@@ -108,7 +111,8 @@ def rule_min_three_hypotheses(result: Dict, **kwargs) -> Optional[str]:
     """
     hyps = result.get("hypotheses", [])
     if len(hyps) < 3:
-        return f"Only {len(hyps)} hypotheses generated, minimum 3 required to avoid tunnel vision"
+        return (f"Only {len(hyps)} hypotheses generated, minimum 3 required to avoid tunnel vision. "
+                f"Add at least one contrarian hypothesis that challenges the primary pattern.")
     return None
 
 
@@ -120,7 +124,8 @@ def rule_all_have_confirms_if(result: Dict, **kwargs) -> Optional[str]:
     """
     for h in result.get("hypotheses", []):
         if not h.get("confirms_if"):
-            return f"Hypothesis '{h.get('hypothesis_id', 'unknown')}' has empty confirms_if — must define confirmation criteria before investigation"
+            return (f"Hypothesis '{h.get('hypothesis_id', 'unknown')}' has empty confirms_if — must define confirmation criteria before investigation. "
+                    f"Define specific, testable confirmation criteria (e.g., 'ranking logs show model change in date range').")
     return None
 
 
@@ -133,7 +138,8 @@ def rule_has_contrarian_hypothesis(result: Dict, **kwargs) -> Optional[str]:
     """
     hyps = result.get("hypotheses", [])
     if not any(h.get("is_contrarian") for h in hyps):
-        return "No contrarian hypothesis found — at least one must challenge the obvious explanation to prevent confirmation bias"
+        return ("No contrarian hypothesis found — at least one must challenge the obvious explanation to prevent confirmation bias. "
+                "Add a hypothesis with is_contrarian=True that proposes an alternative explanation for the metric movement.")
     return None
 
 
@@ -145,7 +151,8 @@ def rule_expected_magnitude_present(result: Dict, **kwargs) -> Optional[str]:
     """
     for h in result.get("hypotheses", []):
         if not h.get("expected_magnitude"):
-            return f"Hypothesis '{h.get('hypothesis_id', 'unknown')}' has no expected_magnitude — required to prevent false alarms"
+            return (f"Hypothesis '{h.get('hypothesis_id', 'unknown')}' has no expected_magnitude — required to prevent false alarms. "
+                    f"Add expected_magnitude as a range (e.g., '2-4% drop') based on the archetype's historical impact.")
     return None
 
 
@@ -201,7 +208,8 @@ def rule_mix_shift_considered_when_detected(result: Dict, **kwargs) -> Optional[
             return (
                 f"Mix-shift explains {pct:.0%} of metric movement but no "
                 f"mix-shift hypothesis was generated. Mix-shift causes 30-40% "
-                f"of Enterprise metric movements — this must be investigated."
+                f"of Enterprise metric movements — this must be investigated. "
+                f"Add a hypothesis with archetype='mix_shift' or 'segment_mix_shift' to the hypothesis set."
             )
     return None
 
@@ -221,7 +229,8 @@ def rule_each_finding_has_evidence(result: Dict, **kwargs) -> Optional[str]:
             return (
                 f"Finding from '{f.get('agent_name', 'unknown')}' for hypothesis "
                 f"'{f.get('hypothesis_id', 'unknown')}' has no evidence — "
-                f"narrative without data is opinion, not diagnosis"
+                f"narrative without data is opinion, not diagnosis. "
+                f"Include at least one evidence item with data values (e.g., {{metric: value, delta: -X%}})."
             )
     return None
 
@@ -253,7 +262,8 @@ def rule_narrative_data_coherence(result: Dict, **kwargs) -> Optional[str]:
                         f"Narrative-data mismatch in finding for "
                         f"'{f.get('hypothesis_id', 'unknown')}': evidence shows "
                         f"direction=UP but narrative uses decline language. "
-                        f"This may indicate narrative drift."
+                        f"This may indicate narrative drift. "
+                        f"Revise the narrative to match evidence direction, or add qualifying language explaining the discrepancy."
                     )
             elif direction == "down" and any(w in narrative for w in increase_words):
                 if not any(w in narrative for w in decline_words):
@@ -261,7 +271,8 @@ def rule_narrative_data_coherence(result: Dict, **kwargs) -> Optional[str]:
                         f"Narrative-data mismatch in finding for "
                         f"'{f.get('hypothesis_id', 'unknown')}': evidence shows "
                         f"direction=DOWN but narrative uses increase language. "
-                        f"This may indicate narrative drift."
+                        f"This may indicate narrative drift. "
+                        f"Revise the narrative to match evidence direction, or add qualifying language explaining the discrepancy."
                     )
     return None
 
@@ -282,7 +293,8 @@ def rule_all_mandatory_sections_present(result: Dict, **kwargs) -> Optional[str]
     ]
     missing = [s for s in mandatory if not result.get(s)]
     if missing:
-        return f"Missing mandatory sections: {', '.join(missing)}. All 7 sections required."
+        return (f"Missing mandatory sections: {', '.join(missing)}. All 7 sections required. "
+                f"Populate each missing section with at least one substantive sentence — do not leave any blank.")
     return None
 
 
@@ -310,7 +322,8 @@ def rule_effect_size_proportionality(result: Dict, **kwargs) -> Optional[str]:
                 return (
                     f"P0 severity but '{field}' uses minimizing language: "
                     f"{', '.join(found)}. A P0 is a critical incident — "
-                    f"language must match severity to avoid downplaying impact."
+                    f"language must match severity to avoid downplaying impact. "
+                    f"Replace minimizing words (minor/slight/small) with proportional language (significant/substantial/critical)."
                 )
     return None
 
