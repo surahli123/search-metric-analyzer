@@ -135,5 +135,5 @@ Areas still pending real-world calibration:
 - Metric noise profiles (weekly standard deviations)
 - Per-metric severity thresholds
 - Real incident scenarios for eval
-- QSR formula exact weights/floors
+- Search metric formula exact weights/floors
 
