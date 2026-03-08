@@ -36,7 +36,17 @@ try:
 except ModuleNotFoundError:
     from schema import normalize_metric_name, normalize_rows
 
-from trace.helpers import emit_deterministic_span
+# Import trace helper for optional span emission. The try/except handles
+# standalone CLI execution where the project root isn't on sys.path and
+# Python's built-in `trace` module shadows our trace/ package.
+# When running as CLI, trace emission is unused (trace=None always), so
+# we fall back to a no-op function.
+try:
+    from trace.helpers import emit_deterministic_span
+except (ModuleNotFoundError, ImportError):
+    def emit_deterministic_span(*args, **kwargs):  # type: ignore[misc]
+        """No-op fallback when trace module is not importable (CLI mode)."""
+        pass
 
 
 # ──────────────────────────────────────────────────
