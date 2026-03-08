@@ -5,6 +5,30 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## v2.0-alpha.4 — Holistic Redesign Wave 3a: Trace Emission + Remediation + Corrections (2026-03-08)
+
+Wave 3a implementation — 7 tasks completed via subagent-driven-development. Adds trace instrumentation to all core tools, actionable remediation messages to all contract violations, and a corrections knowledge layer for institutional memory.
+
+### Added
+- `trace/helpers.py` — `emit_deterministic_span()` convenience helper (no-ops when trace is None, sets swimlane="deterministic" and code_enforced=True)
+- Trace emission in `core/decompose.py` — 3 spans: `metric_direction` (IC9 #1), `dominant_dimension`, `mix_shift_significance`
+- Trace emission in `core/anomaly.py` — spans in all return paths of `check_data_quality()`, `detect_step_change()`, `match_co_movement_pattern()` (11 total emit calls)
+- Trace emission in `core/diagnose.py` — 2 spans: `archetype`, `confidence_level`
+- Remediation suffixes on all 11 contract violation messages (imperative verb: Recheck, Set, Add, Define, Include, Populate, Replace, Revise)
+- `core/corrections.py` — `load_corrections()`, `find_relevant_corrections()` (90-day expiry, archetype-exact ranking), `append_correction()` with source validation, CLI with `--add` flag
+- `data/knowledge/corrections.yaml` — seed entry (CQ drop misattributed to ranking regression, actually mix-shift)
+- 45 new tests: 4 (trace helpers) + 5 (decompose trace) + 4 (anomaly trace) + 3 (diagnose trace) + 13 (remediation messages) + 16 (corrections)
+
+### Fixed
+- CLI import shadowing: Python's built-in `trace` module shadows project `trace/` package during standalone CLI execution — fixed with try/except fallback in all 3 core tools
+- Misleading "lazy import" comment in decompose.py — moved trace import to module-level top of file
+
+### Tests
+- Suite status: `739 passed`, 21 skipped, 0 failures
+- Eval stress test: 6/6 GREEN, average 91.7/100 (unchanged)
+
+---
+
 ## Wave 3 Plan — IC9-Calibrated Review + Approval (2026-03-08)
 
 Planning-only session — no code changes.

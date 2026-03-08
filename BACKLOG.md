@@ -6,14 +6,14 @@ Last updated: 2026-03-08
 
 ## Upcoming
 
-### Wave 3a: Trace Emission + Remediation + Corrections (PLAN APPROVED — ready to implement)
-- [ ] Task 1: Create `trace/helpers.py` with `emit_deterministic_span()` convenience helper
-- [ ] Task 2: Add trace emission to `core/decompose.py` (IC9 #1: metric_direction)
-- [ ] Task 3: Add trace emission to `core/anomaly.py` (data quality, step change, co-movement)
-- [ ] Task 4: Add trace emission to `core/diagnose.py` (archetype, confidence)
-- [ ] Task 5: Add remediation messages to all 11 contract violation rules
-- [ ] Task 6: Create `core/corrections.py` + `data/knowledge/corrections.yaml` (read/write/CLI, 90-day expiry)
-- [ ] Task 7: Wave 3a verification (full test suite + eval)
+### Wave 3a: Trace Emission + Remediation + Corrections (DONE — 2026-03-08)
+- [x] Task 1: Create `trace/helpers.py` with `emit_deterministic_span()` convenience helper
+- [x] Task 2: Add trace emission to `core/decompose.py` (IC9 #1: metric_direction)
+- [x] Task 3: Add trace emission to `core/anomaly.py` (data quality, step change, co-movement)
+- [x] Task 4: Add trace emission to `core/diagnose.py` (archetype, confidence)
+- [x] Task 5: Add remediation messages to all 11 contract violation rules
+- [x] Task 6: Create `core/corrections.py` + `data/knowledge/corrections.yaml` (read/write/CLI, 90-day expiry)
+- [x] Task 7: Wave 3a verification (full test suite + eval)
 
 ### Wave 3b: Full 4-Stage Orchestrator (PLAN APPROVED — after 3a)
 - [ ] Task 8: OrchestratorError hierarchy + SearchMetricOrchestrator skeleton + UNDERSTAND stage
