@@ -6,15 +6,23 @@ Last updated: 2026-03-08
 
 ## Upcoming
 
-### Wave 3: Trace Emission + Orchestrator (scope may change — parallel research in progress)
-- [ ] Add `trace: Optional[InvestigationTrace] = None` parameter to `core/anomaly.py` functions
-- [ ] Add trace emission to `core/decompose.py` functions
-- [ ] Add trace emission to `core/diagnose.py` functions
-- [ ] Add trace emission to `core/formatter.py` functions
-- [ ] Build `harness/orchestrator.py` — full 4-stage pipeline controller with Claude API
-- [ ] Import verdict fusion from old orchestrator (don't rewrite from scratch)
-- [ ] Add tests for trace emission in core tools
-- [ ] Add tests for orchestrator pipeline
+### Wave 3a: Trace Emission + Remediation + Corrections (PLAN APPROVED — ready to implement)
+- [ ] Task 1: Create `trace/helpers.py` with `emit_deterministic_span()` convenience helper
+- [ ] Task 2: Add trace emission to `core/decompose.py` (IC9 #1: metric_direction)
+- [ ] Task 3: Add trace emission to `core/anomaly.py` (data quality, step change, co-movement)
+- [ ] Task 4: Add trace emission to `core/diagnose.py` (archetype, confidence)
+- [ ] Task 5: Add remediation messages to all 11 contract violation rules
+- [ ] Task 6: Create `core/corrections.py` + `data/knowledge/corrections.yaml` (read/write/CLI, 90-day expiry)
+- [ ] Task 7: Wave 3a verification (full test suite + eval)
+
+### Wave 3b: Full 4-Stage Orchestrator (PLAN APPROVED — after 3a)
+- [ ] Task 8: OrchestratorError hierarchy + SearchMetricOrchestrator skeleton + UNDERSTAND stage
+- [ ] Task 9: HYPOTHESIZE stage (LLM + corrections context + IC9 #2: hypothesis_inclusion trace)
+- [ ] Task 10: DISPATCH stage (reuse orchestrate() + IC9 #3: context_construction trace)
+- [ ] Task 11: SYNTHESIZE stage (LLM + retry gate + IC9 #4: narrative_selection trace)
+- [ ] Task 12: Error handling integration tests
+- [ ] Task 13: make_anthropic_llm() factory with timeout + optional SDK
+- [ ] Task 14: Wave 3b verification (all 4 IC9 decisions traced end-to-end)
 
 ### Wave 4: Skill File + Eval
 - [ ] Update `skills/search-metric-analyzer.md` — add seam validator subprocess calls after each stage

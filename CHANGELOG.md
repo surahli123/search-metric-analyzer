@@ -5,6 +5,28 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Wave 3 Plan — IC9-Calibrated Review + Approval (2026-03-08)
+
+Planning-only session — no code changes.
+
+### Added
+- Wave 3 implementation plan: 14 tasks across Wave 3a (trace + remediation + corrections) and 3b (orchestrator)
+- IC9-calibrated review loop: 3 iterations with IC9 Domain Expert + Principal AI Engineer reviewers
+- Plan includes: OrchestratorError hierarchy, exponential backoff, 3-strategy JSON extraction, all 4 IC9 Invisible Decision traces
+
+### Key Plan Decisions
+- All 4 IC9 Invisible Decisions will be traced: metric_direction (3a), hypothesis_inclusion + context_construction + narrative_selection (3b)
+- Corrections layer: 90-day expiration default, 3 capture methods (CLI, auto SQL error, skill feedback)
+- LLM callable pattern: `Callable[[str, str], str]` — anthropic SDK is optional
+- Error handling: transient vs permanent error classification, per-stage retry policies
+- SOFT gates (HYPOTHESIZE, DISPATCH) never raise — no try/except needed
+
+### Review Scores (Final — Iteration 3)
+- IC9 Domain Expert: 7.9/10 (all GREEN)
+- Principal AI Engineer: 7.8/10 (all GREEN)
+
+---
+
 ## v2.0-alpha.3 — Holistic Redesign Wave 2: Directory Restructure (2026-03-08)
 
 Pure rename/restructure — no logic changes. Aligns directory layout with v2 architecture.
