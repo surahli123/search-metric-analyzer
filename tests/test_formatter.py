@@ -1,7 +1,7 @@
 """Tests for Slack message and report template generation."""
 
 import pytest
-from tools.formatter import (
+from core.formatter import (
     generate_slack_message,
     generate_short_report,
     format_diagnosis_output,

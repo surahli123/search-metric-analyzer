@@ -24,11 +24,11 @@ from typing import Any, Callable, Dict, Optional
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from tools.decompose import run_decomposition
-from tools.anomaly import detect_step_change, match_co_movement_pattern, check_data_quality
-from tools.diagnose import run_diagnosis
-from tools.connector_investigator import ConnectorInvestigator
-from tools.formatter import format_diagnosis_output
+from core.decompose import run_decomposition
+from core.anomaly import detect_step_change, match_co_movement_pattern, check_data_quality
+from core.diagnose import run_diagnosis
+from harness.connector_investigator import ConnectorInvestigator
+from core.formatter import format_diagnosis_output
 from eval.run_eval import load_scoring_specs, run_three_run_majority
 
 

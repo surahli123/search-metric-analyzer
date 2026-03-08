@@ -79,22 +79,39 @@ The subagent can take a diagnosis with `confirms_if` conditions, generate SQL, e
 
 ---
 
+## Discovery: Parallel Session Already Wrote v1.5 Plan
+
+The parallel session created `docs/plans/2026-02-22-v1-5-minimal-multi-agent-bridge-plan.md` — a 5-task TDD implementation plan for the Connector Investigator subagent spike. This plan covers:
+- Task 1: Failing contract tests
+- Task 2: `ConnectorInvestigator` class (bounded: max 3 queries, 2-min timeout)
+- Task 3: Wire into `run_diagnosis()` (Medium/Low confidence gate)
+- Task 4: CLI spike switch + smoke test
+- Task 5: Verification + release candidate
+
+The parallel session also created:
+- `2026-02-22-session-end-memory.md` — session end handoff
+- `2026-02-22-v1-contract-baseline.md` — v1 contract baseline doc
+
+**Implication:** The subagent spike already has an implementation plan. Next session should focus on the v1.5-lite foundation track (historical patterns, noise calibration, eval expansion) which has NO plan yet.
+
 ## What to Do Next Session
 
-### Priority 1: Write v1.5 Design Doc
-- Formal design document for the hybrid approach (v1.5-lite + subagent spike)
-- Include: architecture diagram, subagent spec, eval expansion plan, historical pattern schema
-- Save to `docs/plans/2026-02-22-v1.5-hybrid-design.md`
-- Use brainstorming skill → writing-plans skill flow
+### Priority 1: Write v1.5-lite Design Doc (Foundation Validation)
+- Historical pattern population strategy (which 5-10 SEVs, schema, selection criteria)
+- Noise threshold calibration methodology
+- Eval expansion plan (5 → 10 archetypes)
+- Runner-up active verification spec
+- Simpson's Paradox reversal check spec
+- Save to `docs/plans/2026-02-22-v1.5-lite-foundation-design.md`
 
-### Priority 2: Commit v1.4 (if not already done)
-- All v1.4 implementation is complete and tested
-- Check git status — may already be committed from parallel session
+### Priority 2: Review Parallel Session's Subagent Plan
+- Read `2026-02-22-v1-5-minimal-multi-agent-bridge-plan.md` for alignment
+- Check if anything conflicts with PM decisions from this session
+- Merge the two workstreams into a unified v1.5 plan
 
-### Priority 3: Start v1.5-lite Implementation
-- Begin with historical pattern population (5-10 from real SEVs)
-- Calibrate noise thresholds
-- Expand eval scenarios
+### Priority 3: Execute (Once Plans Are Aligned)
+- Start with v1.5-lite (foundation) — lower risk, validates assumptions
+- Then execute subagent spike — higher learning, depends on foundation
 
 ---
 

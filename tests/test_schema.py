@@ -2,11 +2,15 @@
 
 import pytest
 
-from tools.schema import (
+from core.schema import (
     normalize_metric_name,
     normalize_row,
     normalize_rows,
     normalize_diagnosis_payload,
+    AgentVerdict,
+    OrchestrationResult,
+    normalize_agent_verdict,
+    VALID_VERDICTS,
 )
 
 
@@ -86,4 +90,104 @@ class TestNormalizeDiagnosisPayload:
         normalized = normalize_diagnosis_payload(diagnosis)
         assert normalized["aggregate"]["metric"] == "click_quality_value"
         assert normalized["decision_status"] == "diagnosed"
+
+
+class TestAgentVerdictSchema:
+    """Contract tests for the multi-agent verdict schemas.
+
+    These tests lock down the shape of AgentVerdict and OrchestrationResult
+    so that every specialist agent returns a predictable payload.
+    Think of it like an API contract test — if the schema changes,
+    these tests break before downstream consumers do.
+    """
+
+    def test_valid_verdict_passes_normalization_unchanged(self):
+        """A fully-formed verdict dict should come back identical.
+
+        If all required keys are present and valid, the normalizer
+        should act like a no-op — no mutations, no surprises.
+        """
+        complete_verdict = {
+            "agent": "ranking",
+            "ran": True,
+            "verdict": "confirmed",
+            "reason": "Click quality dropped 15% week-over-week",
+            "queries": ["SELECT * FROM metrics WHERE ..."],
+            "evidence": [{"metric": "click_quality_value", "delta": -0.15}],
+            "cost": {"queries": 3, "seconds": 1.2},
+        }
+        result = normalize_agent_verdict(complete_verdict)
+        # Every key/value pair should survive normalization unchanged.
+        for key, value in complete_verdict.items():
+            assert result[key] == value
+
+    def test_missing_keys_get_safe_defaults(self):
+        """A minimal dict with only 'agent' should get conservative defaults.
+
+        This is the defensive programming pattern: if a specialist agent
+        crashes mid-run and only reports its name, the orchestrator still
+        gets a usable payload instead of KeyError explosions downstream.
+        """
+        minimal = {"agent": "ranking"}
+        result = normalize_agent_verdict(minimal)
+
+        assert result["agent"] == "ranking"
+        assert result["ran"] is False
+        assert result["verdict"] == "inconclusive"
+        assert result["reason"] == "no reason provided"
+        assert result["queries"] == []
+        assert result["evidence"] == []
+        assert result["cost"] == {"queries": 0, "seconds": 0.0}
+
+    def test_empty_dict_gets_all_defaults(self):
+        """An empty dict should not crash — agent defaults to 'unknown'.
+
+        Even the most broken input should produce a valid, loggable payload.
+        This is the 'never crash the orchestrator' guarantee.
+        """
+        result = normalize_agent_verdict({})
+
+        assert result["agent"] == "unknown"
+        assert result["ran"] is False
+        assert result["verdict"] == "inconclusive"
+
+    def test_invalid_verdict_value_normalizes_to_inconclusive(self):
+        """An unrecognized verdict string should normalize to 'inconclusive'.
+
+        If an agent returns verdict='maybe' or some typo, the normalizer
+        clamps it to 'inconclusive' rather than letting garbage propagate.
+        Think of this like input validation at an API boundary.
+        """
+        bad_verdict = {"agent": "ranking", "verdict": "maybe"}
+        result = normalize_agent_verdict(bad_verdict)
+        assert result["verdict"] == "inconclusive"
+
+    def test_valid_verdict_values_preserved(self):
+        """All four valid verdict strings should survive normalization.
+
+        VALID_VERDICTS defines the contract: confirmed, rejected,
+        inconclusive, blocked. Each must pass through unchanged.
+        """
+        for valid_value in VALID_VERDICTS:
+            raw = {"agent": "ranking", "verdict": valid_value}
+            result = normalize_agent_verdict(raw)
+            assert result["verdict"] == valid_value, (
+                f"Valid verdict '{valid_value}' was mutated by normalizer"
+            )
+
+    def test_preserves_extra_keys(self):
+        """Extra keys beyond the schema should not be stripped.
+
+        Specialist agents may attach extra metadata (e.g., debug info,
+        timestamps). The normalizer should be additive-only — it fills
+        in missing keys but never removes existing ones.
+        """
+        with_extras = {
+            "agent": "ranking",
+            "debug_info": {"stack_trace": "..."},
+            "custom_field": 42,
+        }
+        result = normalize_agent_verdict(with_extras)
+        assert result["debug_info"] == {"stack_trace": "..."}
+        assert result["custom_field"] == 42
 

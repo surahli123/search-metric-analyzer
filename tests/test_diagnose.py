@@ -13,7 +13,7 @@ from tests.test_connector_investigator import (
     fake_inv,
     fake_rejecting_inv,
 )
-from tools.diagnose import (
+from core.diagnose import (
     ARCHETYPE_MAP,
     check_logging_artifact,
     check_decomposition_completeness,
@@ -140,7 +140,7 @@ class TestRunDiagnosis:
     """Test the full diagnosis pipeline."""
 
     def test_runs_on_decomposition_output(self, sample_metric_rows):
-        from tools.decompose import run_decomposition
+        from core.decompose import run_decomposition
         decomp = run_decomposition(sample_metric_rows, "click_quality_value",
                                    dimensions=["tenant_tier"])
         result = run_diagnosis(decomposition=decomp)
@@ -149,7 +149,7 @@ class TestRunDiagnosis:
         assert result["confidence"]["level"] in ["High", "Medium", "Low"]
 
     def test_includes_all_4_checks(self, sample_metric_rows):
-        from tools.decompose import run_decomposition
+        from core.decompose import run_decomposition
         decomp = run_decomposition(sample_metric_rows, "click_quality_value",
                                    dimensions=["tenant_tier"])
         result = run_diagnosis(decomposition=decomp)
@@ -1166,7 +1166,7 @@ class TestDiagnoseCLI:
 
         # Act: run the CLI
         result = subprocess.run(
-            [sys.executable, str(PROJECT_ROOT / "tools" / "diagnose.py"),
+            [sys.executable, str(PROJECT_ROOT / "core" / "diagnose.py"),
              "--input", str(input_file)],
             capture_output=True,
             text=True,
@@ -1185,7 +1185,7 @@ class TestDiagnoseCLI:
         fake_path = tmp_path / "nonexistent.json"
 
         result = subprocess.run(
-            [sys.executable, str(PROJECT_ROOT / "tools" / "diagnose.py"),
+            [sys.executable, str(PROJECT_ROOT / "core" / "diagnose.py"),
              "--input", str(fake_path)],
             capture_output=True,
             text=True,
@@ -1214,7 +1214,7 @@ class TestDiagnoseCLI:
         step_file.write_text(json.dumps(step_change))
 
         result = subprocess.run(
-            [sys.executable, str(PROJECT_ROOT / "tools" / "diagnose.py"),
+            [sys.executable, str(PROJECT_ROOT / "core" / "diagnose.py"),
              "--input", str(decomp_file),
              "--step-change-json", str(step_file)],
             capture_output=True,
@@ -1243,7 +1243,7 @@ class TestDiagnoseCLI:
 
         # Cause after metric change -> temporal HALT
         result = subprocess.run(
-            [sys.executable, str(PROJECT_ROOT / "tools" / "diagnose.py"),
+            [sys.executable, str(PROJECT_ROOT / "core" / "diagnose.py"),
              "--input", str(decomp_file),
              "--cause-day", "10",
              "--metric-change-day", "3"],
@@ -1268,7 +1268,7 @@ class TestDiagnoseCLI:
         fake_step = tmp_path / "nonexistent_step.json"
 
         result = subprocess.run(
-            [sys.executable, str(PROJECT_ROOT / "tools" / "diagnose.py"),
+            [sys.executable, str(PROJECT_ROOT / "core" / "diagnose.py"),
              "--input", str(decomp_file),
              "--step-change-json", str(fake_step)],
             capture_output=True,
@@ -1297,7 +1297,7 @@ class TestDiagnoseCLI:
         trust_gate_file.write_text(json.dumps(trust_gate))
 
         result = subprocess.run(
-            [sys.executable, str(PROJECT_ROOT / "tools" / "diagnose.py"),
+            [sys.executable, str(PROJECT_ROOT / "core" / "diagnose.py"),
              "--input", str(decomp_file),
              "--co-movement-json", str(co_movement_file),
              "--trust-gate-json", str(trust_gate_file)],
@@ -1751,7 +1751,7 @@ class TestArchetypeSubagentSpecs:
 
     def test_all_archetypes_have_confirms_if(self):
         """Every archetype must have a non-empty confirms_if list."""
-        from tools.diagnose import ARCHETYPE_MAP
+        from core.diagnose import ARCHETYPE_MAP
         for key, val in ARCHETYPE_MAP.items():
             assert "confirms_if" in val, f"{key} missing confirms_if"
             assert isinstance(val["confirms_if"], list), f"{key} confirms_if is not a list"
@@ -1759,7 +1759,7 @@ class TestArchetypeSubagentSpecs:
 
     def test_all_archetypes_have_rejects_if(self):
         """Every archetype must have a non-empty rejects_if list."""
-        from tools.diagnose import ARCHETYPE_MAP
+        from core.diagnose import ARCHETYPE_MAP
         for key, val in ARCHETYPE_MAP.items():
             assert "rejects_if" in val, f"{key} missing rejects_if"
             assert isinstance(val["rejects_if"], list), f"{key} rejects_if is not a list"
@@ -1772,14 +1772,14 @@ class TestArchetypeSubagentSpecs:
         instead of description_template, causing silent render failures.
         This test prevents that regression.
         """
-        from tools.diagnose import ARCHETYPE_MAP
+        from core.diagnose import ARCHETYPE_MAP
         for key, val in ARCHETYPE_MAP.items():
             assert "description_template" in val, \
                 f"{key} missing description_template (uses wrong key?)"
 
     def test_all_archetypes_have_action_items(self):
         """Every archetype must have action_items (list, may be empty for false alarm)."""
-        from tools.diagnose import ARCHETYPE_MAP
+        from core.diagnose import ARCHETYPE_MAP
         for key, val in ARCHETYPE_MAP.items():
             assert "action_items" in val, \
                 f"{key} missing action_items (uses wrong key?)"
@@ -1788,7 +1788,7 @@ class TestArchetypeSubagentSpecs:
 
     def test_confirms_and_rejects_are_strings(self):
         """Each entry in confirms_if and rejects_if must be a string."""
-        from tools.diagnose import ARCHETYPE_MAP
+        from core.diagnose import ARCHETYPE_MAP
         for key, val in ARCHETYPE_MAP.items():
             for i, item in enumerate(val["confirms_if"]):
                 assert isinstance(item, str), f"{key}.confirms_if[{i}] is not a string"

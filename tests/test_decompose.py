@@ -6,7 +6,7 @@ import sys
 import tempfile
 import pytest
 from pathlib import Path
-from tools.decompose import (
+from core.decompose import (
     _mean,
     _safe_float,
     _classify_severity,
@@ -603,7 +603,7 @@ class TestDecomposeCLI:
     def test_cli_outputs_valid_json(self, csv_file):
         """CLI should output valid JSON to stdout."""
         result = subprocess.run(
-            [sys.executable, "-m", "tools.decompose",
+            [sys.executable, "-m", "core.decompose",
              "--input", str(csv_file),
              "--metric", "click_quality_value",
              "--dimensions", "tenant_tier"],
@@ -618,7 +618,7 @@ class TestDecomposeCLI:
     def test_cli_missing_file_returns_error(self, tmp_path):
         """CLI should output an error JSON and exit code 1 for missing file."""
         result = subprocess.run(
-            [sys.executable, "-m", "tools.decompose",
+            [sys.executable, "-m", "core.decompose",
              "--input", str(tmp_path / "nonexistent.csv"),
              "--metric", "click_quality_value"],
             capture_output=True, text=True,
@@ -631,7 +631,7 @@ class TestDecomposeCLI:
     def test_cli_custom_dimensions(self, csv_file):
         """CLI should accept comma-separated dimensions."""
         result = subprocess.run(
-            [sys.executable, "-m", "tools.decompose",
+            [sys.executable, "-m", "core.decompose",
              "--input", str(csv_file),
              "--metric", "click_quality_value",
              "--dimensions", "tenant_tier,ai_enablement"],
@@ -646,7 +646,7 @@ class TestDecomposeCLI:
     def test_cli_aggregate_shows_correct_direction(self, csv_file):
         """CLI aggregate output should show the metric dropped."""
         result = subprocess.run(
-            [sys.executable, "-m", "tools.decompose",
+            [sys.executable, "-m", "core.decompose",
              "--input", str(csv_file),
              "--metric", "click_quality_value",
              "--dimensions", "tenant_tier"],

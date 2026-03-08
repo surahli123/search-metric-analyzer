@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any, Dict
 
-from tools.connector_investigator import ConnectorInvestigator
+from harness.connector_investigator import ConnectorInvestigator
 
 
 def decomp_high_confidence() -> Dict[str, Any]:
