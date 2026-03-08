@@ -1,28 +1,12 @@
 # Backlog — Search Metric Analyzer v2.0 Holistic Redesign
 
-Last updated: 2026-03-07
-
----
-
-## In Progress
-
-### Wave 2: Directory Restructure
-- [x] Rename `tools/` → `core/` (git mv, preserve history)
-- [x] Move `tools/agent_orchestrator.py` → `harness/orchestrator.py`
-- [x] Move `tools/connector_investigator.py` → `harness/connector_investigator.py`
-- [ ] Create `core/__init__.py` and `harness/__init__.py`
-- [ ] Update all imports in `tests/*.py` (~14 files)
-- [ ] Update all imports in `eval/*.py`
-- [ ] Update all imports in `generators/*.py`
-- [ ] Update CLI paths in `skills/search-metric-analyzer.md`
-- [ ] Fix `contribution_pct` naming ambiguity — check `decompose.py` output format, align `MixShiftResult`
-- [ ] Run full test suite — must stay at 694 passed, 21 skipped
+Last updated: 2026-03-08
 
 ---
 
 ## Upcoming
 
-### Wave 3: Trace Emission + Orchestrator
+### Wave 3: Trace Emission + Orchestrator (scope may change — parallel research in progress)
 - [ ] Add `trace: Optional[InvestigationTrace] = None` parameter to `core/anomaly.py` functions
 - [ ] Add trace emission to `core/decompose.py` functions
 - [ ] Add trace emission to `core/diagnose.py` functions
@@ -47,7 +31,7 @@ Last updated: 2026-03-07
 
 Priority: fix during the wave where they naturally fit.
 
-- [ ] `contribution_pct` naming — ratio (0.0-1.0) vs percentage (0-100). Fix during Wave 2 when wiring `decompose.py` output. (Important)
+- [ ] `contribution_pct` naming — ratio (0.0-1.0) vs percentage (0-100). Deferred to Wave 3 (confirmed no actual ambiguity — consistently 0-100). (Suggestion)
 - [ ] `constrained_by` field validation — add warning in `InvestigationTrace.emit()` when `swimlane == "llm_generated"` and `constrained_by` missing. Fix during Wave 3 when adding LLM spans. (Important)
 - [ ] Business rules return single violation — document as known limitation or change return type to `List[str]`. (Suggestion)
 - [ ] `narrative_data_coherence` false-negative bias — add docstring noting that mixed-direction text passes. (Suggestion)
@@ -70,6 +54,22 @@ Priority: fix during the wave where they naturally fit.
 ---
 
 ## Done
+
+### Wave 2: Directory Restructure (2026-03-08)
+- [x] Rename `tools/` → `core/` (git mv, preserve history)
+- [x] Move `tools/agent_orchestrator.py` → `harness/orchestrator.py`
+- [x] Move `tools/connector_investigator.py` → `harness/connector_investigator.py`
+- [x] Create `core/__init__.py` and `harness/__init__.py`
+- [x] Update all imports in `tests/*.py` (11 files)
+- [x] Update all imports in `eval/*.py` (2 files)
+- [x] Update CLI paths in `skills/search-metric-analyzer.md`
+- [x] Update `CLAUDE.md`, `README.md`, operational markdown docs
+- [x] Delete thin wrappers (`generate_synthetic_data.py`, `validate_scenarios.py`)
+- [x] Fix dead fallback import in `harness/orchestrator.py`
+- [x] Run full test suite — 694 passed, 21 skipped
+- [x] Run eval stress test — 6/6 GREEN, avg 91.7
+- [x] Code review — all findings addressed
+- [x] PR #4 opened
 
 ### Wave 1: Trace + Contracts (2026-03-07)
 - [x] Create `trace/` module (span.py, collector.py, schema.py)

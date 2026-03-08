@@ -5,35 +5,29 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
-## Eval Framework: Validation Rubrics for Retrospective + Prospective Eval (2026-03-07)
+## v2.0-alpha.3 — Holistic Redesign Wave 2: Directory Restructure (2026-03-08)
 
-Research session on validation/eval frameworks for LLM-based agent systems.
-Produced executable evaluation rubrics to validate the agent against real
-engineering investigation reports — addressing Eng lead questions about
-how to prove the system works.
+Pure rename/restructure — no logic changes. Aligns directory layout with v2 architecture.
 
-### Added
-- `eval/eval_rubric_approach_a.md` — Retrospective eval rubric
-  - 100-point scoring across 7 sections (B through G)
-  - Maps to the 4-stage pipeline (UNDERSTAND, HYPOTHESIZE, DISPATCH, SYNTHESIZE)
-  - Includes cross-stage checks for IC9 audit failure modes
-  - Critical failure flags for categorical failures (convincing wrong answer, hallucinated evidence)
-  - Selection criteria and aggregate reporting targets
-- `eval/eval_rubric_approach_b.md` — Prospective eval protocol
-  - Three operating modes for different evaluation contexts:
-    - Mode 1: Agent-First Audit (primary — for solo DS reviewing agent output)
-    - Mode 2: Delayed Agent Run (for establishing unbiased baseline)
-    - Mode 3: Engineer Proxy (for opportunistic eval when Eng investigates independently)
-  - Mode 1 scoring (P1a-P6a): first-draft accuracy, error detectability,
-    verification speedup, anchoring risk, final output quality
-  - Blind parallel protocol for Modes 2/3
-  - Aggregate tracking table and Eng lead reporting metrics
-  - Recommended phased rollout sequence
+### Changed
+- Renamed `tools/` → `core/` for 5 analysis tools (decompose, anomaly, diagnose, formatter, schema)
+- Moved `tools/agent_orchestrator.py` → `harness/orchestrator.py` (renamed)
+- Moved `tools/connector_investigator.py` → `harness/connector_investigator.py`
+- Updated all imports across 31 files (core, harness, tests, eval, docs, skill file)
+- Updated CLI paths in `skills/search-metric-analyzer.md` and `README.md`
+- Updated directory tree in `README.md` to reflect `core/` + `harness/` layout
+- Fixed dead fallback import in `harness/orchestrator.py` (stale `from .schema` try/except)
+- Fixed stale `tools/` references in `synthetic-validation-scenarios.md`, `README_synthetic_validation.md`
+- Updated test assertion messages in `test_skill_file.py` to reference `core/`
 
-### Context
-- Eng leads questioning validation/eval approach for the agent
-- Existing eval (`run_eval.py` + 6 scoring specs) covers deterministic Layer 1
-- New rubrics cover Layer 2 (human-scored, real cases) and Layer 3 (live investigations)
+### Removed
+- `tools/generate_synthetic_data.py` — thin wrapper, canonical copy in `generators/`
+- `tools/validate_scenarios.py` — thin wrapper, canonical copy in `generators/`
+- `tools/__init__.py` — replaced by `core/__init__.py` and `harness/__init__.py`
+
+### Tests
+- Suite status: `694 passed`, 21 skipped, 0 failures (unchanged)
+- Eval stress test: 6/6 GREEN, average 91.7/100
 
 ---
 
