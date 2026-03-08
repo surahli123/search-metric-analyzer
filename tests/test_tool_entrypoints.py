@@ -10,7 +10,8 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parent.parent
-TOOLS_DIR = ROOT / "tools"
+CORE_DIR = ROOT / "core"
+GENERATORS_DIR = ROOT / "generators"
 EVAL_DIR = ROOT / "eval"
 
 
@@ -21,13 +22,33 @@ EVAL_DIR = ROOT / "eval"
         "decompose.py",
         "diagnose.py",
         "formatter.py",
+    ],
+)
+def test_core_scripts_support_help(script_name: str):
+    """Direct script execution should work for help invocation."""
+    script_path = CORE_DIR / script_name
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--help"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    combined = f"{result.stdout}\n{result.stderr}".lower()
+    assert result.returncode == 0, combined
+    assert "usage" in combined
+
+
+@pytest.mark.parametrize(
+    "script_name",
+    [
         "generate_synthetic_data.py",
         "validate_scenarios.py",
     ],
 )
-def test_tool_scripts_support_help(script_name: str):
+def test_generator_scripts_support_help(script_name: str):
     """Direct script execution should work for help invocation."""
-    script_path = TOOLS_DIR / script_name
+    script_path = GENERATORS_DIR / script_name
     result = subprocess.run(
         [sys.executable, str(script_path), "--help"],
         capture_output=True,

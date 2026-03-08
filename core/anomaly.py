@@ -15,10 +15,10 @@ Design philosophy:
 - All output is JSON to stdout so Claude Code can parse it programmatically.
 
 Usage (CLI):
-    python tools/anomaly.py --input data.csv --metric click_quality_value
+    python core/anomaly.py --input data.csv --metric click_quality_value
 
 Usage (import):
-    from tools.anomaly import check_data_quality, detect_step_change
+    from core.anomaly import check_data_quality, detect_step_change
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
-    from tools.schema import normalize_rows
+    from core.schema import normalize_rows
 except ModuleNotFoundError:
     from schema import normalize_rows
 
@@ -73,7 +73,7 @@ def _load_co_movement_table() -> List[Dict[str, Any]]:
     import yaml
 
     # Resolve path relative to this file's location, not cwd.
-    # tools/anomaly.py -> project_root/data/knowledge/metric_definitions.yaml
+    # core/anomaly.py -> project_root/data/knowledge/metric_definitions.yaml
     project_root = Path(__file__).resolve().parent.parent
     yaml_path = project_root / "data" / "knowledge" / "metric_definitions.yaml"
 
@@ -514,9 +514,9 @@ def main() -> None:
     """CLI entrypoint: run anomaly detection on a CSV file.
 
     Example:
-        python tools/anomaly.py --input data.csv --metric click_quality_value
-        python tools/anomaly.py --input data.csv --check data_quality
-        python tools/anomaly.py --input data.csv --check co_movement \
+        python core/anomaly.py --input data.csv --metric click_quality_value
+        python core/anomaly.py --input data.csv --check data_quality
+        python core/anomaly.py --input data.csv --check co_movement \
             --directions '{"click_quality":"down","search_quality_success":"down",...}'
     """
     parser = argparse.ArgumentParser(

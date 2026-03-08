@@ -16,7 +16,7 @@ A diagnostic tool for Enterprise Search metric movements. Built for Senior Data 
   - S7 cannot resolve to single-cause high confidence.
   - S8 is always `blocked_by_data_quality`.
 - Eval scoring enforces `decision_status` contract checks (notably S7/S8 behavior).
-- Synthetic pipeline is canonical in `generators/*`; `tools/*` generator scripts are wrappers only.
+- Synthetic pipeline is canonical in `generators/*`; `core/*` generator scripts are wrappers only.
 - Connector Investigator spike contract:
   - runs only for `Medium`/`Low` diagnosed cases
   - bounded to max 3 checks with a 2-minute timeout budget
@@ -54,10 +54,10 @@ python3 eval/run_stress_test.py
 python3 eval/run_stress_test.py --enable-connector-spike
 
 # Run individual tools
-python3 tools/decompose.py --input data.csv --metric click_quality_value
-python3 tools/anomaly.py --input data.csv --metric click_quality_value --check data_quality
-python3 tools/diagnose.py --input decomposition.json --co-movement-json co_movement.json --trust-gate-json trust_gate.json
-python3 tools/formatter.py --input diagnosis.json
+python3 core/decompose.py --input data.csv --metric click_quality_value
+python3 core/anomaly.py --input data.csv --metric click_quality_value --check data_quality
+python3 core/diagnose.py --input decomposition.json --co-movement-json co_movement.json --trust-gate-json trust_gate.json
+python3 core/formatter.py --input diagnosis.json
 ```
 
 ## Project Structure
@@ -69,7 +69,7 @@ Search_Metric_Analyzer/
 │   │   ├── metric_definitions.yaml    # Metric formulas, noise profiles, co-movement patterns
 │   │   └── historical_patterns.yaml   # Known incident patterns, seasonal effects
 │   └── synthetic/                     # Generated test data (gitignored, regenerable)
-├── tools/
+├── core/
 │   ├── decompose.py                   # Kitagawa-Oaxaca decomposition + mix-shift
 │   ├── anomaly.py                     # Step-change detection, co-movement matching
 │   ├── diagnose.py                    # Archetype recognition, confidence scoring
@@ -77,6 +77,9 @@ Search_Metric_Analyzer/
 │   ├── schema.py                      # Canonical schema normalization + alias bridge
 │   ├── generate_synthetic_data.py     # Wrapper -> generators/generate_synthetic_data.py
 │   └── validate_scenarios.py          # Wrapper -> generators/validate_scenarios.py
+├── harness/
+│   ├── orchestrator.py                # Multi-agent orchestrator for diagnosis verification
+│   └── connector_investigator.py      # Connector-level investigation for medium/low cases
 ├── generators/
 │   ├── generate_synthetic_data.py     # Canonical synthetic data generator (S0-S12)
 │   └── validate_scenarios.py          # Canonical synthetic validator
@@ -132,5 +135,5 @@ Areas still pending real-world calibration:
 - Metric noise profiles (weekly standard deviations)
 - Per-metric severity thresholds
 - Real incident scenarios for eval
-- QSR formula exact weights/floors
+- Search metric formula exact weights/floors
 

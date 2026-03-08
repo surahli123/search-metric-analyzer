@@ -37,6 +37,75 @@ how to prove the system works.
 
 ---
 
+## v2.0-alpha.2 — Holistic Redesign Wave 1: Trace + Contracts (2026-03-07)
+
+Wave 1 of the v2.0 holistic redesign. IC9-reviewed architectural plan, new trace
+system and stage contracts with 11 domain-aware business rules. No existing code
+touched — all pure additive.
+
+### Added
+- `trace/` module (4 files)
+  - `TraceSpan` and `SeamSpan` TypedDicts with dual-audience design (human_summary + agent_context)
+  - `InvestigationTrace` collector with emit, emit_seam, token-budgeted `agent_context_for()`, JSON roundtrip
+  - Trace completeness validation — checks all 4 IC9 Invisible Decisions are traced
+- `contracts/` module (6 files)
+  - Stage contracts: `UnderstandResult`, `HypothesisSet`, `FindingSet`, `SynthesisReport`
+  - `MixShiftResult` TypedDict — first-class mix-shift representation (Amendment 3)
+  - `seam_validator.py` — 11 business rules across 4 stages, tiered gate system, CLI interface
+  - Key domain rules: AI-CQ co-movement consistency (Amendment 2), mix-shift consideration, P0 proportionality
+- `tests/test_trace.py` — 57 tests for trace module
+- `tests/test_contracts.py` — 87 tests for contracts module
+- `docs/research/IC9_review_FULL_PIPELINE_assessment.md` — IC9 audit reference
+- `docs/research/openai-harness-engineering-notes.md` — harness engineering reference stub
+- `docs/talks/` — tech talk scripts (HTML + Markdown)
+- `docs/plans/2026-03-07-v2-holistic-redesign.md` — v2 design doc
+- `reviews/v2-plan-review/` — IC9-calibrated review (DS Lead, PM Lead, Principal AI Eng + synthesis)
+- `.worktrees/` added to `.gitignore` for isolated development
+
+### Fixed
+- `rule_effect_size_proportionality` — changed from substring to word-boundary regex matching to prevent false positives ("minority", "smaller")
+- Updated `validate_seam` signature in design doc to match implementation (`stage: str` instead of `schema_class: Type`)
+
+---
+
+## v2.0-alpha.1 — Phase 2.1 Foundation: Multi-Agent Orchestrator (2026-03-07)
+
+Phase 2.1 foundation layer: typed schemas, orchestrator skeleton, and contract
+tests for the multi-agent diagnosis system. All using fake agents — no changes
+to the existing diagnosis pipeline or CLI.
+
+### Added
+- `tools/schema.py`
+  - `AgentVerdict` TypedDict — normalized payload contract for all specialist agents
+  - `OrchestrationResult` TypedDict — top-level orchestrator output shape
+  - `VALID_VERDICTS` set (`confirmed|rejected|inconclusive|blocked`)
+  - `normalize_agent_verdict()` — safe-default normalizer for raw agent payloads
+- `tools/agent_orchestrator.py` (new module)
+  - `orchestrate()` — main entry point, post-process hook pattern
+  - Agent selection gate: only runs for `diagnosed` + `Medium|Low` confidence
+  - Sequential agent runner with per-agent error isolation and global timeout
+  - Deterministic fusion policy: `blocked > rejected > confirmed > inconclusive`
+  - Run log for reproducibility (agent, started, ended, verdict)
+- `tests/test_agent_orchestrator.py` — 21 contract tests across 4 categories:
+  - Agent selection gate (6 tests)
+  - Sequential execution with timeout + error handling (5 tests)
+  - Fusion policy (8 tests)
+  - Backward compatibility (2 tests)
+- `tests/test_schema.py` — 6 new schema contract tests
+- `docs/plans/2026-02-23-phase2-1-foundation-design.md` — approved design doc
+- `docs/plans/2026-02-23-phase2-1-implementation-plan.md` — TDD implementation plan
+
+### Unchanged
+- `tools/diagnose.py` — zero modifications, all existing contracts preserved
+- All 544 existing tests pass without modification
+- Stress test scores identical (6/6 GREEN, avg 91.7/100)
+
+### Tests
+- Suite status: `571 passed` (544 existing + 27 new), 0 failures
+>>>>>>> origin/main
+
+---
+
 ## v1.5.4 — Minimal Multi-Agent Bridge Spike (2026-02-23)
 
 Forward-port + completion pass for the v1.5 minimal connector bridge.

@@ -19,10 +19,10 @@ DESIGN PRINCIPLES (from Section 9 of the design doc):
 - NO anti-patterns: no hedging, no passive voice, no data dumps
 
 Usage (CLI):
-    python tools/formatter.py --input diagnosis.json
+    python core/formatter.py --input diagnosis.json
 
 Usage (import):
-    from tools.formatter import generate_slack_message, generate_short_report
+    from core.formatter import generate_slack_message, generate_short_report
     slack_msg = generate_slack_message(diagnosis_dict)
     report = generate_short_report(diagnosis_dict)
 
@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
-    from tools.schema import normalize_diagnosis_payload
+    from core.schema import normalize_diagnosis_payload
 except ModuleNotFoundError:
     from schema import normalize_diagnosis_payload
 
@@ -81,7 +81,7 @@ def _find_project_root() -> Path:
         if (current / "CLAUDE.md").exists():
             return current
         current = current.parent
-    # Fallback: assume tools/ is one level below root
+    # Fallback: assume core/ is one level below root
     return Path(__file__).resolve().parent.parent
 
 

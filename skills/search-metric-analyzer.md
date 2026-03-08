@@ -22,10 +22,10 @@ Do not improvise alternative workflows.
 Before starting, confirm these resources are available:
 
 - **Python tools** (CLI scripts that output JSON to stdout):
-  - `tools/decompose.py` -- dimensional decomposition + mix-shift analysis
-  - `tools/anomaly.py` -- data quality gate, step-change detection, co-movement matching, baseline comparison
-  - `tools/diagnose.py` -- 4 validation checks + confidence scoring
-  - `tools/formatter.py` -- Slack message + short report generation
+  - `core/decompose.py` -- dimensional decomposition + mix-shift analysis
+  - `core/anomaly.py` -- data quality gate, step-change detection, co-movement matching, baseline comparison
+  - `core/diagnose.py` -- 4 validation checks + confidence scoring
+  - `core/formatter.py` -- Slack message + short report generation
 - **Knowledge files** (domain-encoded YAML):
   - `data/knowledge/metric_definitions.yaml` -- metric formulas, relationships, baselines, co-movement diagnostic table
   - `data/knowledge/historical_patterns.yaml` -- seasonal patterns, past incidents, diagnostic shortcuts
@@ -78,7 +78,7 @@ Legacy aliases (`dlctr_value`, `qsr_value`, `sain_trigger`, `sain_success`) are 
 Run the data quality check FIRST. Bad data makes all analysis unreliable.
 
 ```bash
-python3 tools/anomaly.py --input {data_file} --check data_quality
+python3 core/anomaly.py --input {data_file} --check data_quality
 ```
 
 **Decision:**
@@ -89,7 +89,7 @@ python3 tools/anomaly.py --input {data_file} --check data_quality
 ### 1c. Compute Headline Delta
 
 ```bash
-python3 tools/decompose.py --input {data_file} --metric {metric_field} --dimensions tenant_tier
+python3 core/decompose.py --input {data_file} --metric {metric_field} --dimensions tenant_tier
 ```
 
 Read the `aggregate` section of the JSON output. Extract:
@@ -102,7 +102,7 @@ Read the `aggregate` section of the JSON output. Extract:
 Check the directions of related metrics to narrow the hypothesis space:
 
 ```bash
-python3 tools/anomaly.py --input {data_file} --check co_movement --directions '{"click_quality":"{direction}","search_quality_success":"{direction}","ai_trigger":"{direction}","ai_success":"{direction}","zero_result_rate":"{direction}","latency":"{direction}"}'
+python3 core/anomaly.py --input {data_file} --check co_movement --directions '{"click_quality":"{direction}","search_quality_success":"{direction}","ai_trigger":"{direction}","ai_success":"{direction}","zero_result_rate":"{direction}","latency":"{direction}"}'
 ```
 
 Compare the observed pattern against the co-movement diagnostic table
@@ -153,7 +153,7 @@ Report to the user:
 Run decomposition across all Enterprise Search dimensions:
 
 ```bash
-python3 tools/decompose.py --input {data_file} --metric {metric_field} --dimensions tenant_tier,ai_enablement,industry_vertical,connector_type,query_type,position_bucket
+python3 core/decompose.py --input {data_file} --metric {metric_field} --dimensions tenant_tier,ai_enablement,industry_vertical,connector_type,query_type,position_bucket
 ```
 
 Read the JSON output:
@@ -219,7 +219,7 @@ simultaneous causes? (Common in Enterprise Search -- e.g., AI rollout + tenant c
 Use the decomposition output (save as JSON first) as input to diagnose.py:
 
 ```bash
-python3 tools/diagnose.py --input {decomposition_result_json} --co-movement-json {co_movement_result_json} --trust-gate-json {trust_gate_result_json}
+python3 core/diagnose.py --input {decomposition_result_json} --co-movement-json {co_movement_result_json} --trust-gate-json {trust_gate_result_json}
 ```
 
 This runs all 4 checks automatically:
@@ -236,13 +236,13 @@ This runs all 4 checks automatically:
 If you suspect a logging artifact, run step-change detection separately:
 
 ```bash
-python3 tools/anomaly.py --input {data_file} --check step_change --metric {metric_field}
+python3 core/anomaly.py --input {data_file} --check step_change --metric {metric_field}
 ```
 
 Then pass the result to diagnose.py:
 
 ```bash
-python3 tools/diagnose.py --input {decomposition_result_json} --step-change-json {step_change_result_json} --co-movement-json {co_movement_result_json} --trust-gate-json {trust_gate_result_json}
+python3 core/diagnose.py --input {decomposition_result_json} --step-change-json {step_change_result_json} --co-movement-json {co_movement_result_json} --trust-gate-json {trust_gate_result_json}
 ```
 
 ### 3d. Decision Status Contract
@@ -276,7 +276,7 @@ Always state: "Would upgrade to {level} if {specific condition}."
 ### 4a. Generate Formatted Output
 
 ```bash
-python3 tools/formatter.py --input {diagnosis_result_json}
+python3 core/formatter.py --input {diagnosis_result_json}
 ```
 
 This produces both `slack_message` and `short_report` in a single JSON output.
