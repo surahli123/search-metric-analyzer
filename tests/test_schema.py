@@ -2,7 +2,7 @@
 
 import pytest
 
-from tools.schema import (
+from core.schema import (
     normalize_metric_name,
     normalize_row,
     normalize_rows,

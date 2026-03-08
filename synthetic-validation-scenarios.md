@@ -146,13 +146,13 @@ No new raw data tables are required.
 Run from `/Users/surahli/Documents/New project/Search_Metric_Analyzer`:
 
 1. Generate starter CSV templates:
-`python3 tools/generate_synthetic_data.py --write-templates-only`
+`python3 generators/generate_synthetic_data.py --write-templates-only`
 
 2. Generate synthetic data (default 20,000 rows per scenario):
-`python3 tools/generate_synthetic_data.py --rows-per-scenario 20000 --output-dir data/synthetic`
+`python3 generators/generate_synthetic_data.py --rows-per-scenario 20000 --output-dir data/synthetic`
 
 3. Validate scenarios and emit reports:
-`python3 tools/validate_scenarios.py --input-dir data/synthetic --output-dir data/synthetic`
+`python3 generators/validate_scenarios.py --input-dir data/synthetic --output-dir data/synthetic`
 
 Expected artifacts:
 - `data/synthetic/synthetic_search_session_log.csv`

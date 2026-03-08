@@ -15,7 +15,7 @@ Enterprise Search (like Glean). Key concepts:
 - Python 3.10+, stdlib + PyYAML only
 - Heavy comments explaining WHY, not just WHAT
 - Small functions, small files
-- All tools are CLI scripts: `python tools/decompose.py --input data.csv`
+- All tools are CLI scripts: `python core/decompose.py --input data.csv`
 - Output is always JSON to stdout (Claude Code reads it)
 
 ## Key Files

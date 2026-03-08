@@ -5,7 +5,7 @@ import subprocess
 import sys
 import pytest
 from pathlib import Path
-from tools.anomaly import (
+from core.anomaly import (
     check_data_quality,
     detect_step_change,
     _direction_matches,
@@ -596,7 +596,7 @@ class TestDecomposeToAnomalyIntegration:
     def test_aggregate_mean_feeds_into_baseline_check(self, sample_metric_rows):
         """The aggregate current_mean from decompose can be checked against
         a known baseline using check_against_baseline."""
-        from tools.decompose import compute_aggregate_delta
+        from core.decompose import compute_aggregate_delta
 
         baseline = [r for r in sample_metric_rows if r["period"] == "baseline"]
         current = [r for r in sample_metric_rows if r["period"] == "current"]
@@ -624,7 +624,7 @@ class TestDecomposeToAnomalyIntegration:
     def test_segment_means_feed_into_baseline_check(self, sample_metric_rows):
         """Per-segment means from decompose can be checked against
         segment-specific baselines."""
-        from tools.decompose import decompose_by_dimension
+        from core.decompose import decompose_by_dimension
 
         baseline = [r for r in sample_metric_rows if r["period"] == "baseline"]
         current = [r for r in sample_metric_rows if r["period"] == "current"]
@@ -653,7 +653,7 @@ class TestDecomposeToAnomalyIntegration:
     def test_full_pipeline_decompose_then_anomaly(self, sample_metric_rows):
         """Full pipeline: run_decomposition -> extract signal -> anomaly checks.
         This is the end-to-end flow Claude Code would orchestrate."""
-        from tools.decompose import run_decomposition
+        from core.decompose import run_decomposition
 
         # Step 1: Full decomposition
         result = run_decomposition(
@@ -683,7 +683,7 @@ class TestDecomposeToAnomalyIntegration:
         """When mix-shift is dominant, the aggregate anomaly check result
         should be interpreted differently (it's compositional, not behavioral).
         This test verifies the pipeline produces coherent results."""
-        from tools.decompose import compute_aggregate_delta, compute_mix_shift
+        from core.decompose import compute_aggregate_delta, compute_mix_shift
 
         baseline = [r for r in sample_mix_shift_rows if r["period"] == "baseline"]
         current = [r for r in sample_mix_shift_rows if r["period"] == "current"]
@@ -740,7 +740,7 @@ class TestAnomalyCLI:
     def test_cli_data_quality_check_outputs_json(self, csv_file):
         """Data quality check should output valid JSON with status field."""
         result = subprocess.run(
-            [sys.executable, "-m", "tools.anomaly",
+            [sys.executable, "-m", "core.anomaly",
              "--input", str(csv_file),
              "--check", "data_quality"],
             capture_output=True, text=True,
@@ -754,7 +754,7 @@ class TestAnomalyCLI:
     def test_cli_step_change_check(self, csv_file):
         """Step-change check should detect the drop in the test data."""
         result = subprocess.run(
-            [sys.executable, "-m", "tools.anomaly",
+            [sys.executable, "-m", "core.anomaly",
              "--input", str(csv_file),
              "--check", "step_change",
              "--metric", "click_quality_value"],
@@ -769,7 +769,7 @@ class TestAnomalyCLI:
     def test_cli_baseline_check(self, csv_file):
         """Baseline check with provided mean and std should output z-score."""
         result = subprocess.run(
-            [sys.executable, "-m", "tools.anomaly",
+            [sys.executable, "-m", "core.anomaly",
              "--input", str(csv_file),
              "--check", "baseline",
              "--metric", "click_quality_value",
@@ -787,7 +787,7 @@ class TestAnomalyCLI:
     def test_cli_baseline_missing_args_returns_error(self, csv_file):
         """Baseline check without mean/std should return an error message."""
         result = subprocess.run(
-            [sys.executable, "-m", "tools.anomaly",
+            [sys.executable, "-m", "core.anomaly",
              "--input", str(csv_file),
              "--check", "baseline",
              "--metric", "click_quality_value"],
@@ -806,7 +806,7 @@ class TestAnomalyCLI:
             "zero_result_rate": "stable", "latency": "stable",
         })
         result = subprocess.run(
-            [sys.executable, "-m", "tools.anomaly",
+            [sys.executable, "-m", "core.anomaly",
              "--input", str(csv_file),
              "--check", "co_movement",
              "--directions", directions],
@@ -821,7 +821,7 @@ class TestAnomalyCLI:
     def test_cli_co_movement_without_directions_returns_error(self, csv_file):
         """Co-movement check without --directions should return error."""
         result = subprocess.run(
-            [sys.executable, "-m", "tools.anomaly",
+            [sys.executable, "-m", "core.anomaly",
              "--input", str(csv_file),
              "--check", "co_movement"],
             capture_output=True, text=True,
@@ -839,7 +839,7 @@ class TestAnomalyCLI:
             "zero_result_rate": "stable", "latency": "stable",
         })
         result = subprocess.run(
-            [sys.executable, "-m", "tools.anomaly",
+            [sys.executable, "-m", "core.anomaly",
              "--input", str(csv_file),
              "--check", "all",
              "--metric", "click_quality_value",

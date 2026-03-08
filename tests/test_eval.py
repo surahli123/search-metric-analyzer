@@ -337,7 +337,7 @@ class TestEvalRunner:
         }
 
         # Format the diagnosis output (simulating what the formatter produces)
-        from tools.formatter import format_diagnosis_output
+        from core.formatter import format_diagnosis_output
         formatted = format_diagnosis_output(mock_diagnosis)
 
         result = module.score_single_run(case1_spec, mock_diagnosis, formatted)
@@ -417,7 +417,7 @@ class TestEvalRunner:
             "action_items": [],
         }
 
-        from tools.formatter import format_diagnosis_output
+        from core.formatter import format_diagnosis_output
         formatted = format_diagnosis_output(bad_diagnosis)
 
         result = module.score_single_run(case1_spec, bad_diagnosis, formatted)
@@ -471,7 +471,7 @@ class TestEvalRunner:
             "action_items": [],
         }
 
-        from tools.formatter import format_diagnosis_output
+        from core.formatter import format_diagnosis_output
         formatted = format_diagnosis_output(hedging_diagnosis)
 
         result = module.score_single_run(case1_spec, hedging_diagnosis, formatted)
@@ -528,7 +528,7 @@ class TestEvalRunner:
             ],
         }
 
-        from tools.formatter import format_diagnosis_output
+        from core.formatter import format_diagnosis_output
 
         formatted = format_diagnosis_output(diagnosis)
         result = module.score_single_run(case3_spec, diagnosis, formatted)
@@ -585,7 +585,7 @@ class TestEvalRunner:
             ],
         }
 
-        from tools.formatter import format_diagnosis_output
+        from core.formatter import format_diagnosis_output
 
         formatted = format_diagnosis_output(diagnosis)
         result = module.score_single_run(case3_spec, diagnosis, formatted)
@@ -642,7 +642,7 @@ class TestEvalRunner:
             },
         }
 
-        from tools.formatter import format_diagnosis_output
+        from core.formatter import format_diagnosis_output
 
         formatted = format_diagnosis_output(diagnosis)
         result = module.score_single_run(case6_spec, diagnosis, formatted)
@@ -698,7 +698,7 @@ class TestEvalRunner:
             },
         }
 
-        from tools.formatter import format_diagnosis_output
+        from core.formatter import format_diagnosis_output
 
         formatted = format_diagnosis_output(diagnosis)
         result = module.score_single_run(case6_spec, diagnosis, formatted)
@@ -756,7 +756,7 @@ class TestEvalRunner:
             ],
         }
 
-        from tools.formatter import format_diagnosis_output
+        from core.formatter import format_diagnosis_output
 
         formatted = format_diagnosis_output(diagnosis)
         result = module.score_single_run(case4_spec, diagnosis, formatted)

@@ -44,7 +44,7 @@ python3 generators/validate_scenarios.py --input-dir data/synthetic --output-dir
   - `S7` cannot produce a single-cause high-confidence outcome.
   - `S8` is always forced to `blocked_by_data_quality`.
 - Long-click is computed from next query in the same session using the 40-second rule.
-- `tools/generate_synthetic_data.py` and `tools/validate_scenarios.py` are wrapper entrypoints that delegate to `generators/*`.
+- Canonical scripts live in `generators/generate_synthetic_data.py` and `generators/validate_scenarios.py` (the old `tools/` wrappers have been removed).
 
 ## Troubleshooting
 - If script execution fails, rerun with explicit paths from repo root.

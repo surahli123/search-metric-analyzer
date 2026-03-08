@@ -12,10 +12,10 @@ In Enterprise Search, aggregate metric drops often have simple explanations:
 Distinguishing these two is critical because they require different responses.
 
 Usage (CLI):
-    python tools/decompose.py --input data.csv --metric click_quality_value --dimensions tenant_tier,ai_enablement
+    python core/decompose.py --input data.csv --metric click_quality_value --dimensions tenant_tier,ai_enablement
 
 Usage (from Python):
-    from tools.decompose import run_decomposition
+    from core.decompose import run_decomposition
     result = run_decomposition(rows, "click_quality_value", dimensions=["tenant_tier"])
 
 Output: JSON to stdout (Claude Code reads this).
@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
-    from tools.schema import normalize_metric_name, normalize_rows
+    from core.schema import normalize_metric_name, normalize_rows
 except ModuleNotFoundError:
     from schema import normalize_metric_name, normalize_rows
 

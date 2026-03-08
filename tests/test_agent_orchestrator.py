@@ -21,8 +21,8 @@ import time
 
 import pytest
 
-from tools.agent_orchestrator import orchestrate, DEFAULT_CONFIG
-from tools.schema import normalize_agent_verdict, VALID_VERDICTS
+from harness.orchestrator import orchestrate, DEFAULT_CONFIG
+from core.schema import normalize_agent_verdict, VALID_VERDICTS
 
 
 # ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ from tools.schema import normalize_agent_verdict, VALID_VERDICTS
 def _make_diagnosis(decision_status="diagnosed", confidence_level="Medium"):
     """Build a minimal diagnosis result for testing.
 
-    This mirrors the shape produced by tools/diagnose.py::run_diagnosis().
+    This mirrors the shape produced by core/diagnose.py::run_diagnosis().
     Only includes fields the orchestrator actually reads, keeping tests
     focused on orchestrator behavior rather than diagnosis internals.
     """

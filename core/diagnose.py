@@ -16,10 +16,10 @@ But that's not enough -- you need to validate the diagnosis:
 Only after passing these checks can we confidently assign a root cause.
 
 Usage (CLI):
-    python tools/diagnose.py --input decomposition.json
+    python core/diagnose.py --input decomposition.json
 
 Usage (from Python):
-    from tools.diagnose import run_diagnosis
+    from core.diagnose import run_diagnosis
     result = run_diagnosis(decomposition=decomp_output)
 
 Output: JSON to stdout (Claude Code reads this).
@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
-    from tools.schema import normalize_diagnosis_payload, normalize_metric_name
+    from core.schema import normalize_diagnosis_payload, normalize_metric_name
 except ModuleNotFoundError:
     from schema import normalize_diagnosis_payload, normalize_metric_name
 

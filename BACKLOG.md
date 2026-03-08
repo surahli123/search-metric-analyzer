@@ -7,9 +7,9 @@ Last updated: 2026-03-07
 ## In Progress
 
 ### Wave 2: Directory Restructure
-- [ ] Rename `tools/` → `core/` (git mv, preserve history)
-- [ ] Move `tools/agent_orchestrator.py` → `harness/orchestrator.py`
-- [ ] Move `tools/connector_investigator.py` → `harness/connector_investigator.py`
+- [x] Rename `tools/` → `core/` (git mv, preserve history)
+- [x] Move `tools/agent_orchestrator.py` → `harness/orchestrator.py`
+- [x] Move `tools/connector_investigator.py` → `harness/connector_investigator.py`
 - [ ] Create `core/__init__.py` and `harness/__init__.py`
 - [ ] Update all imports in `tests/*.py` (~14 files)
 - [ ] Update all imports in `eval/*.py`
