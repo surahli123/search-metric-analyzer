@@ -713,3 +713,10 @@ class TestDecomposeTraceEmission:
         spans = trace.spans_for_stage("UNDERSTAND")
         ms_spans = [s for s in spans if s["decision"] == "mix_shift_significance"]
         assert len(ms_spans) == 1
+
+    def test_no_spans_emitted_on_aggregate_error(self):
+        """When decomposition errors (empty data), no trace spans should be emitted."""
+        from trace.collector import InvestigationTrace
+        trace = InvestigationTrace(question="test")
+        run_decomposition([], "click_quality_value", dimensions=["tier"], trace=trace)
+        assert len(trace.spans_for_stage("UNDERSTAND")) == 0

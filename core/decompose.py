@@ -36,6 +36,8 @@ try:
 except ModuleNotFoundError:
     from schema import normalize_metric_name, normalize_rows
 
+from trace.helpers import emit_deterministic_span
+
 
 # ──────────────────────────────────────────────────
 # Severity classification thresholds
@@ -420,10 +422,6 @@ def run_decomposition(
     # Split into baseline and current periods
     baseline = [r for r in rows if r.get(period_field) == baseline_period]
     current = [r for r in rows if r.get(period_field) == current_period]
-
-    # Lazy import: only needed when trace is provided, keeps core/ decoupled
-    # from trace/ at module level (no import at top of file)
-    from trace.helpers import emit_deterministic_span
 
     # Step 1: Headline delta -- "Click Quality dropped 6.25% WoW"
     aggregate = compute_aggregate_delta(baseline, current, metric_field)
