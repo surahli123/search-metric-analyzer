@@ -13,3 +13,4 @@ The trace system captures 4 IC9 "Invisible Decisions":
 
 from trace.span import TraceSpan, SeamSpan
 from trace.collector import InvestigationTrace
+from trace.helpers import emit_deterministic_span

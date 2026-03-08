@@ -2072,3 +2072,51 @@ class TestVerifyDiagnosis:
         result = run_diagnosis(decomposition=decomposition)
         assert "verification_warnings" in result
         assert isinstance(result["verification_warnings"], list)
+
+
+class TestDiagnoseTraceEmission:
+    """Trace emission for diagnosis pipeline."""
+
+    def _make_decomposition(self):
+        """Minimal decomposition result for diagnosis."""
+        return {
+            "aggregate": {
+                "baseline_mean": 0.70, "current_mean": 0.65,
+                "absolute_delta": -0.05, "relative_delta_pct": -7.1,
+                "severity": "P1", "direction": "down",
+            },
+            "dimensional_breakdown": {"tier": {
+                "segments": [{"segment": "enterprise", "contribution_pct": 80}],
+                "dominant_segment": "enterprise", "dominant_contribution_pct": 80,
+            }},
+            "mix_shift": {"tier": {"mix_shift_contribution_pct": 10, "flag": None}},
+        }
+
+    def test_no_trace_returns_same_output(self):
+        from trace.collector import InvestigationTrace
+        decomp = self._make_decomposition()
+        result_without = run_diagnosis(decomp)
+        trace = InvestigationTrace(question="test")
+        result_with = run_diagnosis(decomp, trace=trace)
+        # Core fields should match (trace doesn't change diagnosis logic)
+        assert result_without["decision_status"] == result_with["decision_status"]
+        assert result_without["confidence"]["level"] == result_with["confidence"]["level"]
+
+    def test_emits_archetype_span(self):
+        from trace.collector import InvestigationTrace
+        decomp = self._make_decomposition()
+        trace = InvestigationTrace(question="CQ drop")
+        run_diagnosis(decomp, trace=trace)
+        spans = trace.spans_for_stage("UNDERSTAND")
+        arch_spans = [s for s in spans if s["decision"] == "archetype"]
+        assert len(arch_spans) == 1
+
+    def test_emits_confidence_span(self):
+        from trace.collector import InvestigationTrace
+        decomp = self._make_decomposition()
+        trace = InvestigationTrace(question="CQ drop")
+        run_diagnosis(decomp, trace=trace)
+        spans = trace.spans_for_stage("UNDERSTAND")
+        conf_spans = [s for s in spans if s["decision"] == "confidence_level"]
+        assert len(conf_spans) == 1
+        assert conf_spans[0]["value"] in ("High", "Medium", "Low")

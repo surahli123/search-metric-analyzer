@@ -1,0 +1,25 @@
+# data/knowledge/corrections.yaml
+#
+# Institutional memory of diagnostic mistakes.
+# Three capture methods:
+#   1. CLI:  python3 core/corrections.py --add --metric X --original Y --corrected-to Z ...
+#   2. Auto: Orchestrator appends when connector SQL queries fail (source: sql_error)
+#   3. Skill: Post-diagnosis feedback prompt saves via CLI (source: skill_feedback)
+#
+# Schema: metric, original_archetype, corrected_to, corrected_by, date, context, lesson, source
+
+corrections:
+  - date: "2026-02-15"
+    metric: "click_quality"
+    original_archetype: "ranking_regression"
+    corrected_to: "mix_shift"
+    corrected_by: "DS Lead"
+    source: "user_correction"
+    context: >
+      CQ drop was initially attributed to ranking model regression but was
+      actually caused by a large enterprise tenant migrating 40% of their
+      traffic from desktop to mobile. Mobile segment has inherently lower
+      CQ due to UI constraints, not quality issues.
+    lesson: >
+      When CQ drops are concentrated in a single tenant, always check
+      traffic platform mix before attributing to ranking changes.

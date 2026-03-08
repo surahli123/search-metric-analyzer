@@ -1104,3 +1104,235 @@ class TestGateTierConfig:
     def test_synthesize_is_retry(self):
         """SYNTHESIZE must be retry — missing section is usually fixable."""
         assert GATE_TIERS["SYNTHESIZE"] == "retry"
+
+
+# =============================================================================
+# TestRemediationMessages — every violation must include actionable guidance
+# =============================================================================
+
+class TestRemediationMessages:
+    """Every violation message must include actionable remediation guidance.
+
+    Why this matters: violations are read by LLMs (in Mode B) and DSs (in Mode A).
+    Saying "something is wrong" without "here's how to fix it" creates a dead end.
+    Each violation should end with an imperative sentence (a verb telling the agent
+    what to DO).
+    """
+
+    # -- Broad coverage: every rule's violation contains a remediation verb ------
+
+    def test_all_violations_contain_remediation_verb(self):
+        """Each violation string should contain an imperative action verb.
+
+        This is the master test: trigger every rule and verify the violation
+        message includes at least one actionable verb from our remediation
+        vocabulary.
+        """
+        # Remediation verbs — these are the imperative verbs we expect
+        # in remediation suffixes (e.g., "Recheck the data source...")
+        remediation_verbs = [
+            "recheck", "present", "set", "add", "replace", "include",
+            "populate", "define", "mark", "revise", "state", "generate",
+        ]
+
+        # UNDERSTAND rules
+        v1 = rule_data_quality_not_failed({"data_quality_status": "fail"})
+        assert v1 is not None
+        assert any(word in v1.lower() for word in remediation_verbs), (
+            f"data_quality violation lacks remediation verb: {v1}"
+        )
+
+        v2 = rule_metric_direction_set({"metric_direction": ""})
+        assert v2 is not None
+        assert "set" in v2.lower(), (
+            f"metric_direction (empty) violation lacks 'set' verb: {v2}"
+        )
+
+        # HYPOTHESIZE rules
+        v3 = rule_min_three_hypotheses({"hypotheses": [{"hypothesis_id": "h1"}, {"hypothesis_id": "h2"}]})
+        assert v3 is not None
+        assert any(word in v3.lower() for word in remediation_verbs), (
+            f"min_three_hypotheses violation lacks remediation verb: {v3}"
+        )
+
+        v4 = rule_all_have_confirms_if({"hypotheses": [{"hypothesis_id": "h1"}]})
+        assert v4 is not None
+        assert any(word in v4.lower() for word in remediation_verbs), (
+            f"all_have_confirms_if violation lacks remediation verb: {v4}"
+        )
+
+        v5 = rule_has_contrarian_hypothesis({
+            "hypotheses": [{"is_contrarian": False}, {"is_contrarian": False}, {"is_contrarian": False}]
+        })
+        assert v5 is not None
+        assert any(word in v5.lower() for word in remediation_verbs), (
+            f"has_contrarian violation lacks remediation verb: {v5}"
+        )
+
+        v6 = rule_expected_magnitude_present({
+            "hypotheses": [{"hypothesis_id": "h1"}]
+        })
+        assert v6 is not None
+        assert any(word in v6.lower() for word in remediation_verbs), (
+            f"expected_magnitude violation lacks remediation verb: {v6}"
+        )
+
+        # DISPATCH rules
+        v7 = rule_each_finding_has_evidence({
+            "findings": [{"agent_name": "test", "hypothesis_id": "h1", "evidence": []}]
+        })
+        assert v7 is not None
+        assert any(word in v7.lower() for word in remediation_verbs), (
+            f"each_finding_has_evidence violation lacks remediation verb: {v7}"
+        )
+
+        v8 = rule_narrative_data_coherence({
+            "findings": [{
+                "hypothesis_id": "h1",
+                "narrative": "The metric dropped significantly",
+                "evidence": [{"direction": "up"}],
+            }]
+        })
+        assert v8 is not None
+        assert any(word in v8.lower() for word in remediation_verbs), (
+            f"narrative_data_coherence violation lacks remediation verb: {v8}"
+        )
+
+        # SYNTHESIZE rules
+        v9 = rule_all_mandatory_sections_present({})
+        assert v9 is not None
+        assert any(word in v9.lower() for word in remediation_verbs), (
+            f"all_mandatory_sections violation lacks remediation verb: {v9}"
+        )
+
+        v10 = rule_effect_size_proportionality({
+            "severity": "P0",
+            "tldr": "A minor drop in click quality.",
+            "root_cause": "Some issue.",
+        })
+        assert v10 is not None
+        assert any(word in v10.lower() for word in remediation_verbs), (
+            f"effect_size_proportionality violation lacks remediation verb: {v10}"
+        )
+
+    # -- Individual rule remediation checks -------------------------------------
+
+    def test_min_hypotheses_violation_has_remediation(self):
+        """min_three_hypotheses violation must tell the agent to add more hypotheses."""
+        result = {"hypotheses": [{"hypothesis_id": "h1"}, {"hypothesis_id": "h2"}]}
+        violation = rule_min_three_hypotheses(result)
+        assert violation is not None
+        # Must tell the agent what to do, not just what went wrong
+        assert "add" in violation.lower() or "generate" in violation.lower(), (
+            f"Expected 'add' or 'generate' in violation: {violation}"
+        )
+
+    def test_effect_size_violation_has_remediation(self):
+        """effect_size_proportionality violation must tell agent to fix language."""
+        result = {"severity": "P0", "root_cause": "A minor issue caused the drop"}
+        violation = rule_effect_size_proportionality(result)
+        assert violation is not None
+        assert "replace" in violation.lower() or "rephrase" in violation.lower(), (
+            f"Expected 'replace' or 'rephrase' in violation: {violation}"
+        )
+
+    def test_upgrade_condition_violation_has_remediation(self):
+        """upgrade_condition violation must tell agent to add the condition."""
+        result = {"upgrade_condition": ""}
+        violation = rule_upgrade_condition_stated(result)
+        assert violation is not None
+        assert "add" in violation.lower() or "state" in violation.lower(), (
+            f"Expected 'add' or 'state' in violation: {violation}"
+        )
+
+    def test_data_quality_violation_has_specific_thresholds(self):
+        """data_quality remediation should mention specific thresholds (completeness, freshness)."""
+        violation = rule_data_quality_not_failed({"data_quality_status": "fail"})
+        assert violation is not None
+        assert "completeness" in violation.lower() or "freshness" in violation.lower(), (
+            f"Expected specific threshold guidance in violation: {violation}"
+        )
+
+    def test_metric_direction_invalid_has_remediation(self):
+        """metric_direction with invalid value should include remediation."""
+        violation = rule_metric_direction_set({"metric_direction": "sideways"})
+        assert violation is not None
+        assert "set" in violation.lower(), (
+            f"Expected 'set' verb in violation: {violation}"
+        )
+
+    def test_confirms_if_violation_has_remediation(self):
+        """confirms_if violation should tell agent to define testable criteria."""
+        violation = rule_all_have_confirms_if({
+            "hypotheses": [{"hypothesis_id": "h1"}]
+        })
+        assert violation is not None
+        assert "define" in violation.lower() or "testable" in violation.lower(), (
+            f"Expected 'define' or 'testable' in violation: {violation}"
+        )
+
+    def test_contrarian_violation_has_remediation(self):
+        """contrarian violation should tell agent to add a contrarian hypothesis."""
+        violation = rule_has_contrarian_hypothesis({
+            "hypotheses": [{"is_contrarian": False}]
+        })
+        assert violation is not None
+        assert "add" in violation.lower(), (
+            f"Expected 'add' verb in violation: {violation}"
+        )
+
+    def test_expected_magnitude_violation_has_remediation(self):
+        """expected_magnitude violation should tell agent to add magnitude range."""
+        violation = rule_expected_magnitude_present({
+            "hypotheses": [{"hypothesis_id": "h1"}]
+        })
+        assert violation is not None
+        assert "add" in violation.lower(), (
+            f"Expected 'add' verb in violation: {violation}"
+        )
+
+    def test_each_finding_evidence_violation_has_remediation(self):
+        """each_finding_has_evidence violation should tell agent to include evidence."""
+        violation = rule_each_finding_has_evidence({
+            "findings": [{"agent_name": "test", "hypothesis_id": "h1", "evidence": []}]
+        })
+        assert violation is not None
+        assert "include" in violation.lower(), (
+            f"Expected 'include' verb in violation: {violation}"
+        )
+
+    def test_narrative_coherence_violation_has_remediation(self):
+        """narrative_data_coherence violation should tell agent to revise narrative."""
+        violation = rule_narrative_data_coherence({
+            "findings": [{
+                "hypothesis_id": "h1",
+                "narrative": "The metric dropped significantly",
+                "evidence": [{"direction": "up"}],
+            }]
+        })
+        assert violation is not None
+        assert "revise" in violation.lower(), (
+            f"Expected 'revise' verb in violation: {violation}"
+        )
+
+    def test_mandatory_sections_violation_has_remediation(self):
+        """mandatory_sections violation should tell agent to populate sections."""
+        violation = rule_all_mandatory_sections_present({})
+        assert violation is not None
+        assert "populate" in violation.lower(), (
+            f"Expected 'populate' verb in violation: {violation}"
+        )
+
+    def test_mix_shift_violation_has_remediation(self):
+        """mix_shift_considered violation should tell agent to add mix-shift hypothesis."""
+        understand = {
+            "mix_shift_result": {"detected": True, "contribution_pct": 0.35}
+        }
+        result = {
+            "hypotheses": [{"hypothesis_id": "h1", "archetype": "ranking_regression"}]
+        }
+        violation = rule_mix_shift_considered_when_detected(result, understand_result=understand)
+        assert violation is not None
+        assert "add" in violation.lower(), (
+            f"Expected 'add' verb in violation: {violation}"
+        )

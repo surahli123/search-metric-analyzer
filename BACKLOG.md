@@ -1,36 +1,28 @@
 # Backlog — Search Metric Analyzer v2.0 Holistic Redesign
 
-Last updated: 2026-03-07
-
----
-
-## In Progress
-
-### Wave 2: Directory Restructure
-- [x] Rename `tools/` → `core/` (git mv, preserve history)
-- [x] Move `tools/agent_orchestrator.py` → `harness/orchestrator.py`
-- [x] Move `tools/connector_investigator.py` → `harness/connector_investigator.py`
-- [ ] Create `core/__init__.py` and `harness/__init__.py`
-- [ ] Update all imports in `tests/*.py` (~14 files)
-- [ ] Update all imports in `eval/*.py`
-- [ ] Update all imports in `generators/*.py`
-- [ ] Update CLI paths in `skills/search-metric-analyzer.md`
-- [ ] Fix `contribution_pct` naming ambiguity — check `decompose.py` output format, align `MixShiftResult`
-- [ ] Run full test suite — must stay at 694 passed, 21 skipped
+Last updated: 2026-03-08
 
 ---
 
 ## Upcoming
 
-### Wave 3: Trace Emission + Orchestrator
-- [ ] Add `trace: Optional[InvestigationTrace] = None` parameter to `core/anomaly.py` functions
-- [ ] Add trace emission to `core/decompose.py` functions
-- [ ] Add trace emission to `core/diagnose.py` functions
-- [ ] Add trace emission to `core/formatter.py` functions
-- [ ] Build `harness/orchestrator.py` — full 4-stage pipeline controller with Claude API
-- [ ] Import verdict fusion from old orchestrator (don't rewrite from scratch)
-- [ ] Add tests for trace emission in core tools
-- [ ] Add tests for orchestrator pipeline
+### Wave 3a: Trace Emission + Remediation + Corrections (DONE — 2026-03-08)
+- [x] Task 1: Create `trace/helpers.py` with `emit_deterministic_span()` convenience helper
+- [x] Task 2: Add trace emission to `core/decompose.py` (IC9 #1: metric_direction)
+- [x] Task 3: Add trace emission to `core/anomaly.py` (data quality, step change, co-movement)
+- [x] Task 4: Add trace emission to `core/diagnose.py` (archetype, confidence)
+- [x] Task 5: Add remediation messages to all 11 contract violation rules
+- [x] Task 6: Create `core/corrections.py` + `data/knowledge/corrections.yaml` (read/write/CLI, 90-day expiry)
+- [x] Task 7: Wave 3a verification (full test suite + eval)
+
+### Wave 3b: Full 4-Stage Orchestrator (PLAN APPROVED — after 3a)
+- [ ] Task 8: OrchestratorError hierarchy + SearchMetricOrchestrator skeleton + UNDERSTAND stage
+- [ ] Task 9: HYPOTHESIZE stage (LLM + corrections context + IC9 #2: hypothesis_inclusion trace)
+- [ ] Task 10: DISPATCH stage (reuse orchestrate() + IC9 #3: context_construction trace)
+- [ ] Task 11: SYNTHESIZE stage (LLM + retry gate + IC9 #4: narrative_selection trace)
+- [ ] Task 12: Error handling integration tests
+- [ ] Task 13: make_anthropic_llm() factory with timeout + optional SDK
+- [ ] Task 14: Wave 3b verification (all 4 IC9 decisions traced end-to-end)
 
 ### Wave 4: Skill File + Eval
 - [ ] Update `skills/search-metric-analyzer.md` — add seam validator subprocess calls after each stage
@@ -47,7 +39,7 @@ Last updated: 2026-03-07
 
 Priority: fix during the wave where they naturally fit.
 
-- [ ] `contribution_pct` naming — ratio (0.0-1.0) vs percentage (0-100). Fix during Wave 2 when wiring `decompose.py` output. (Important)
+- [ ] `contribution_pct` naming — ratio (0.0-1.0) vs percentage (0-100). Deferred to Wave 3 (confirmed no actual ambiguity — consistently 0-100). (Suggestion)
 - [ ] `constrained_by` field validation — add warning in `InvestigationTrace.emit()` when `swimlane == "llm_generated"` and `constrained_by` missing. Fix during Wave 3 when adding LLM spans. (Important)
 - [ ] Business rules return single violation — document as known limitation or change return type to `List[str]`. (Suggestion)
 - [ ] `narrative_data_coherence` false-negative bias — add docstring noting that mixed-direction text passes. (Suggestion)
@@ -70,6 +62,22 @@ Priority: fix during the wave where they naturally fit.
 ---
 
 ## Done
+
+### Wave 2: Directory Restructure (2026-03-08)
+- [x] Rename `tools/` → `core/` (git mv, preserve history)
+- [x] Move `tools/agent_orchestrator.py` → `harness/orchestrator.py`
+- [x] Move `tools/connector_investigator.py` → `harness/connector_investigator.py`
+- [x] Create `core/__init__.py` and `harness/__init__.py`
+- [x] Update all imports in `tests/*.py` (11 files)
+- [x] Update all imports in `eval/*.py` (2 files)
+- [x] Update CLI paths in `skills/search-metric-analyzer.md`
+- [x] Update `CLAUDE.md`, `README.md`, operational markdown docs
+- [x] Delete thin wrappers (`generate_synthetic_data.py`, `validate_scenarios.py`)
+- [x] Fix dead fallback import in `harness/orchestrator.py`
+- [x] Run full test suite — 694 passed, 21 skipped
+- [x] Run eval stress test — 6/6 GREEN, avg 91.7
+- [x] Code review — all findings addressed
+- [x] PR #4 opened
 
 ### Wave 1: Trace + Contracts (2026-03-07)
 - [x] Create `trace/` module (span.py, collector.py, schema.py)

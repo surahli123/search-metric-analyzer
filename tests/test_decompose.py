@@ -656,3 +656,67 @@ class TestDecomposeCLI:
         output = json.loads(result.stdout)
         assert output["aggregate"]["direction"] == "down"
         assert output["aggregate"]["severity"] in ["P0", "P1", "P2", "normal"]
+
+
+# ======================================================================
+# TRACE EMISSION TESTS — verify run_decomposition records decisions
+# ======================================================================
+
+
+class TestDecomposeTraceEmission:
+    """Trace emission is optional — when provided, spans are recorded."""
+
+    def _make_rows(self):
+        """Minimal rows for decomposition."""
+        return [
+            {"period": "baseline", "tier": "standard", "click_quality_value": 0.65},
+            {"period": "baseline", "tier": "enterprise", "click_quality_value": 0.70},
+            {"period": "current", "tier": "standard", "click_quality_value": 0.63},
+            {"period": "current", "tier": "enterprise", "click_quality_value": 0.60},
+        ]
+
+    def test_no_trace_returns_same_output(self):
+        """Output must be identical whether trace is provided or not."""
+        from trace.collector import InvestigationTrace
+        rows = self._make_rows()
+        result_without = run_decomposition(rows, "click_quality_value", dimensions=["tier"])
+        trace = InvestigationTrace(question="test")
+        result_with = run_decomposition(rows, "click_quality_value", dimensions=["tier"], trace=trace)
+        assert result_without == result_with
+
+    def test_emits_metric_direction_span(self):
+        """Must trace IC9 Invisible Decision #1: metric_direction."""
+        from trace.collector import InvestigationTrace
+        rows = self._make_rows()
+        trace = InvestigationTrace(question="CQ drop")
+        run_decomposition(rows, "click_quality_value", dimensions=["tier"], trace=trace)
+        spans = trace.spans_for_stage("UNDERSTAND")
+        direction_spans = [s for s in spans if s["decision"] == "metric_direction"]
+        assert len(direction_spans) == 1
+        assert direction_spans[0]["value"] == "down"
+        assert direction_spans[0]["tool"] == "core.decompose.compute_aggregate_delta"
+
+    def test_emits_dominant_dimension_span(self):
+        from trace.collector import InvestigationTrace
+        rows = self._make_rows()
+        trace = InvestigationTrace(question="CQ drop")
+        run_decomposition(rows, "click_quality_value", dimensions=["tier"], trace=trace)
+        spans = trace.spans_for_stage("UNDERSTAND")
+        dim_spans = [s for s in spans if s["decision"] == "dominant_dimension"]
+        assert len(dim_spans) == 1
+
+    def test_emits_mix_shift_span(self):
+        from trace.collector import InvestigationTrace
+        rows = self._make_rows()
+        trace = InvestigationTrace(question="CQ drop")
+        run_decomposition(rows, "click_quality_value", dimensions=["tier"], trace=trace)
+        spans = trace.spans_for_stage("UNDERSTAND")
+        ms_spans = [s for s in spans if s["decision"] == "mix_shift_significance"]
+        assert len(ms_spans) == 1
+
+    def test_no_spans_emitted_on_aggregate_error(self):
+        """When decomposition errors (empty data), no trace spans should be emitted."""
+        from trace.collector import InvestigationTrace
+        trace = InvestigationTrace(question="test")
+        run_decomposition([], "click_quality_value", dimensions=["tier"], trace=trace)
+        assert len(trace.spans_for_stage("UNDERSTAND")) == 0

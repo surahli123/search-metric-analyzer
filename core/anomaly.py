@@ -36,6 +36,18 @@ try:
 except ModuleNotFoundError:
     from schema import normalize_rows
 
+# Import trace helper for optional span emission. The try/except handles
+# standalone CLI execution where the project root isn't on sys.path and
+# Python's built-in `trace` module shadows our trace/ package.
+# When running as CLI, trace emission is unused (trace=None always), so
+# we fall back to a no-op function.
+try:
+    from trace.helpers import emit_deterministic_span
+except (ModuleNotFoundError, ImportError):
+    def emit_deterministic_span(*args, **kwargs):  # type: ignore[misc]
+        """No-op fallback when trace module is not importable (CLI mode)."""
+        pass
+
 
 # ---------------------------------------------------------------------------
 # Constants — thresholds come from the diagnostic workflow design
@@ -87,7 +99,10 @@ def _load_co_movement_table() -> List[Dict[str, Any]]:
 # Function 1: Data Quality Gate
 # ---------------------------------------------------------------------------
 
-def check_data_quality(rows: List[Dict[str, float]]) -> Dict[str, Any]:
+def check_data_quality(
+    rows: List[Dict[str, float]],
+    trace: Optional[Any] = None,
+) -> Dict[str, Any]:
     """Check if the data is reliable enough to diagnose.
 
     This is Step 1 of the diagnostic workflow — if data quality is bad,
@@ -97,13 +112,15 @@ def check_data_quality(rows: List[Dict[str, float]]) -> Dict[str, Any]:
     Args:
         rows: List of dicts, each with 'data_completeness' (0-1 ratio)
               and 'data_freshness_min' (minutes since last update).
+        trace: Optional InvestigationTrace for recording the data quality
+               decision. Pass None (default) to skip trace emission.
 
     Returns:
         {"status": "pass"|"fail"|"warn", "reason": str,
          "avg_completeness": float, "avg_freshness_min": float}
     """
     if not rows:
-        return {
+        result = {
             "status": "fail",
             "reason": "No data rows provided",
             "avg_completeness": 0.0,
@@ -111,6 +128,17 @@ def check_data_quality(rows: List[Dict[str, float]]) -> Dict[str, Any]:
             "avg_completeness_pct": 0.0,
             "avg_freshness_lag_min": 0.0,
         }
+        # Emit trace even for the empty-rows edge case — the data quality
+        # gate decision is always worth recording for downstream context
+        emit_deterministic_span(
+            trace,
+            tool="core.anomaly.check_data_quality",
+            decision="data_quality_status",
+            value=result["status"],
+            human_summary=f"Data quality: {result['status']} — {result['reason']}",
+            agent_context=f"data_quality={result['status']}, completeness=0.000, freshness=0.0min",
+        )
+        return result
 
     normalized_rows = normalize_rows(rows)
 
@@ -135,7 +163,7 @@ def check_data_quality(rows: List[Dict[str, float]]) -> Dict[str, Any]:
 
     # Check hard failure thresholds first (order matters: fail > warn > pass)
     if avg_completeness < COMPLETENESS_FAIL_THRESHOLD:
-        return {
+        result = {
             "status": "fail",
             "reason": (
                 f"Data completeness too low: {avg_completeness:.3f} "
@@ -146,9 +174,18 @@ def check_data_quality(rows: List[Dict[str, float]]) -> Dict[str, Any]:
             "avg_completeness_pct": avg_completeness_pct,
             "avg_freshness_lag_min": avg_freshness,
         }
+        emit_deterministic_span(
+            trace,
+            tool="core.anomaly.check_data_quality",
+            decision="data_quality_status",
+            value=result["status"],
+            human_summary=f"Data quality: {result['status']} — {result['reason']}",
+            agent_context=f"data_quality={result['status']}, completeness={avg_completeness:.3f}, freshness={avg_freshness:.1f}min",
+        )
+        return result
 
     if avg_freshness > FRESHNESS_FAIL_THRESHOLD:
-        return {
+        result = {
             "status": "fail",
             "reason": (
                 f"Data freshness too stale: {avg_freshness:.1f} min "
@@ -159,6 +196,15 @@ def check_data_quality(rows: List[Dict[str, float]]) -> Dict[str, Any]:
             "avg_completeness_pct": avg_completeness_pct,
             "avg_freshness_lag_min": avg_freshness,
         }
+        emit_deterministic_span(
+            trace,
+            tool="core.anomaly.check_data_quality",
+            decision="data_quality_status",
+            value=result["status"],
+            human_summary=f"Data quality: {result['status']} — {result['reason']}",
+            agent_context=f"data_quality={result['status']}, completeness={avg_completeness:.3f}, freshness={avg_freshness:.1f}min",
+        )
+        return result
 
     # Check warning thresholds — borderline data, proceed with caution
     warnings: List[str] = []
@@ -172,7 +218,7 @@ def check_data_quality(rows: List[Dict[str, float]]) -> Dict[str, Any]:
         )
 
     if warnings:
-        return {
+        result = {
             "status": "warn",
             "reason": "; ".join(warnings),
             "avg_completeness": avg_completeness,
@@ -180,9 +226,18 @@ def check_data_quality(rows: List[Dict[str, float]]) -> Dict[str, Any]:
             "avg_completeness_pct": avg_completeness_pct,
             "avg_freshness_lag_min": avg_freshness,
         }
+        emit_deterministic_span(
+            trace,
+            tool="core.anomaly.check_data_quality",
+            decision="data_quality_status",
+            value=result["status"],
+            human_summary=f"Data quality: {result['status']} — {result['reason']}",
+            agent_context=f"data_quality={result['status']}, completeness={avg_completeness:.3f}, freshness={avg_freshness:.1f}min",
+        )
+        return result
 
     # All clear — data is trustworthy
-    return {
+    result = {
         "status": "pass",
         "reason": "Data quality checks passed",
         "avg_completeness": avg_completeness,
@@ -190,6 +245,15 @@ def check_data_quality(rows: List[Dict[str, float]]) -> Dict[str, Any]:
         "avg_completeness_pct": avg_completeness_pct,
         "avg_freshness_lag_min": avg_freshness,
     }
+    emit_deterministic_span(
+        trace,
+        tool="core.anomaly.check_data_quality",
+        decision="data_quality_status",
+        value=result["status"],
+        human_summary=f"Data quality: {result['status']} — {result['reason']}",
+        agent_context=f"data_quality={result['status']}, completeness={avg_completeness:.3f}, freshness={avg_freshness:.1f}min",
+    )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +263,7 @@ def check_data_quality(rows: List[Dict[str, float]]) -> Dict[str, Any]:
 def detect_step_change(
     daily_values: List[float],
     threshold_pct: float = 2.0,
+    trace: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Detect overnight step-changes in a daily metric time series.
 
@@ -218,12 +283,23 @@ def detect_step_change(
     Args:
         daily_values: List of daily metric averages, ordered chronologically.
         threshold_pct: Minimum percent change to consider a step-change (e.g., 2.0 = 2%).
+        trace: Optional InvestigationTrace for recording the step-change
+               detection decision. Pass None (default) to skip trace emission.
 
     Returns:
         {"detected": bool, "change_day_index": int|None, "magnitude_pct": float}
     """
     if len(daily_values) < 2:
-        return {"detected": False, "change_day_index": None, "magnitude_pct": 0.0}
+        result = {"detected": False, "change_day_index": None, "magnitude_pct": 0.0}
+        emit_deterministic_span(
+            trace,
+            tool="core.anomaly.detect_step_change",
+            decision="step_change_detected",
+            value=result["detected"],
+            human_summary=f"Step change: not detected (max change: {result['magnitude_pct']:.1f}%)",
+            agent_context=f"step_change={result['detected']}, magnitude_pct={result['magnitude_pct']}, change_day={result.get('change_day_index')}",
+        )
+        return result
 
     # Find the largest single day-over-day percent change
     max_change_pct = 0.0
@@ -262,13 +338,32 @@ def detect_step_change(
         # The single-day jump should account for at least 60% of total shift
         # to qualify as a "step" rather than "gradual drift with one bumpy day"
         if total_change > 0 and (single_day_change / total_change) >= 0.6:
-            return {
+            result = {
                 "detected": True,
                 "change_day_index": max_change_idx,
                 "magnitude_pct": round(max_change_pct, 2),
             }
+            emit_deterministic_span(
+                trace,
+                tool="core.anomaly.detect_step_change",
+                decision="step_change_detected",
+                value=result["detected"],
+                human_summary=f"Step change: detected (max change: {result['magnitude_pct']:.1f}%)",
+                agent_context=f"step_change={result['detected']}, magnitude_pct={result['magnitude_pct']}, change_day={result.get('change_day_index')}",
+            )
+            return result
 
-    return {"detected": False, "change_day_index": None, "magnitude_pct": round(max_change_pct, 2)}
+    # No step-change detected (either below threshold or not sustained)
+    result = {"detected": False, "change_day_index": None, "magnitude_pct": round(max_change_pct, 2)}
+    emit_deterministic_span(
+        trace,
+        tool="core.anomaly.detect_step_change",
+        decision="step_change_detected",
+        value=result["detected"],
+        human_summary=f"Step change: not detected (max change: {result['magnitude_pct']:.1f}%)",
+        agent_context=f"step_change={result['detected']}, magnitude_pct={result['magnitude_pct']}, change_day={result.get('change_day_index')}",
+    )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +411,7 @@ def _direction_matches(observed_value: str, pattern_value: str) -> bool:
 
 def match_co_movement_pattern(
     observed: Dict[str, str],
+    trace: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Match observed metric directions against the co-movement diagnostic table.
 
@@ -338,6 +434,8 @@ def match_co_movement_pattern(
         observed: Dict mapping metric names to directions.
             Keys: click_quality, search_quality_success, ai_trigger, ai_success, zero_result_rate, latency
             Values: "up", "down", "stable", or compound like "stable_or_up"
+        trace: Optional InvestigationTrace for recording the co-movement
+               pattern match decision. Pass None (default) to skip trace emission.
 
     Returns:
         {"likely_cause": str, "description": str,
@@ -396,7 +494,7 @@ def match_co_movement_pattern(
                     break
             else:
                 # No other pattern qualifies — return unknown
-                return {
+                result = {
                     "likely_cause": "unknown_pattern",
                     "description": "Observed metric directions do not match any known co-movement pattern.",
                     "priority_hypotheses": [],
@@ -404,6 +502,15 @@ def match_co_movement_pattern(
                     "match_score": best["match_score"],
                     "runner_up": None,
                 }
+                emit_deterministic_span(
+                    trace,
+                    tool="core.anomaly.match_co_movement_pattern",
+                    decision="co_movement_pattern",
+                    value=result["likely_cause"],
+                    human_summary=f"Co-movement match: {result['likely_cause']} (score: {result['match_score']:.2f})",
+                    agent_context=f"likely_cause={result['likely_cause']}, match_score={result['match_score']}, is_positive={result.get('is_positive', False)}",
+                )
+                return result
 
         # Build runner-up dict (if it exists and is above a useful threshold)
         runner_up = None
@@ -415,7 +522,7 @@ def match_co_movement_pattern(
                     "match_score": runner_up_entry["match_score"],
                 }
 
-        return {
+        result = {
             "likely_cause": best["likely_cause"],
             "description": best["description"],
             "priority_hypotheses": best["priority_hypotheses"],
@@ -423,11 +530,20 @@ def match_co_movement_pattern(
             "match_score": best["match_score"],
             "runner_up": runner_up,
         }
+        emit_deterministic_span(
+            trace,
+            tool="core.anomaly.match_co_movement_pattern",
+            decision="co_movement_pattern",
+            value=result["likely_cause"],
+            human_summary=f"Co-movement match: {result['likely_cause']} (score: {result['match_score']:.2f})",
+            agent_context=f"likely_cause={result['likely_cause']}, match_score={result['match_score']}, is_positive={result.get('is_positive', False)}",
+        )
+        return result
 
     # No pattern met the threshold — novel or ambiguous situation.
     # Include the best score so callers know how close we got.
     best_score = best["match_score"] if best else 0.0
-    return {
+    result = {
         "likely_cause": "unknown_pattern",
         "description": "Observed metric directions do not match any known co-movement pattern.",
         "priority_hypotheses": [],
@@ -435,6 +551,15 @@ def match_co_movement_pattern(
         "match_score": best_score,
         "runner_up": None,
     }
+    emit_deterministic_span(
+        trace,
+        tool="core.anomaly.match_co_movement_pattern",
+        decision="co_movement_pattern",
+        value=result["likely_cause"],
+        human_summary=f"Co-movement match: {result['likely_cause']} (score: {result['match_score']:.2f})",
+        agent_context=f"likely_cause={result['likely_cause']}, match_score={result['match_score']}, is_positive={result.get('is_positive', False)}",
+    )
+    return result
 
 
 # ---------------------------------------------------------------------------

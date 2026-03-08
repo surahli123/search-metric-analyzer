@@ -984,3 +984,49 @@ class TestScoredCoMovement:
         result_click = match_co_movement_pattern(observed_click)
         assert result_click["likely_cause"] == "click_behavior_change"
         assert result_click["match_score"] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Trace Emission Tests (Wave 3a, Task 3)
+# ---------------------------------------------------------------------------
+
+class TestAnomalyTraceEmission:
+    """Trace emission for anomaly detection functions."""
+
+    def test_check_data_quality_emits_span(self):
+        from trace.collector import InvestigationTrace
+        rows = [{"data_completeness": 0.99, "data_freshness_min": 10}]
+        trace = InvestigationTrace(question="test")
+        check_data_quality(rows, trace=trace)
+        spans = trace.spans_for_stage("UNDERSTAND")
+        dq_spans = [s for s in spans if s["decision"] == "data_quality_status"]
+        assert len(dq_spans) == 1
+        assert dq_spans[0]["value"] == "pass"
+
+    def test_check_data_quality_no_trace_unchanged(self):
+        rows = [{"data_completeness": 0.99, "data_freshness_min": 10}]
+        result = check_data_quality(rows)
+        assert result["status"] == "pass"  # Same as before
+
+    def test_detect_step_change_emits_span(self):
+        from trace.collector import InvestigationTrace
+        values = [0.5] * 10 + [0.3] * 10  # Clear step change
+        trace = InvestigationTrace(question="test")
+        detect_step_change(values, trace=trace)
+        spans = trace.spans_for_stage("UNDERSTAND")
+        sc_spans = [s for s in spans if s["decision"] == "step_change_detected"]
+        assert len(sc_spans) == 1
+
+    def test_match_co_movement_emits_span(self):
+        from trace.collector import InvestigationTrace
+        observed = {
+            "click_quality": "down",
+            "search_quality_success": "down",
+            "ai_trigger": "up",
+            "ai_success": "stable",
+        }
+        trace = InvestigationTrace(question="test")
+        match_co_movement_pattern(observed, trace=trace)
+        spans = trace.spans_for_stage("UNDERSTAND")
+        cm_spans = [s for s in spans if s["decision"] == "co_movement_pattern"]
+        assert len(cm_spans) == 1
