@@ -5,6 +5,87 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Presentation: Search Metric Analyzer HTML Slides (2026-03-08)
+
+Built a 19-slide self-contained HTML presentation visualizing the 0→1 builder
+journey and demoing the Search Metric Analyzer. Merged to main, deployed via
+GitHub Pages.
+
+### Added
+- `search-metric-analyzer-presentation.html` — 19 slides, all CSS/JS inline
+  - Investigation report mockup (slide 6) with anonymized metric stat cards
+  - Execution trace panel (slide 7) with phase accordion, step type badges, timing
+  - Multi-agent architecture flowchart (slide 9) matching real architecture diagram
+  - 3 eng-focused slides with audience tags for modular presentation
+  - Inline editing (press E or hover top-left), localStorage persistence
+- GitHub Pages deployment at `surahli123.github.io/search-metric-analyzer/`
+
+### Changed
+- CSS spacing scale system (`--space-xs` through `--space-lg`) for consistent vertical rhythm
+- Stripped all inline margin styles in favor of CSS class-based spacing rules
+- Closing slide refactored from inline styles to proper CSS classes
+
+### Fixed
+- GitHub Pages 404: switched from `workflow` to `legacy` build mode
+
+---
+
+## OpenAI Harness Research: Lessons for v2 Redesign (2026-03-08)
+
+Research session analyzing OpenAI's in-house data agent, harness engineering principles,
+and Codex architecture. Extracted patterns applicable to Search Metric Analyzer v2,
+updated Wave 3/4 scope based on findings.
+
+### Added
+- `docs/research/2026-03-08-openai-harness-research.md` — Full research document with 7 findings, 5 decisions, 3 deep dives (eval dual grading, evidence chain observability, frontend UI design)
+
+### Changed
+- Updated MEMORY.md Wave 3 scope: added remediation messages in contracts + memory/correction layer (promoted from v2+ backlog per OpenAI memory pattern)
+- Updated MEMORY.md Wave 4 scope: added self-evaluation confidence score + hybrid prompting
+- Added OpenAI harness research key takeaways section to MEMORY.md
+
+### Decisions
+- **Memory/correction layer promoted to Wave 3** (was deferred to v2+) — enables agent to auto-save user corrections during investigations to prevent repeating critical errors
+- Remediation messages in contract violations → Wave 3
+- Self-evaluation confidence score at SYNTHESIZE → Wave 4
+- Hybrid prompting (relax micro-instructions) → Wave 4
+- Knowledge enrichment (auto-extract from code) → deferred to v3
+
+---
+
+## Eval Framework: Validation Rubrics for Retrospective + Prospective Eval (2026-03-07)
+
+Research session on validation/eval frameworks for LLM-based agent systems.
+Produced executable evaluation rubrics to validate the agent against real
+engineering investigation reports — addressing Eng lead questions about
+how to prove the system works.
+
+### Added
+- `eval/eval_rubric_approach_a.md` — Retrospective eval rubric
+  - 100-point scoring across 7 sections (B through G)
+  - Maps to the 4-stage pipeline (UNDERSTAND, HYPOTHESIZE, DISPATCH, SYNTHESIZE)
+  - Includes cross-stage checks for IC9 audit failure modes
+  - Critical failure flags for categorical failures (convincing wrong answer, hallucinated evidence)
+  - Selection criteria and aggregate reporting targets
+- `eval/eval_rubric_approach_b.md` — Prospective eval protocol
+  - Three operating modes for different evaluation contexts:
+    - Mode 1: Agent-First Audit (primary — for solo DS reviewing agent output)
+    - Mode 2: Delayed Agent Run (for establishing unbiased baseline)
+    - Mode 3: Engineer Proxy (for opportunistic eval when Eng investigates independently)
+  - Mode 1 scoring (P1a-P6a): first-draft accuracy, error detectability,
+    verification speedup, anchoring risk, final output quality
+  - Blind parallel protocol for Modes 2/3
+  - Aggregate tracking table and Eng lead reporting metrics
+  - Recommended phased rollout sequence
+
+### Context
+- Eng leads questioning validation/eval approach for the agent
+- Existing eval (`run_eval.py` + 6 scoring specs) covers deterministic Layer 1
+- New rubrics cover Layer 2 (human-scored, real cases) and Layer 3 (live investigations)
+- Two Eng lead eval ideas formalized: (A) replay past experiment reports, (B) parallel live investigations
+
+---
+
 ## v2.0-alpha.1 — Phase 2.1 Foundation: Multi-Agent Orchestrator (2026-03-07)
 
 Phase 2.1 foundation layer: typed schemas, orchestrator skeleton, and contract
