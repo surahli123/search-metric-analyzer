@@ -5,6 +5,38 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Eval Framework: Validation Rubrics for Retrospective + Prospective Eval (2026-03-07)
+
+Research session on validation/eval frameworks for LLM-based agent systems.
+Produced executable evaluation rubrics to validate the agent against real
+engineering investigation reports — addressing Eng lead questions about
+how to prove the system works.
+
+### Added
+- `eval/eval_rubric_approach_a.md` — Retrospective eval rubric
+  - 100-point scoring across 7 sections (B through G)
+  - Maps to the 4-stage pipeline (UNDERSTAND, HYPOTHESIZE, DISPATCH, SYNTHESIZE)
+  - Includes cross-stage checks for IC9 audit failure modes
+  - Critical failure flags for categorical failures (convincing wrong answer, hallucinated evidence)
+  - Selection criteria and aggregate reporting targets
+- `eval/eval_rubric_approach_b.md` — Prospective eval protocol
+  - Three operating modes for different evaluation contexts:
+    - Mode 1: Agent-First Audit (primary — for solo DS reviewing agent output)
+    - Mode 2: Delayed Agent Run (for establishing unbiased baseline)
+    - Mode 3: Engineer Proxy (for opportunistic eval when Eng investigates independently)
+  - Mode 1 scoring (P1a-P6a): first-draft accuracy, error detectability,
+    verification speedup, anchoring risk, final output quality
+  - Blind parallel protocol for Modes 2/3
+  - Aggregate tracking table and Eng lead reporting metrics
+  - Recommended phased rollout sequence
+
+### Context
+- Eng leads questioning validation/eval approach for the agent
+- Existing eval (`run_eval.py` + 6 scoring specs) covers deterministic Layer 1
+- New rubrics cover Layer 2 (human-scored, real cases) and Layer 3 (live investigations)
+
+---
+
 ## v2.0-alpha.2 — Holistic Redesign Wave 1: Trace + Contracts (2026-03-07)
 
 Wave 1 of the v2.0 holistic redesign. IC9-reviewed architectural plan, new trace
@@ -70,6 +102,7 @@ to the existing diagnosis pipeline or CLI.
 
 ### Tests
 - Suite status: `571 passed` (544 existing + 27 new), 0 failures
+>>>>>>> origin/main
 
 ---
 
