@@ -21,10 +21,10 @@ test data. They verify OUTPUT QUALITY, not just that the code runs:
 
 import json
 import pytest
-from tools.decompose import run_decomposition
-from tools.anomaly import detect_step_change, check_data_quality
-from tools.diagnose import run_diagnosis
-from tools.formatter import format_diagnosis_output, generate_slack_message
+from core.decompose import run_decomposition
+from core.anomaly import detect_step_change, check_data_quality
+from core.diagnose import run_diagnosis
+from core.formatter import format_diagnosis_output, generate_slack_message
 
 
 # ──────────────────────────────────────────────────

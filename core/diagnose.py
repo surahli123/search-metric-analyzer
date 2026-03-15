@@ -16,10 +16,10 @@ But that's not enough -- you need to validate the diagnosis:
 Only after passing these checks can we confidently assign a root cause.
 
 Usage (CLI):
-    python tools/diagnose.py --input decomposition.json
+    python core/diagnose.py --input decomposition.json
 
 Usage (from Python):
-    from tools.diagnose import run_diagnosis
+    from core.diagnose import run_diagnosis
     result = run_diagnosis(decomposition=decomp_output)
 
 Output: JSON to stdout (Claude Code reads this).
@@ -34,9 +34,21 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
-    from tools.schema import normalize_diagnosis_payload, normalize_metric_name
+    from core.schema import normalize_diagnosis_payload, normalize_metric_name
 except ModuleNotFoundError:
     from schema import normalize_diagnosis_payload, normalize_metric_name
+
+# Import trace helper for optional span emission. The try/except handles
+# standalone CLI execution where the project root isn't on sys.path and
+# Python's built-in `trace` module shadows our trace/ package.
+# When running as CLI, trace emission is unused (trace=None always), so
+# we fall back to a no-op function.
+try:
+    from trace.helpers import emit_deterministic_span
+except (ModuleNotFoundError, ImportError):
+    def emit_deterministic_span(*args, **kwargs):  # type: ignore[misc]
+        """No-op fallback when trace module is not importable (CLI mode)."""
+        pass
 
 
 # ──────────────────────────────────────────────────
@@ -1313,6 +1325,7 @@ def run_diagnosis(
     metric_change_date_index: Optional[int] = None,
     has_historical_precedent: bool = False,
     connector_investigator: Optional[Any] = None,
+    trace: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Run the full diagnosis pipeline on decomposition output.
 
@@ -1687,6 +1700,30 @@ def run_diagnosis(
     # warnings are surfaced in the formatter output but don't block diagnosis.
     verification_warnings = verify_diagnosis(result)
     result["verification_warnings"] = verification_warnings
+
+    # ── Trace emission ──
+    # Record the two key deterministic decisions made by the diagnosis pipeline:
+    # 1. Which archetype (failure mode pattern) was recognized
+    # 2. What confidence level was assigned to the diagnosis
+    # These are "Invisible Decisions" that IC9 audit identified — without trace,
+    # downstream stages (HYPOTHESIZE, SYNTHESIZE) can't verify what the diagnosis
+    # decided or why.
+    emit_deterministic_span(
+        trace,
+        tool="core.diagnose.archetype_recognition",
+        decision="archetype",
+        value=likely_cause,
+        human_summary=f"Archetype: {likely_cause} (severity: {severity})",
+        agent_context=f"archetype={likely_cause}, severity={severity}, is_false_alarm={is_false_alarm}",
+    )
+    emit_deterministic_span(
+        trace,
+        tool="core.diagnose.compute_confidence",
+        decision="confidence_level",
+        value=confidence["level"],
+        human_summary=f"Confidence: {confidence['level']} — {confidence.get('reasoning', '')}",
+        agent_context=f"confidence={confidence['level']}, decision_status={decision_status}, evidence_lines={evidence_lines}",
+    )
 
     return normalize_diagnosis_payload(result)
 

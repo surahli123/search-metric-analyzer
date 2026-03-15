@@ -18,7 +18,7 @@ from pathlib import Path
 # Path to the skill file (from project root)
 ROOT = Path(__file__).parent.parent
 SKILL_FILE = ROOT / "skills" / "search-metric-analyzer.md"
-TOOLS_DIR = ROOT / "tools"
+TOOLS_DIR = ROOT / "core"
 KNOWLEDGE_DIR = ROOT / "data" / "knowledge"
 
 
@@ -75,16 +75,16 @@ class TestSkillFileReferencesRealTools:
         return SKILL_FILE.read_text()
 
     def test_references_decompose_py(self, content):
-        assert "decompose.py" in content, "Must reference tools/decompose.py"
+        assert "decompose.py" in content, "Must reference core/decompose.py"
 
     def test_references_anomaly_py(self, content):
-        assert "anomaly.py" in content, "Must reference tools/anomaly.py"
+        assert "anomaly.py" in content, "Must reference core/anomaly.py"
 
     def test_references_diagnose_py(self, content):
-        assert "diagnose.py" in content, "Must reference tools/diagnose.py"
+        assert "diagnose.py" in content, "Must reference core/diagnose.py"
 
     def test_references_formatter_py(self, content):
-        assert "formatter.py" in content, "Must reference tools/formatter.py"
+        assert "formatter.py" in content, "Must reference core/formatter.py"
 
     def test_referenced_tools_exist(self, content):
         """Every tool referenced in the skill file must exist on disk."""
@@ -102,7 +102,7 @@ class TestSkillFileCLIFlags:
     """Verify CLI invocations use flags that actually exist in the tools.
 
     This is critical: if the skill tells Claude Code to run
-    `python tools/anomaly.py --mode quality` but the actual flag is --check,
+    `python core/anomaly.py --mode quality` but the actual flag is --check,
     the workflow will fail at runtime.
     """
 

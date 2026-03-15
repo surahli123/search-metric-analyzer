@@ -1047,7 +1047,7 @@ def main():
         # Generate formatted output for scoring
         # Import formatter here to avoid circular dependency at module level
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-        from tools.formatter import format_diagnosis_output
+        from core.formatter import format_diagnosis_output
         formatted = format_diagnosis_output(diagnosis)
 
         results = {}

@@ -1,7 +1,7 @@
 """Multi-agent orchestrator — post-process hook for diagnosis verification.
 
 WHY THIS MODULE EXISTS:
-The diagnosis pipeline (tools/diagnose.py) produces a single hypothesis about
+The diagnosis pipeline (core/diagnose.py) produces a single hypothesis about
 why a metric moved.  That hypothesis might be wrong.  The orchestrator runs
 specialist agents AFTER the diagnosis to verify (or challenge) the hypothesis,
 then fuses their individual verdicts into a single decision.
@@ -33,13 +33,8 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-# Import the normalizer from schema.py.
-# We use try/except to handle both absolute imports (when run as part of
-# the tools package) and relative imports (when run standalone).
-try:
-    from tools.schema import normalize_agent_verdict, VALID_VERDICTS
-except ImportError:
-    from schema import normalize_agent_verdict, VALID_VERDICTS
+# Cross-package dependency: schema.py lives in core/, not harness/.
+from core.schema import normalize_agent_verdict, VALID_VERDICTS
 
 
 # ---------------------------------------------------------------------------

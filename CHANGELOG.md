@@ -27,84 +27,106 @@ ran security audit (AgentShield), and scoped the web app layer for Search Metric
 
 ---
 
-## Presentation: Search Metric Analyzer HTML Slides (2026-03-08)
+## v2.0-alpha.4 — Holistic Redesign Wave 3a: Trace Emission + Remediation + Corrections (2026-03-08)
 
-Built a 19-slide self-contained HTML presentation visualizing the 0→1 builder
-journey and demoing the Search Metric Analyzer. Merged to main, deployed via
-GitHub Pages.
+Wave 3a implementation — 7 tasks completed via subagent-driven-development. Adds trace instrumentation to all core tools, actionable remediation messages to all contract violations, and a corrections knowledge layer for institutional memory.
 
 ### Added
-- `search-metric-analyzer-presentation.html` — 19 slides, all CSS/JS inline
-  - Investigation report mockup (slide 6) with anonymized metric stat cards
-  - Execution trace panel (slide 7) with phase accordion, step type badges, timing
-  - Multi-agent architecture flowchart (slide 9) matching real architecture diagram
-  - 3 eng-focused slides with audience tags for modular presentation
-  - Inline editing (press E or hover top-left), localStorage persistence
-- GitHub Pages deployment at `surahli123.github.io/search-metric-analyzer/`
-
-### Changed
-- CSS spacing scale system (`--space-xs` through `--space-lg`) for consistent vertical rhythm
-- Stripped all inline margin styles in favor of CSS class-based spacing rules
-- Closing slide refactored from inline styles to proper CSS classes
+- `trace/helpers.py` — `emit_deterministic_span()` convenience helper (no-ops when trace is None, sets swimlane="deterministic" and code_enforced=True)
+- Trace emission in `core/decompose.py` — 3 spans: `metric_direction` (IC9 #1), `dominant_dimension`, `mix_shift_significance`
+- Trace emission in `core/anomaly.py` — spans in all return paths of `check_data_quality()`, `detect_step_change()`, `match_co_movement_pattern()` (11 total emit calls)
+- Trace emission in `core/diagnose.py` — 2 spans: `archetype`, `confidence_level`
+- Remediation suffixes on all 11 contract violation messages (imperative verb: Recheck, Set, Add, Define, Include, Populate, Replace, Revise)
+- `core/corrections.py` — `load_corrections()`, `find_relevant_corrections()` (90-day expiry, archetype-exact ranking), `append_correction()` with source validation, CLI with `--add` flag
+- `data/knowledge/corrections.yaml` — seed entry (CQ drop misattributed to ranking regression, actually mix-shift)
+- 45 new tests: 4 (trace helpers) + 5 (decompose trace) + 4 (anomaly trace) + 3 (diagnose trace) + 13 (remediation messages) + 16 (corrections)
 
 ### Fixed
-- GitHub Pages 404: switched from `workflow` to `legacy` build mode
+- CLI import shadowing: Python's built-in `trace` module shadows project `trace/` package during standalone CLI execution — fixed with try/except fallback in all 3 core tools
+- Misleading "lazy import" comment in decompose.py — moved trace import to module-level top of file
+
+### Tests
+- Suite status: `739 passed`, 21 skipped, 0 failures
+- Eval stress test: 6/6 GREEN, average 91.7/100 (unchanged)
 
 ---
 
-## OpenAI Harness Research: Lessons for v2 Redesign (2026-03-08)
+## Wave 3 Plan — IC9-Calibrated Review + Approval (2026-03-08)
 
-Research session analyzing OpenAI's in-house data agent, harness engineering principles,
-and Codex architecture. Extracted patterns applicable to Search Metric Analyzer v2,
-updated Wave 3/4 scope based on findings.
+Planning-only session — no code changes.
 
 ### Added
-- `docs/research/2026-03-08-openai-harness-research.md` — Full research document with 7 findings, 5 decisions, 3 deep dives (eval dual grading, evidence chain observability, frontend UI design)
+- Wave 3 implementation plan: 14 tasks across Wave 3a (trace + remediation + corrections) and 3b (orchestrator)
+- IC9-calibrated review loop: 3 iterations with IC9 Domain Expert + Principal AI Engineer reviewers
+- Plan includes: OrchestratorError hierarchy, exponential backoff, 3-strategy JSON extraction, all 4 IC9 Invisible Decision traces
+
+### Key Plan Decisions
+- All 4 IC9 Invisible Decisions will be traced: metric_direction (3a), hypothesis_inclusion + context_construction + narrative_selection (3b)
+- Corrections layer: 90-day expiration default, 3 capture methods (CLI, auto SQL error, skill feedback)
+- LLM callable pattern: `Callable[[str, str], str]` — anthropic SDK is optional
+- Error handling: transient vs permanent error classification, per-stage retry policies
+- SOFT gates (HYPOTHESIZE, DISPATCH) never raise — no try/except needed
+
+### Review Scores (Final — Iteration 3)
+- IC9 Domain Expert: 7.9/10 (all GREEN)
+- Principal AI Engineer: 7.8/10 (all GREEN)
+
+---
+
+## v2.0-alpha.3 — Holistic Redesign Wave 2: Directory Restructure (2026-03-08)
+
+Pure rename/restructure — no logic changes. Aligns directory layout with v2 architecture.
 
 ### Changed
-- Updated MEMORY.md Wave 3 scope: added remediation messages in contracts + memory/correction layer (promoted from v2+ backlog per OpenAI memory pattern)
-- Updated MEMORY.md Wave 4 scope: added self-evaluation confidence score + hybrid prompting
-- Added OpenAI harness research key takeaways section to MEMORY.md
+- Renamed `tools/` → `core/` for 5 analysis tools (decompose, anomaly, diagnose, formatter, schema)
+- Moved `tools/agent_orchestrator.py` → `harness/orchestrator.py` (renamed)
+- Moved `tools/connector_investigator.py` → `harness/connector_investigator.py`
+- Updated all imports across 31 files (core, harness, tests, eval, docs, skill file)
+- Updated CLI paths in `skills/search-metric-analyzer.md` and `README.md`
+- Updated directory tree in `README.md` to reflect `core/` + `harness/` layout
+- Fixed dead fallback import in `harness/orchestrator.py` (stale `from .schema` try/except)
+- Fixed stale `tools/` references in `synthetic-validation-scenarios.md`, `README_synthetic_validation.md`
+- Updated test assertion messages in `test_skill_file.py` to reference `core/`
 
-### Decisions
-- **Memory/correction layer promoted to Wave 3** (was deferred to v2+) — enables agent to auto-save user corrections during investigations to prevent repeating critical errors
-- Remediation messages in contract violations → Wave 3
-- Self-evaluation confidence score at SYNTHESIZE → Wave 4
-- Hybrid prompting (relax micro-instructions) → Wave 4
-- Knowledge enrichment (auto-extract from code) → deferred to v3
+### Removed
+- `tools/generate_synthetic_data.py` — thin wrapper, canonical copy in `generators/`
+- `tools/validate_scenarios.py` — thin wrapper, canonical copy in `generators/`
+- `tools/__init__.py` — replaced by `core/__init__.py` and `harness/__init__.py`
+
+### Tests
+- Suite status: `694 passed`, 21 skipped, 0 failures (unchanged)
+- Eval stress test: 6/6 GREEN, average 91.7/100
 
 ---
 
-## Eval Framework: Validation Rubrics for Retrospective + Prospective Eval (2026-03-07)
+## v2.0-alpha.2 — Holistic Redesign Wave 1: Trace + Contracts (2026-03-07)
 
-Research session on validation/eval frameworks for LLM-based agent systems.
-Produced executable evaluation rubrics to validate the agent against real
-engineering investigation reports — addressing Eng lead questions about
-how to prove the system works.
+Wave 1 of the v2.0 holistic redesign. IC9-reviewed architectural plan, new trace
+system and stage contracts with 11 domain-aware business rules. No existing code
+touched — all pure additive.
 
 ### Added
-- `eval/eval_rubric_approach_a.md` — Retrospective eval rubric
-  - 100-point scoring across 7 sections (B through G)
-  - Maps to the 4-stage pipeline (UNDERSTAND, HYPOTHESIZE, DISPATCH, SYNTHESIZE)
-  - Includes cross-stage checks for IC9 audit failure modes
-  - Critical failure flags for categorical failures (convincing wrong answer, hallucinated evidence)
-  - Selection criteria and aggregate reporting targets
-- `eval/eval_rubric_approach_b.md` — Prospective eval protocol
-  - Three operating modes for different evaluation contexts:
-    - Mode 1: Agent-First Audit (primary — for solo DS reviewing agent output)
-    - Mode 2: Delayed Agent Run (for establishing unbiased baseline)
-    - Mode 3: Engineer Proxy (for opportunistic eval when Eng investigates independently)
-  - Mode 1 scoring (P1a-P6a): first-draft accuracy, error detectability,
-    verification speedup, anchoring risk, final output quality
-  - Blind parallel protocol for Modes 2/3
-  - Aggregate tracking table and Eng lead reporting metrics
-  - Recommended phased rollout sequence
+- `trace/` module (4 files)
+  - `TraceSpan` and `SeamSpan` TypedDicts with dual-audience design (human_summary + agent_context)
+  - `InvestigationTrace` collector with emit, emit_seam, token-budgeted `agent_context_for()`, JSON roundtrip
+  - Trace completeness validation — checks all 4 IC9 Invisible Decisions are traced
+- `contracts/` module (6 files)
+  - Stage contracts: `UnderstandResult`, `HypothesisSet`, `FindingSet`, `SynthesisReport`
+  - `MixShiftResult` TypedDict — first-class mix-shift representation (Amendment 3)
+  - `seam_validator.py` — 11 business rules across 4 stages, tiered gate system, CLI interface
+  - Key domain rules: AI-CQ co-movement consistency (Amendment 2), mix-shift consideration, P0 proportionality
+- `tests/test_trace.py` — 57 tests for trace module
+- `tests/test_contracts.py` — 87 tests for contracts module
+- `docs/research/IC9_review_FULL_PIPELINE_assessment.md` — IC9 audit reference
+- `docs/research/openai-harness-engineering-notes.md` — harness engineering reference stub
+- `docs/talks/` — tech talk scripts (HTML + Markdown)
+- `docs/plans/2026-03-07-v2-holistic-redesign.md` — v2 design doc
+- `reviews/v2-plan-review/` — IC9-calibrated review (DS Lead, PM Lead, Principal AI Eng + synthesis)
+- `.worktrees/` added to `.gitignore` for isolated development
 
-### Context
-- Eng leads questioning validation/eval approach for the agent
-- Existing eval (`run_eval.py` + 6 scoring specs) covers deterministic Layer 1
-- New rubrics cover Layer 2 (human-scored, real cases) and Layer 3 (live investigations)
-- Two Eng lead eval ideas formalized: (A) replay past experiment reports, (B) parallel live investigations
+### Fixed
+- `rule_effect_size_proportionality` — changed from substring to word-boundary regex matching to prevent false positives ("minority", "smaller")
+- Updated `validate_seam` signature in design doc to match implementation (`stage: str` instead of `schema_class: Type`)
 
 ---
 
