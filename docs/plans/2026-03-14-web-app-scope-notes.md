@@ -5,40 +5,40 @@
 
 ## Metric Focus
 
-### v1 Scope: Online User Engagement Metrics
+### v1 Scope: Online User Engagement Metrics (5 dashboard metrics)
 - Click Quality (click-through behavior, click positions)
 - Search Quality Success = max(click_component, ai_trigger * ai_success)
 - AI trigger rate, AI success rate
 - Zero-result rate
-- Latency (p50, p95, p99)
-- Session depth, dwell time, bounce rate
 - The inverse co-movement pattern: more AI answers = fewer clicks (expected, not alarming)
+
+### v2 Scope: Additional Online Metrics (deferred from v1 dashboard)
+- Latency (p50, p95, p99) — requires separate data source
+- Session depth, dwell time, bounce rate — requires session-level aggregation
 
 ### Future Scope: Offline Metrics (deferred)
 - NDCG, MRR, precision@k on labeled datasets
 - Requires ground-truth labels + evaluation pipelines
 - Different workflow (batch evaluation vs real-time monitoring)
 
-## Web App Vision: Three Views
+## Web App Vision: Two Views (consolidated from original 3)
+
+**Design evolution (2026-03-14):** Query Playground + Trace Viewer merged into a single
+"Agent" view with two tabs (Overview + Execution Trace), inspired by OpenAI's data agent
+pattern. See architecture design doc for details.
 
 ### 1. Dashboard
 - Metric cards with trend indicators (up/down/stable)
 - Time-series charts for key metrics (CTR, Search Quality Success, AI rates)
 - Tenant-level drill-down (standard/premium/enterprise)
 - Alert indicators for anomalous movements
+- **Clickable metric cards → opens Agent with pre-filled investigation**
 - Think: "search team standup screen"
 
-### 2. Query Playground (ChatGPT-like)
-- User inputs a question: "Why did Click Quality drop 15% for enterprise tenants last week?"
-- System runs the diagnostic pipeline (existing orchestrator)
-- Streams results in real-time
-- Shows agent reasoning + evidence
-- Think: "search team diagnostic console"
-
-### 3. Trace Viewer
-- Expandable tree view of diagnostic trace
-- Each node: which agent ran, what it found, confidence, raw evidence
-- Links back to underlying data (connector metrics, tenant breakdown)
+### 2. Agent (merged Query Playground + Trace Viewer)
+- **Overview tab:** Answer-first flow — verdict, narrative, results table, charts, segment decomposition, methodology (collapsed), SQL queries
+- **Execution Trace tab:** Phase-based accordion with step-type badges (SQL, Knowledge, Reasoning), live streaming progression, filter tabs
+- Think: "OpenAI data agent for search diagnostics"
 - Think: "Chrome DevTools Network tab, but for search diagnostics"
 
 ## Technical Stack (IC9 Recommendation)

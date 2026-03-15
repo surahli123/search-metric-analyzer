@@ -15,7 +15,28 @@ Last updated: 2026-03-08
 - [x] Task 6: Create `core/corrections.py` + `data/knowledge/corrections.yaml` (read/write/CLI, 90-day expiry)
 - [x] Task 7: Wave 3a verification (full test suite + eval)
 
-### Wave 3b: Full 4-Stage Orchestrator (PLAN APPROVED — after 3a)
+### Web App Phase 1: Agent View with Mock Data (SPEC APPROVED — 2026-03-14)
+- [ ] Write implementation plan (invoke `superpowers:writing-plans`)
+- [ ] Scaffold `web/backend/` — FastAPI app, routes, fixtures, presenter.py
+- [ ] Scaffold `web/frontend/` — React + Vite + Tailwind, design token CSS
+- [ ] Build Overview tab components (VerdictStrip, CoMovementIndicator, ResultsTable, DivergingBarChart, TrendChart, SegmentTable, SqlBlock)
+- [ ] Build Execution Trace tab components (PhaseAccordion, StepRow, filter tabs)
+- [ ] Wire hardcoded mock investigation fixtures to API endpoint
+- [ ] Employer demo ready
+- Spec: `docs/plans/2026-03-14-web-app-architecture-design.md`
+- Mockup: `.superpowers/brainstorm/44661-1773549752/agent-view-v5.html`
+
+### Web App Phase 2: SSE Streaming + Live Trace (after Phase 1)
+- [ ] Implement SSE streaming endpoint with in-memory buffer
+- [ ] Wire real pipeline calls (decompose → diagnose → orchestrate)
+- [ ] Build loading/error/empty states
+
+### Web App Phase 3: Dashboard View (after Phase 2)
+- [ ] Build 6 metric cards (including Connector Health)
+- [ ] Clickable cards → pre-filled Agent investigation
+- [ ] Tenant tier filter tabs
+
+### Wave 3b: Full 4-Stage Orchestrator (PLAN APPROVED — after web app)
 - [ ] Task 8: OrchestratorError hierarchy + SearchMetricOrchestrator skeleton + UNDERSTAND stage
 - [ ] Task 9: HYPOTHESIZE stage (LLM + corrections context + IC9 #2: hypothesis_inclusion trace)
 - [ ] Task 10: DISPATCH stage (reuse orchestrate() + IC9 #3: context_construction trace)
