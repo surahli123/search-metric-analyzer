@@ -5,6 +5,28 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Tooling & Web App Scoping (2026-03-14)
+
+Installed 11 new Claude Code skills/agents from the everything-claude-code ecosystem,
+ran security audit (AgentShield), and scoped the web app layer for Search Metric Analyzer.
+
+### Added
+- 9 new skills: `security-scan`, `security-review`, `agent-harness-construction`, `eval-harness`, `autonomous-loops`, `backend-patterns`, `deployment-patterns`, `e2e-testing`, `verification-loop`
+- 1 new agent: `security-reviewer` (Sonnet) for OWASP vulnerability detection
+- `ecc-agentshield` v1.3.0 (npm global) — Claude Code config security scanner
+- `docs/plans/2026-03-14-cognee-evaluation.md` — GraphRAG knowledge engine evaluation (deferred to v3)
+- `docs/plans/2026-03-14-web-app-scope-notes.md` — Web app scope: 3 views (Dashboard, Query Playground, Trace Viewer), FastAPI + React stack, online engagement metrics focus
+
+### Changed
+- `agents/test-writer.md` — Removed hardcoded password patterns in example code (flagged by AgentShield)
+- `~/.claude.json` — Removed Excalidraw MCP server (SSE, project-scoped)
+
+### Security
+- AgentShield audit: D (43/100) → A (93/100) → B (88/100, stable with new security-reviewer agent)
+- Zero critical or high findings
+
+---
+
 ## v2.0-alpha.4 — Holistic Redesign Wave 3a: Trace Emission + Remediation + Corrections (2026-03-08)
 
 Wave 3a implementation — 7 tasks completed via subagent-driven-development. Adds trace instrumentation to all core tools, actionable remediation messages to all contract violations, and a corrections knowledge layer for institutional memory.
@@ -142,7 +164,6 @@ to the existing diagnosis pipeline or CLI.
 
 ### Tests
 - Suite status: `571 passed` (544 existing + 27 new), 0 failures
->>>>>>> origin/main
 
 ---
 

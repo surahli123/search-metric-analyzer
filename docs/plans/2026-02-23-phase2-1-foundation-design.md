@@ -99,9 +99,9 @@ def orchestrate(diagnosis_result: dict, agents: list, config: dict) -> Orchestra
 
 Priority order:
 1. Any `"blocked"` verdict → fused = `"blocked"` (trust gate precedence)
-2. Any `"rejected"` with no `"confirmed"` → fused = `"insufficient_evidence"`
-3. Majority `"confirmed"` with no hard reject → fused = `"confirmed"`
-4. Mixed or all `"inconclusive"` → fused = `"insufficient_evidence"` (conservative default)
+2. Any `"rejected"` verdict → fused = `"insufficient_evidence"` (one reject overrides all confirms)
+3. At least one `"confirmed"` (no rejects/blocked) → fused = `"confirmed"`
+4. All `"inconclusive"` → fused = `"insufficient_evidence"` (conservative default)
 
 ### Not In Scope
 

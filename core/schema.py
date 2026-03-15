@@ -175,7 +175,7 @@ class OrchestrationResult(TypedDict, total=False):
 
     Fields:
         orchestrated:           Whether orchestration actually ran.
-        agents_run:             List of agent names that were invoked.
+        agents_run:             List of normalized AgentVerdict dicts.
         fused_verdict:          The combined verdict across all agents.
         fused_reason:           Human-readable summary of the fused reasoning.
         updated_decision_status: The new decision status after orchestration.
