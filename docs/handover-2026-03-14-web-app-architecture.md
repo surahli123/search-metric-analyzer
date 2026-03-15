@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-14
 **Project:** Search Metric Analyzer
-**Path:** `/Users/surahli/Documents/New project/Search_Metric_Analyzer/`
+**Path:** `/Users/surahli/Documents/projects/Search_Metric_Analyzer/`
 **Branch:** `feature/web-app-architecture-design` (1 commit ahead of main, not pushed)
 
 ## Last Session Summary
