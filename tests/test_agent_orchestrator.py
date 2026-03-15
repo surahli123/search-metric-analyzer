@@ -126,7 +126,8 @@ class TestAgentSelectionGate:
 
         assert result["orchestrated"] is True
         assert len(result["agents_run"]) == 1
-        assert "ranking" in result["agents_run"]
+        # agents_run now contains full AgentVerdict dicts, not just names
+        assert result["agents_run"][0]["agent"] == "ranking"
 
     def test_runs_agents_for_diagnosed_low_confidence(self):
         """Low confidence is the MOST important case for agent verification."""
@@ -196,7 +197,9 @@ class TestSequentialExecution:
         result = orchestrate(diagnosis, agents)
 
         assert result["orchestrated"] is True
-        assert result["agents_run"] == ["ranking", "data_quality"]
+        # agents_run contains full AgentVerdict dicts — extract names to check order
+        agent_names = [a["agent"] for a in result["agents_run"]]
+        assert agent_names == ["ranking", "data_quality"]
 
     def test_max_agents_cap(self):
         """The max_agents config should limit how many agents actually run.
@@ -214,7 +217,7 @@ class TestSequentialExecution:
         result = orchestrate(diagnosis, agents, config={"max_agents": 1})
 
         assert len(result["agents_run"]) == 1
-        assert result["agents_run"] == ["agent_1"]
+        assert result["agents_run"][0]["agent"] == "agent_1"
 
     def test_agent_exception_produces_inconclusive(self):
         """A crashing agent should NOT bring down the whole orchestration.
@@ -229,9 +232,10 @@ class TestSequentialExecution:
         result = orchestrate(diagnosis, agents)
 
         assert result["orchestrated"] is True
-        # Both agents should appear in agents_run
-        assert "bad_agent" in result["agents_run"]
-        assert "good_agent" in result["agents_run"]
+        # Both agents should appear in agents_run (as full AgentVerdict dicts)
+        agent_names = [a["agent"] for a in result["agents_run"]]
+        assert "bad_agent" in agent_names
+        assert "good_agent" in agent_names
 
         # The run_log should show the bad agent as inconclusive
         bad_entry = [e for e in result["run_log"] if e["agent"] == "bad_agent"]
@@ -361,6 +365,30 @@ class TestFusionPolicy:
         """A single rejecting agent should fuse to insufficient_evidence."""
         diagnosis = _make_diagnosis()
         agents = [_fake_agent("solo", "rejected")]
+        result = orchestrate(diagnosis, agents)
+
+        assert result["fused_verdict"] == "insufficient_evidence"
+
+    def test_rejected_plus_blocked_fuses_to_blocked(self):
+        """Blocked takes priority over rejected — data quality is the hardest stop.
+
+        Even if one agent rejects the hypothesis, a data quality block is
+        a more fundamental problem that supersedes all other verdicts.
+        """
+        diagnosis = _make_diagnosis()
+        agents = [_fake_agent("a1", "rejected"), _fake_agent("a2", "blocked")]
+        result = orchestrate(diagnosis, agents)
+
+        assert result["fused_verdict"] == "blocked"
+
+    def test_rejected_plus_inconclusive_fuses_to_insufficient_evidence(self):
+        """Rejected + inconclusive = insufficient_evidence.
+
+        The rejection is a real signal; the inconclusive is a non-vote.
+        Together they produce insufficient_evidence (the rejection dominates).
+        """
+        diagnosis = _make_diagnosis()
+        agents = [_fake_agent("a1", "rejected"), _fake_agent("a2", "inconclusive")]
         result = orchestrate(diagnosis, agents)
 
         assert result["fused_verdict"] == "insufficient_evidence"

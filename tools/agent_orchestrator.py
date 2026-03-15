@@ -39,7 +39,7 @@ from typing import Any, Dict, List, Optional, Tuple
 try:
     from tools.schema import normalize_agent_verdict, VALID_VERDICTS
 except ImportError:
-    from .schema import normalize_agent_verdict, VALID_VERDICTS
+    from schema import normalize_agent_verdict, VALID_VERDICTS
 
 
 # ---------------------------------------------------------------------------
@@ -201,10 +201,13 @@ def _run_agents_sequentially(
         # Record in the run log for debugging/audit purposes.
         # This is the observability layer — like logging in a data pipeline
         # so you can reconstruct what happened after the fact.
+        # Use relative offsets (seconds since orchestration started) instead
+        # of absolute monotonic values.  Relative times are human-readable
+        # (e.g., 0.0, 0.5, 1.2) and meaningful across machines/sessions.
         run_log.append({
             "agent": normalized["agent"],
-            "started": agent_started,
-            "ended": agent_ended,
+            "started": agent_started - orchestration_start,
+            "ended": agent_ended - orchestration_start,
             "verdict": normalized["verdict"],
         })
 
@@ -372,7 +375,7 @@ def orchestrate(
     Returns:
         A dict conforming to the OrchestrationResult shape:
         - orchestrated:           bool — did orchestration actually run?
-        - agents_run:             list — names of agents that were invoked
+        - agents_run:             list — normalized AgentVerdict dicts
         - fused_verdict:          str  — the combined verdict
         - fused_reason:           str  — human-readable explanation
         - updated_decision_status: str  — new decision status after fusion
@@ -436,11 +439,12 @@ def orchestrate(
     updated_status = _verdict_to_decision_status(fused_verdict, original_status)
 
     # --- Build the result (never mutates diagnosis_result) ---
-    agent_names = [a["agent"] for a in agents_run_results]
-
+    # Return full AgentVerdict dicts, not just names.  Downstream consumers
+    # (Trace Viewer, formatters, logging) need per-agent evidence, reasoning,
+    # and cost data — not just the agent's name.
     return {
         "orchestrated": True,
-        "agents_run": agent_names,
+        "agents_run": agents_run_results,
         "fused_verdict": fused_verdict,
         "fused_reason": fused_reason,
         "updated_decision_status": updated_status,
