@@ -445,3 +445,526 @@ def orchestrate(
         "updated_decision_status": updated_status,
         "run_log": run_log,
     }
+
+
+# ---------------------------------------------------------------------------
+# SearchMetricOrchestrator — Full 4-Stage Pipeline (v2 Architecture)
+# ---------------------------------------------------------------------------
+#
+# WHY A CLASS INSTEAD OF A FUNCTION:
+# The existing `orchestrate()` function is a stateless post-process hook.
+# The new 4-stage pipeline (UNDERSTAND → HYPOTHESIZE → DISPATCH → SYNTHESIZE)
+# needs configuration (LLM callable, retry settings) and state that flows
+# between stages (trace, understand_result passed to hypothesize, etc.).
+# A class captures this naturally without threading config through every call.
+#
+# RELATIONSHIP TO orchestrate():
+# SearchMetricOrchestrator does NOT replace orchestrate(). They serve
+# different purposes:
+# - orchestrate(): Post-process hook for agent verification (v1 architecture)
+# - SearchMetricOrchestrator: Full investigation pipeline (v2 architecture)
+# Both coexist in the same module — v1 callers are not affected.
+# ---------------------------------------------------------------------------
+
+from core.anomaly import check_data_quality, detect_step_change, match_co_movement_pattern
+from core.decompose import run_decomposition
+from core.diagnose import run_diagnosis
+from contracts.seam_validator import validate_seam, SeamViolation
+from trace.collector import InvestigationTrace
+from trace.helpers import emit_deterministic_span
+from harness.errors import OrchestratorError, StageError
+
+
+class SearchMetricOrchestrator:
+    """Full 4-stage pipeline: UNDERSTAND → HYPOTHESIZE → DISPATCH → SYNTHESIZE.
+
+    Each stage follows the same protocol:
+    1. Validate input (pre-conditions)
+    2. Execute stage logic (deterministic or LLM-based)
+    3. Validate output with seam_validator (business rules)
+    4. Emit trace span (record what was decided and why)
+
+    The UNDERSTAND stage is fully deterministic (no LLM calls). It uses
+    existing core tools (decompose, anomaly, diagnose) to produce a
+    structured understanding of the metric movement.
+
+    HYPOTHESIZE, DISPATCH, and SYNTHESIZE require an LLM callable and
+    are not yet implemented (raise NotImplementedError).
+
+    Usage:
+        def my_llm(prompt, system, max_tokens):
+            return "LLM response..."
+
+        orch = SearchMetricOrchestrator(llm_callable=my_llm)
+        report = orch.run(
+            question="Click Quality dropped 6.2% WoW",
+            rows=metric_rows,
+            metric_field="click_quality_value",
+            dimensions=["tenant_tier", "ai_enablement"],
+        )
+
+    Args:
+        llm_callable: Function with signature (prompt, system, max_tokens) -> str.
+            Used by HYPOTHESIZE, DISPATCH, and SYNTHESIZE stages.
+            Not used by UNDERSTAND (deterministic).
+        config: Optional dict with orchestration settings:
+            - max_retries (int): Max LLM retries per stage (default: 2)
+            - timeout_seconds (float): Per-stage timeout (default: 60)
+    """
+
+    # Default configuration — conservative settings for reliability
+    DEFAULT_CONFIG: Dict[str, Any] = {
+        "max_retries": 2,
+        "timeout_seconds": 60,
+    }
+
+    def __init__(
+        self,
+        llm_callable: Any,
+        config: Optional[Dict[str, Any]] = None,
+    ):
+        self._llm = llm_callable
+        self._config = dict(self.DEFAULT_CONFIG)
+        if config:
+            self._config.update(config)
+
+    def run(
+        self,
+        question: str,
+        rows: list,
+        metric_field: str = "click_quality_value",
+        dimensions: Optional[list] = None,
+    ) -> Dict[str, Any]:
+        """Run the full 4-stage investigation pipeline.
+
+        Currently only UNDERSTAND is implemented. The remaining stages
+        raise NotImplementedError with descriptive messages explaining
+        what they will do when implemented.
+
+        Args:
+            question: The investigation question (e.g., "Click Quality dropped 6.2% WoW").
+            rows: List of metric row dicts. Must include a 'period' field
+                  with values "baseline" or "current" to separate comparison periods.
+            metric_field: Which metric column to analyze (default: click_quality_value).
+            dimensions: List of dimension columns to decompose by.
+                       Defaults to standard Enterprise Search dimensions.
+
+        Returns:
+            InvestigationReport dict with keys:
+            - status: "completed" | "blocked" | "partial"
+            - question: The original question
+            - understand_result: Output from UNDERSTAND stage
+            - trace: Full investigation trace as dict
+            - (future) hypothesize_result, dispatch_result, synthesize_result
+
+        Raises:
+            StageError: If the UNDERSTAND stage fails due to seam validation.
+            OrchestratorError: For unexpected pipeline failures.
+        """
+        # Create a fresh trace for this investigation
+        trace = InvestigationTrace(question=question)
+
+        # --- Stage 1: UNDERSTAND (deterministic, no LLM) ---
+        try:
+            understand_result = self._stage_understand(
+                question=question,
+                rows=rows,
+                metric_field=metric_field,
+                dimensions=dimensions,
+                trace=trace,
+            )
+        except SeamViolation as e:
+            # UNDERSTAND has a HARD gate — if seam validation fails,
+            # the investigation cannot continue. Build a blocked report
+            # explaining what went wrong and how to fix it.
+            blocked_understand = {
+                "question": question,
+                "metric": metric_field,
+                "data_quality_status": "fail",
+                "metric_direction": "unknown",
+                "severity": "blocked",
+                "direction": "unknown",
+                "step_change": None,
+                "co_movement_pattern": {},
+                "mix_shift_result": None,
+                "data_quality_details": None,
+            }
+            return self._build_blocked_report(
+                understand_result=blocked_understand,
+                trace=trace,
+                reason="; ".join(e.violations),
+            )
+
+        # Check if data quality failed — return blocked report
+        # (this handles the case where check_data_quality returns "fail"
+        # but the seam validator processes it as a violation)
+        if understand_result.get("data_quality_status") == "fail":
+            return self._build_blocked_report(
+                understand_result=understand_result,
+                trace=trace,
+                reason=understand_result.get("data_quality_details", {}).get(
+                    "reason", "Data quality check failed"
+                ),
+            )
+
+        # --- Stages 2-4: Not yet implemented ---
+        # These will be added in Tasks 9, 10, 11 respectively.
+        # For now, return the UNDERSTAND result as a partial report.
+        return {
+            "status": "partial",
+            "question": question,
+            "stages_completed": ["UNDERSTAND"],
+            "stages_remaining": ["HYPOTHESIZE", "DISPATCH", "SYNTHESIZE"],
+            "understand_result": understand_result,
+            "trace": trace.to_dict(),
+        }
+
+    def _stage_understand(
+        self,
+        question: str,
+        rows: list,
+        metric_field: str,
+        dimensions: Optional[list],
+        trace: InvestigationTrace,
+    ) -> Dict[str, Any]:
+        """Stage 1: UNDERSTAND — deterministic analysis using core tools.
+
+        This stage answers: "What happened?" using only code (no LLM).
+        It runs the full diagnostic toolkit and produces a structured
+        summary of the metric movement.
+
+        Steps:
+        1. Check data quality (gate check — can we trust this data?)
+        2. Run decomposition (where is the movement concentrated?)
+        3. Extract daily values for step-change detection
+        4. Detect step change (overnight jump or gradual drift?)
+        5. Match co-movement pattern (which known failure mode?)
+        6. Run diagnosis (validate, build hypothesis, score confidence)
+        7. Build UnderstandResult dict
+        8. Validate with seam_validator (HARD gate — halts on failure)
+        9. Emit trace span
+
+        Args:
+            question: Investigation question text.
+            rows: Metric data rows (must have 'period' field).
+            metric_field: Which metric to analyze.
+            dimensions: Dimensions to decompose by.
+            trace: InvestigationTrace to record decisions to.
+
+        Returns:
+            UnderstandResult dict conforming to the contract schema.
+
+        Raises:
+            SeamViolation: If UNDERSTAND seam validation fails (HARD gate).
+        """
+        # --- Step 1: Data quality gate ---
+        # This is the most important check — if data is bad, everything
+        # downstream is unreliable. Check FIRST, fail FAST.
+        dq_result = check_data_quality(rows, trace=trace)
+
+        # --- Step 2: Run decomposition ---
+        # Even if data quality is "warn", we continue — the analyst
+        # should see the decomposition alongside the warning.
+        # If data quality is "fail", we still run decomposition to
+        # populate the UnderstandResult, but the seam validator will
+        # halt the pipeline at step 8.
+        decomposition = run_decomposition(
+            rows=rows,
+            metric_field=metric_field,
+            dimensions=dimensions,
+            trace=trace,
+        )
+
+        # --- Step 3: Extract daily values for step-change detection ---
+        # Step-change detection needs daily metric averages. We extract
+        # these from the current-period rows (looking for overnight jumps
+        # within the current period).
+        daily_values = self._extract_daily_values(rows, metric_field)
+
+        # --- Step 4: Detect step change ---
+        step_change = detect_step_change(daily_values, trace=trace)
+
+        # --- Step 5: Match co-movement pattern ---
+        # Build the observed directions dict from the decomposition aggregate.
+        # We need direction for each metric to match against the co-movement table.
+        observed_directions = self._extract_observed_directions(rows, metric_field)
+        co_movement = match_co_movement_pattern(observed_directions, trace=trace)
+
+        # --- Step 6: Run diagnosis ---
+        # Diagnosis consumes all prior analysis and produces the hypothesis.
+        diagnosis = run_diagnosis(
+            decomposition=decomposition,
+            step_change_result=step_change,
+            co_movement_result=co_movement,
+            trust_gate_result=dq_result,
+            trace=trace,
+        )
+
+        # --- Step 7: Build UnderstandResult ---
+        # Extract key fields from diagnosis and decomposition into the
+        # contract-defined UnderstandResult shape.
+        aggregate = decomposition.get("aggregate", {})
+        direction = aggregate.get("direction", "stable")
+        severity = diagnosis.get("aggregate", aggregate).get("severity", "normal")
+
+        understand_result: Dict[str, Any] = {
+            "question": question,
+            "metric": metric_field,
+            "direction": direction,
+            "severity": severity,
+            "data_quality_status": dq_result.get("status", "pass"),
+            "step_change": step_change if step_change.get("detected") else None,
+            "co_movement_pattern": co_movement,
+            "mix_shift_result": decomposition.get("mix_shift") or None,
+            # IC9 Invisible Decision #1: metric_direction must be explicitly set
+            "metric_direction": direction,
+            "data_quality_details": dq_result,
+            # Additional context for downstream stages
+            "decomposition": decomposition,
+            "diagnosis": diagnosis,
+        }
+
+        # --- Step 8: Seam validation (HARD gate) ---
+        # UNDERSTAND uses a HARD gate — if validation fails, the pipeline
+        # halts immediately. This prevents bad data from producing misleading
+        # diagnoses. The SeamViolation exception propagates to run().
+        validate_seam(
+            result=understand_result,
+            stage="UNDERSTAND",
+            trace=trace,
+        )
+
+        # --- Step 9: Emit summary trace span ---
+        # Record the overall UNDERSTAND outcome for downstream stages
+        emit_deterministic_span(
+            trace,
+            tool="harness.orchestrator.SearchMetricOrchestrator._stage_understand",
+            decision="understand_complete",
+            value=f"{direction}_{severity}",
+            human_summary=(
+                f"UNDERSTAND complete: {metric_field} {direction} "
+                f"(severity={severity}, dq={dq_result.get('status', 'unknown')})"
+            ),
+            agent_context=(
+                f"metric={metric_field}, direction={direction}, severity={severity}, "
+                f"dq_status={dq_result.get('status')}, "
+                f"co_movement={co_movement.get('likely_cause', 'unknown')}, "
+                f"step_change={step_change.get('detected', False)}"
+            ),
+        )
+
+        return understand_result
+
+    def _build_blocked_report(
+        self,
+        understand_result: Dict[str, Any],
+        trace: InvestigationTrace,
+        reason: str,
+    ) -> Dict[str, Any]:
+        """Build a report when the pipeline is halted (e.g., data quality failure).
+
+        A blocked report explains WHY the investigation stopped and WHAT
+        the user needs to fix before retrying. This is more useful than
+        just raising an exception — the user gets actionable guidance.
+
+        Args:
+            understand_result: Partial UNDERSTAND output (may be incomplete).
+            trace: The investigation trace (contains what we managed to record).
+            reason: Human-readable explanation of why the pipeline was blocked.
+
+        Returns:
+            InvestigationReport dict with status="blocked".
+        """
+        # Emit a trace span recording the block decision
+        emit_deterministic_span(
+            trace,
+            tool="harness.orchestrator.SearchMetricOrchestrator._build_blocked_report",
+            decision="pipeline_blocked",
+            value="blocked",
+            human_summary=f"Pipeline blocked: {reason}",
+            agent_context=f"blocked_reason={reason}",
+        )
+
+        return {
+            "status": "blocked",
+            "question": understand_result.get("question", ""),
+            "stages_completed": [],
+            "stages_remaining": ["UNDERSTAND", "HYPOTHESIZE", "DISPATCH", "SYNTHESIZE"],
+            "blocked_reason": reason,
+            "understand_result": understand_result,
+            "remediation": (
+                "Fix the data quality issues described above, then rerun the investigation. "
+                "Common fixes: verify data completeness > 96%, data freshness < 60 minutes, "
+                "and ensure both baseline and current period data are present."
+            ),
+            "trace": trace.to_dict(),
+        }
+
+    def _stage_hypothesize(self, understand_result, trace):
+        """Stage 2: HYPOTHESIZE — generate hypotheses using LLM.
+
+        NOT YET IMPLEMENTED (Task 9).
+
+        This stage will:
+        1. Load corrections from corrections.yaml (past diagnostic mistakes)
+        2. Build a prompt with UNDERSTAND context + domain knowledge
+        3. Call the LLM to generate 3+ hypotheses with confirms_if criteria
+        4. Validate with seam_validator (SOFT gate)
+        5. Check co-movement consistency (Amendment 2)
+        6. Check mix-shift consideration (Amendment 3)
+        """
+        raise NotImplementedError(
+            "HYPOTHESIZE stage is not yet implemented (Task 9). "
+            "This stage will use the LLM callable to generate hypotheses "
+            "based on the UNDERSTAND result, domain knowledge, and past corrections."
+        )
+
+    def _stage_dispatch(self, hypothesize_result, understand_result, trace):
+        """Stage 3: DISPATCH — investigate hypotheses using specialist agents.
+
+        NOT YET IMPLEMENTED (Task 10).
+
+        This stage will:
+        1. Route each hypothesis to the appropriate specialist agent
+        2. Agents gather evidence (connector checks, timeline analysis, etc.)
+        3. Each agent returns findings with raw data evidence
+        4. Validate with seam_validator (SOFT gate)
+        5. Check narrative-data coherence
+        """
+        raise NotImplementedError(
+            "DISPATCH stage is not yet implemented (Task 10). "
+            "This stage will dispatch hypotheses to specialist agents "
+            "for evidence gathering and return structured findings."
+        )
+
+    def _stage_synthesize(self, dispatch_result, understand_result, trace):
+        """Stage 4: SYNTHESIZE — produce the final investigation report.
+
+        NOT YET IMPLEMENTED (Task 11).
+
+        This stage will:
+        1. Build a prompt with all prior stage context (token-budgeted)
+        2. Call the LLM to produce a structured report (7 mandatory sections)
+        3. Validate with seam_validator (RETRY gate — retry once, then soft)
+        4. Check effect-size proportionality for P0 severity
+        5. Require upgrade_condition statement
+        6. Add self-evaluation confidence score
+        """
+        raise NotImplementedError(
+            "SYNTHESIZE stage is not yet implemented (Task 11). "
+            "This stage will use the LLM callable to produce a final "
+            "investigation report with 7 mandatory sections and confidence grading."
+        )
+
+    # --- Helper methods ---
+
+    def _extract_daily_values(
+        self, rows: list, metric_field: str
+    ) -> List[float]:
+        """Extract daily metric averages from rows for step-change detection.
+
+        Groups rows by date (from metric_ts or date field) and computes
+        the daily mean for the target metric. Returns a chronologically
+        sorted list of daily averages.
+
+        If no date field is found, returns an empty list (step-change
+        detection will report "not detected" for < 2 values).
+        """
+        from collections import defaultdict
+
+        daily_buckets: Dict[str, List[float]] = defaultdict(list)
+
+        for row in rows:
+            # Try common date field names
+            ts = row.get("metric_ts", row.get("date", row.get("event_ts", "")))
+            if not ts:
+                continue
+            # Extract date portion (first 10 chars of ISO timestamp)
+            date_str = str(ts)[:10] if ts else "unknown"
+            try:
+                val = float(row.get(metric_field, 0))
+            except (ValueError, TypeError):
+                val = 0.0
+            daily_buckets[date_str].append(val)
+
+        if not daily_buckets:
+            return []
+
+        # Sort by date and compute daily averages
+        sorted_dates = sorted(daily_buckets.keys())
+        return [
+            sum(daily_buckets[d]) / len(daily_buckets[d])
+            for d in sorted_dates
+        ]
+
+    def _extract_observed_directions(
+        self, rows: list, primary_metric: str
+    ) -> Dict[str, str]:
+        """Extract observed metric directions for co-movement pattern matching.
+
+        Compares baseline vs current period means for each metric and
+        classifies the direction as "up", "down", or "stable".
+
+        The co-movement table expects directions for:
+        - click_quality, search_quality_success, ai_trigger, ai_success
+
+        Uses a 1% relative threshold to distinguish "stable" from real movement.
+        """
+        from core.schema import normalize_metric_name
+
+        # Metrics to check for co-movement (maps output key → row field name)
+        metric_fields = {
+            "click_quality": "click_quality_value",
+            "search_quality_success": "search_quality_success_value",
+            "ai_trigger": "ai_trigger",
+            "ai_success": "ai_success",
+        }
+
+        # Split by period
+        baseline_rows = [r for r in rows if r.get("period") == "baseline"]
+        current_rows = [r for r in rows if r.get("period") == "current"]
+
+        if not baseline_rows or not current_rows:
+            # Can't compute directions without both periods
+            return {}
+
+        directions: Dict[str, str] = {}
+        # Threshold for "stable" — less than 1% relative change
+        STABLE_THRESHOLD = 0.01
+
+        for key, field in metric_fields.items():
+            # Compute means for each period
+            bl_vals = []
+            cur_vals = []
+            for r in baseline_rows:
+                try:
+                    bl_vals.append(float(r.get(field, 0)))
+                except (ValueError, TypeError):
+                    pass
+            for r in current_rows:
+                try:
+                    cur_vals.append(float(r.get(field, 0)))
+                except (ValueError, TypeError):
+                    pass
+
+            if not bl_vals or not cur_vals:
+                directions[key] = "stable"
+                continue
+
+            bl_mean = sum(bl_vals) / len(bl_vals)
+            cur_mean = sum(cur_vals) / len(cur_vals)
+
+            if bl_mean == 0:
+                directions[key] = "stable"
+                continue
+
+            relative_change = (cur_mean - bl_mean) / abs(bl_mean)
+
+            if relative_change > STABLE_THRESHOLD:
+                directions[key] = "up"
+            elif relative_change < -STABLE_THRESHOLD:
+                directions[key] = "down"
+            else:
+                directions[key] = "stable"
+
+        return directions
