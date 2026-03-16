@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Search Metric Analyzer — Agent View v5</title>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-page: #F4F4F5;
+    --bg-card: #FFFFFF;
+    --bg-elevated: #FAFAFA;
+    --bg-input: #F0F0F2;
+    --border: #E4E4E7;
+    --border-hover: #D1D1D6;
+    --text-primary: #18181B;
+    --text-secondary: #52525B;
+    --text-muted: #A1A1AA;
+    --accent: #2563EB;
+    --accent-hover: #1D4ED8;
+    --accent-light: #EFF6FF;
+    --green: #16A34A;
+    --green-bg: #F0FDF4;
+    --green-border: #BBF7D0;
+    --red: #DC2626;
+    --red-bg: #FEF2F2;
+    --amber: #D97706;
+    --amber-bg: #FFFBEB;
+    --amber-border: #FDE68A;
+    --purple: #7C3AED;
+    --purple-bg: #F5F3FF;
+    --teal: #0D9488;
+    --teal-bg: #F0FDFA;
+    --coral: #E11D48;
+    --coral-bg: #FFF1F2;
+    --code-bg: #1E1E2E;
+    --code-text: #CDD6F4;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg-page);
+    color: var(--text-primary);
+    font-family: 'Fira Sans', -apple-system, system-ui, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ═══ App Shell ═══ */
+  .app {
+    max-width: 960px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ═══ Header ═══ */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+  }
+
+  .logo span { color: var(--accent); }
+
+  .nav {
+    display: flex;
+    gap: 2px;
+    background: var(--bg-input);
+    border-radius: 8px;
+    padding: 3px;
+  }
+
+  .nav-btn {
+    padding: 5px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-weight: 500;
+    transition: all 150ms;
+  }
+
+  .nav-btn:hover { color: var(--text-secondary); }
+
+  .nav-active {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .header-meta {
+    font-family: 'Fira Code', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* ═══ Question ═══ */
+  .question-area {
+    padding: 20px 24px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .question-text {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1.5;
+  }
+
+  .question-meta {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+
+  .question-meta:hover { color: var(--text-secondary); }
+
+  /* ═══ Tabs ═══ */
+  .tabs {
+    display: flex;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .tab {
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    position: relative;
+    transition: color 150ms;
+    border: none;
+    background: none;
+    font-family: inherit;
+  }
+
+  .tab-active { color: var(--accent); }
+
+  .tab-active::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 16px; right: 16px;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 2px 2px 0 0;
+  }
+
+  .tab-inactive { color: var(--text-muted); }
+  .tab-inactive:hover { color: var(--text-secondary); }
+
+  .tab-badge {
+    font-family: 'Fira Code', monospace;
+    font-size: 10px;
+    background: var(--bg-input);
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    color: var(--text-muted);
+  }
+
+  /* ═══ Tab Content ═══ */
+  .content { flex: 1; }
+  .panel { display: none; }
+  .panel-active { display: block; }
+
+  /* ═══ OVERVIEW TAB ═══ */
+  .overview { padding: 24px; }
+
+  /* TL;DR Verdict */
+  .verdict-strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--green-bg);
+    border: 1px solid var(--green-border);
+    border-radius: 10px;
+    margin-bottom: 20px;
+  }
+
+  .verdict-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    flex-shrink: 0;
+  }
+
+  .verdict-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--green);
+  }
+
+  .verdict-detail {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 400;
+  }
+
+  /* Narrative */
+  .narrative {
+    font-size: 15px;
+    line-height: 1.8;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+  }
+
+  .narrative strong { color: var(--text-primary); font-weight: 600; }
+  .narrative .highlight {
+    color: var(--green);
+    font-weight: 600;
+    font-family: 'Fira Code', monospace;
+    font-size: 14px;
+  }
+
+  /* Table Card */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .card-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .card-header-right {
+    font-weight: 400;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'Fira Code', monospace;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  th {
+    text-align: left;
+    padding: 8px 16px;
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'Fira Code', monospace;
+  }
+
+  td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--bg-input);
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg-elevated); }
+
+  .val-up { color: var(--green); font-weight: 600; }
+  .val-down { color: var(--red); font-weight: 600; }
+  .val-flat { color: var(--text-muted); }
+
+  /* Chart Card */
+  .chart-body {
+    padding: 20px 16px;
+    height: 180px;
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+  }
+
+  .chart-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .chart-bars {
+    display: flex;
+    gap: 3px;
+    align-items: flex-end;
+    width: 100%;
+    height: 130px;
+  }
+
+  .chart-bar {
+    flex: 1;
+    border-radius: 3px 3px 0 0;
+    cursor: pointer;
+    transition: opacity 150ms;
+  }
+
+  .chart-bar:hover { opacity: 0.75; }
+
+  .chart-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: 'Fira Code', monospace;
+  }
+
+  .chart-legend {
+    display: flex;
+    gap: 16px;
+    padding: 8px 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .legend-swatch {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    margin-right: 5px;
+    vertical-align: middle;
+  }
+
+  /* Collapsible Methodology */
+  .collapsible {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .collapsible-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    background: var(--bg-card);
+    transition: background 150ms;
+    border: none;
+    width: 100%;
+    font-family: inherit;
+    text-align: left;
+  }
+
+  .collapsible-trigger:hover { background: var(--bg-elevated); }
+
+  .collapsible-chevron {
+    transition: transform 200ms;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  .collapsible-body {
+    display: none;
+    background: var(--bg-card);
+  }
+
+  .collapsible.open .collapsible-body { display: block; }
+  .collapsible.open .collapsible-chevron { transform: rotate(90deg); }
+
+  .methodology-content {
+    padding: 0 16px 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.8;
+  }
+
+  .methodology-content strong { color: var(--text-primary); }
+
+  .code-inline {
+    background: var(--bg-input);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+    color: var(--text-primary);
+  }
+
+  /* SQL Block (dark inside light) */
+  .sql-card {
+    background: var(--code-bg);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-md);
+  }
+
+  .sql-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    border-bottom: 1px solid #313244;
+    font-size: 12px;
+  }
+
+  .sql-header-left { color: #A6ADC8; }
+  .sql-header-right { color: #89B4FA; cursor: pointer; }
+  .sql-header-right:hover { text-decoration: underline; }
+
+  .sql-body {
+    padding: 14px 16px;
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--code-text);
+    overflow-x: auto;
+  }
+
+  .kw { color: #CBA6F7; }
+  .fn { color: #89B4FA; }
+  .str { color: #A6E3A1; }
+  .num { color: #FAB387; }
+
+  /* ═══ EXECUTION TRACE TAB ═══ */
+  .trace-filters {
+    display: flex;
+    gap: 6px;
+    padding: 12px 24px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tf {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    background: transparent;
+    font-family: inherit;
+    font-weight: 500;
+    transition: all 150ms;
+  }
+
+  .tf-on {
+    background: var(--bg-card);
+    border-color: var(--border);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .tf-off { color: var(--text-muted); }
+  .tf-off:hover { color: var(--text-secondary); border-color: var(--border); }
+
+  .tf-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+  }
+
+  /* Phase */
+  .phase {
+    margin: 8px 24px 0;
+  }
+
+  .phase-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 150ms;
+  }
+
+  .phase-card:hover { box-shadow: var(--shadow-md); }
+
+  .phase-trigger {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+    background: none;
+    border: none;
+    width: 100%;
+    font-family: inherit;
+    text-align: left;
+    transition: background 150ms;
+  }
+
+  .phase-trigger:hover { background: var(--bg-elevated); }
+
+  .phase-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .d-done { background: var(--green); }
+  .d-active { background: var(--amber); animation: blink 2s infinite; }
+  .d-pending { background: var(--text-muted); opacity: 0.25; }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.3); }
+    50% { opacity: 0.5; box-shadow: 0 0 0 5px rgba(217, 119, 6, 0); }
+  }
+
+  .phase-name {
+    font-weight: 600;
+    font-size: 14px;
+    flex: 1;
+    color: var(--text-primary);
+  }
+
+  .phase-timing {
+    font-family: 'Fira Code', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-input);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  .phase-chevron {
+    color: var(--text-muted);
+    font-size: 11px;
+    transition: transform 200ms;
+  }
+
+  .badge-progress {
+    background: var(--amber-bg);
+    border: 1px solid var(--amber-border);
+    color: var(--amber);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: 'Fira Code', monospace;
+  }
+
+  .phase.open .phase-chevron { transform: rotate(90deg); }
+
+  /* Steps */
+  .steps {
+    padding: 4px 16px 16px 36px;
+    border-top: 1px solid var(--border);
+    display: none;
+  }
+
+  .phase.open .steps { display: block; }
+
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    position: relative;
+  }
+
+  .step + .step { border-top: 1px solid var(--bg-input); }
+
+  /* SVG circle icons instead of emoji */
+  .step-icon {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 700;
+    border-width: 2px;
+    border-style: solid;
+  }
+
+  .icon-sql { background: var(--purple-bg); border-color: #DDD6FE; color: var(--purple); }
+  .icon-knowledge { background: var(--teal-bg); border-color: #99F6E4; color: var(--teal); }
+  .icon-reasoning { background: var(--coral-bg); border-color: #FECDD3; color: var(--coral); }
+  .icon-output { background: var(--green-bg); border-color: var(--green-border); color: var(--green); }
+
+  .step-body { flex: 1; min-width: 0; }
+
+  .step-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .step-type {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-family: 'Fira Code', monospace;
+    letter-spacing: 0.3px;
+  }
+
+  .t-sql { background: var(--purple-bg); color: var(--purple); }
+  .t-knowledge { background: var(--teal-bg); color: var(--teal); }
+  .t-reasoning { background: var(--coral-bg); color: var(--coral); }
+  .t-output { background: var(--green-bg); color: var(--green); }
+
+  .step-desc { font-size: 13px; color: var(--text-primary); }
+
+  .step-time {
+    font-family: 'Fira Code', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: auto;
+    background: var(--bg-input);
+    padding: 1px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  .step-link {
+    color: var(--teal);
+    font-size: 12px;
+    text-decoration: none;
+    margin-top: 2px;
+    display: inline-block;
+  }
+
+  .step-link:hover { text-decoration: underline; }
+
+  /* Inline SQL in trace */
+  .step-sql {
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: 8px;
+    font-family: 'Fira Code', monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--code-text);
+    overflow-x: auto;
+  }
+
+  /* ═══ Footer Status Bar ═══ */
+  .footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 24px;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    position: sticky;
+    bottom: 0;
+  }
+
+  .footer-verdict {
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-family: 'Fira Code', monospace;
+    letter-spacing: 0.5px;
+    background: var(--green-bg);
+    color: var(--green);
+    border: 1px solid var(--green-border);
+  }
+
+  .footer-text { color: var(--text-secondary); flex: 1; }
+
+  .footer-meta {
+    font-family: 'Fira Code', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    gap: 12px;
+  }
+
+  /* ═══ Input Bar ═══ */
+  .input-bar {
+    display: flex;
+    gap: 8px;
+    padding: 12px 24px;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+  }
+
+  .input-bar input {
+    flex: 1;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    color: var(--text-primary);
+    font-family: 'Fira Sans', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 150ms;
+  }
+
+  .input-bar input:focus { border-color: var(--accent); }
+  .input-bar input::placeholder { color: var(--text-muted); }
+
+  .input-bar button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-family: 'Fira Sans', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 150ms;
+  }
+
+  .input-bar button:hover { background: var(--accent-hover); }
+
+  .spacer { height: 16px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ═══ Header ═══ -->
+  <div class="header">
+    <div class="logo">Search Metric <span>Analyzer</span></div>
+    <div class="nav">
+      <button class="nav-btn">Dashboard</button>
+      <button class="nav-btn nav-active">Agent</button>
+    </div>
+    <div class="header-meta">session_66 · v1.0</div>
+  </div>
+
+  <!-- ═══ Question ═══ -->
+  <div class="question-area">
+    <div class="question-text">What does QSR look like this week vs last week for Customer Cohort FPS?</div>
+    <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: var(--text-muted); font-family: 'Fira Code', monospace; align-items: center;">
+      <span>Data through <strong style="color: var(--text-secondary);">2026-02-24</strong></span>
+      <span style="color: var(--border);">|</span>
+      <span>Freshness: <strong style="color: var(--green);">4h ago</strong></span>
+      <span style="color: var(--border);">|</span>
+      <span>695 queries analyzed</span>
+      <span style="color: var(--border);">|</span>
+      <span style="cursor: pointer; color: var(--text-muted);" onclick="this.closest('.question-area').querySelector('.detail')?.classList.toggle('open')">Worked for 1m 12s ›</span>
+    </div>
+  </div>
+
+  <!-- ═══ Tabs ═══ -->
+  <div class="tabs">
+    <button class="tab tab-active" onclick="switchTab('overview')">Overview</button>
+    <button class="tab tab-inactive" onclick="switchTab('trace')">Execution Trace <span class="tab-badge">14</span></button>
+  </div>
+
+  <div class="content">
+
+    <!-- ═══════════════════════════════════════ -->
+    <!-- OVERVIEW TAB                           -->
+    <!-- ═══════════════════════════════════════ -->
+    <div id="overview" class="panel panel-active">
+      <div class="overview">
+
+        <!-- TL;DR Verdict (raw n, no fake stats) -->
+        <div class="verdict-strip">
+          <div class="verdict-dot"></div>
+          <div style="flex: 1;">
+            <span class="verdict-text">Within Variance</span>
+            <span class="verdict-detail"> — QSR +0.7pp week-over-week</span>
+          </div>
+          <div style="font-family: 'Fira Code', monospace; font-size: 11px; color: var(--text-muted);">
+            <span style="background: var(--bg-input); padding: 2px 8px; border-radius: 4px;">n = 348 queries</span>
+          </div>
+        </div>
+
+        <!-- Narrative (honest, no fake significance claims) -->
+        <div class="narrative">
+          <strong>Search Quality Success for Customer Cohort FPS</strong> measured at
+          <strong>71.2%</strong> this week vs 70.5% last week
+          (<strong>+0.7pp</strong>). The movement is driven by a
+          <strong>+2.4pp increase in AI Trigger Rate</strong> (35.8% → 38.2%),
+          offset by a small Click Quality dip (-0.7pp) — consistent with the expected
+          inverse co-movement pattern when AI answers increase.
+          Sample size is modest (n=348); consider monitoring for another week
+          before drawing firm conclusions.
+        </div>
+
+        <!-- Results Table -->
+        <div class="card">
+          <div class="card-header">
+            <span>QSR Week-over-Week — Customer Cohort FPS</span>
+            <span class="card-header-right">2026-02-10 → 2026-02-24</span>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Period</th><th>Queries</th><th>QSR</th><th>Click</th><th>AI Trigger</th><th>AI Success</th><th>Δ QSR</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="font-family: 'Fira Sans'; font-weight: 500;">This week</td>
+                <td>348</td>
+                <td style="font-weight: 600;">71.2%</td>
+                <td>65.4%</td>
+                <td>38.2%</td>
+                <td>82.1%</td>
+                <td style="font-weight: 600;">+0.7pp</td>
+              </tr>
+              <tr>
+                <td style="font-family: 'Fira Sans'; font-weight: 500;">Last week</td>
+                <td>347</td>
+                <td>70.5%</td>
+                <td>66.1%</td>
+                <td>35.8%</td>
+                <td>80.9%</td>
+                <td class="val-flat">—</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Investigation Chart: WoW Component Changes (waterfall/diverging bar) -->
+        <div class="card">
+          <div class="card-header">
+            <span>Week-over-Week Change by Component</span>
+            <span class="card-header-right">Δ percentage points</span>
+          </div>
+          <div style="padding: 20px 16px;">
+            <!-- Diverging horizontal bars — negative left, positive right -->
+            <!-- Zero line in the center -->
+            <div style="position: relative;">
+
+              <!-- QSR (net result) -->
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                <div style="width: 110px; text-align: right; font-size: 13px; font-weight: 600; color: var(--text-primary);">QSR (net)</div>
+                <div style="flex: 1; position: relative; height: 28px;">
+                  <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border);"></div>
+                  <div style="position: absolute; left: 50%; top: 4px; height: 20px; width: 14%; background: var(--green); border-radius: 0 4px 4px 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px;">
+                    <span style="font-family: 'Fira Code', monospace; font-size: 11px; color: white; font-weight: 600;">+0.7</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- AI Trigger Rate -->
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                <div style="width: 110px; text-align: right; font-size: 13px; color: var(--text-secondary);">AI Trigger Rate</div>
+                <div style="flex: 1; position: relative; height: 28px;">
+                  <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border);"></div>
+                  <div style="position: absolute; left: 50%; top: 4px; height: 20px; width: 48%; background: var(--accent); border-radius: 0 4px 4px 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px;">
+                    <span style="font-family: 'Fira Code', monospace; font-size: 11px; color: white; font-weight: 600;">+2.4</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- AI Success Rate -->
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                <div style="width: 110px; text-align: right; font-size: 13px; color: var(--text-secondary);">AI Success Rate</div>
+                <div style="flex: 1; position: relative; height: 28px;">
+                  <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border);"></div>
+                  <div style="position: absolute; left: 50%; top: 4px; height: 20px; width: 24%; background: var(--accent); opacity: 0.6; border-radius: 0 4px 4px 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px;">
+                    <span style="font-family: 'Fira Code', monospace; font-size: 11px; color: white; font-weight: 600;">+1.2</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Click Quality (negative — going LEFT) -->
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                <div style="width: 110px; text-align: right; font-size: 13px; color: var(--text-secondary);">Click Quality</div>
+                <div style="flex: 1; position: relative; height: 28px;">
+                  <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border);"></div>
+                  <div style="position: absolute; right: 50%; top: 4px; height: 20px; width: 14%; background: var(--red); opacity: 0.75; border-radius: 4px 0 0 4px; display: flex; align-items: center; padding-left: 8px;">
+                    <span style="font-family: 'Fira Code', monospace; font-size: 11px; color: white; font-weight: 600;">-0.7</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Zero Result Rate (flat) -->
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 110px; text-align: right; font-size: 13px; color: var(--text-secondary);">Zero Result Rate</div>
+                <div style="flex: 1; position: relative; height: 28px;">
+                  <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border);"></div>
+                  <div style="position: absolute; left: calc(50% - 4px); top: 10px; width: 8px; height: 8px; background: var(--text-muted); border-radius: 50%; opacity: 0.5;"></div>
+                  <span style="position: absolute; left: calc(50% + 12px); top: 6px; font-family: 'Fira Code', monospace; font-size: 11px; color: var(--text-muted);">0.0</span>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Axis labels -->
+            <div style="display: flex; margin-top: 16px; padding-left: 122px;">
+              <div style="flex: 1; display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); font-family: 'Fira Code', monospace;">
+                <span>-5pp</span>
+                <span>0</span>
+                <span>+5pp</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Insight callout -->
+          <div style="padding: 10px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-secondary); background: var(--bg-elevated);">
+            <strong style="color: var(--text-primary);">Pattern:</strong> AI Trigger ↑ and Click Quality ↓ is the expected inverse co-movement — more AI answers means fewer clicks. Net QSR is positive.
+          </div>
+        </div>
+
+        <!-- Daily Trend: line-style dot chart -->
+        <div class="card">
+          <div class="card-header">
+            <span>QSR Daily Trend — This Week vs Last Week</span>
+            <span class="card-header-right">14d window</span>
+          </div>
+          <div style="padding: 20px 16px; position: relative;">
+            <!-- Simple dot-and-line chart approximation -->
+            <div style="display: flex; align-items: flex-end; height: 120px; gap: 2px; position: relative;">
+              <!-- Y-axis labels -->
+              <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 35px; display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: var(--text-muted); font-family: 'Fira Code', monospace;">
+                <span>75%</span>
+                <span>70%</span>
+                <span>65%</span>
+              </div>
+              <!-- Chart area -->
+              <div style="margin-left: 40px; flex: 1; position: relative; height: 100%;">
+                <!-- Grid lines -->
+                <div style="position: absolute; top: 0; left: 0; right: 0; height: 1px; background: var(--border); opacity: 0.5;"></div>
+                <div style="position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--border); opacity: 0.5;"></div>
+                <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 1px; background: var(--border); opacity: 0.5;"></div>
+                <!-- Last week dots (muted) -->
+                <svg viewBox="0 0 700 100" style="position: absolute; inset: 0; width: 100%; height: 100%;" preserveAspectRatio="none">
+                  <!-- Last week line (muted dashed) -->
+                  <polyline points="50,55 150,50 250,58 350,48 450,52 550,50 650,45" fill="none" stroke="#A1A1AA" stroke-width="2" stroke-dasharray="6,4" opacity="0.4"/>
+                  <circle cx="50" cy="55" r="3.5" fill="#A1A1AA" opacity="0.4"/>
+                  <circle cx="150" cy="50" r="3.5" fill="#A1A1AA" opacity="0.4"/>
+                  <circle cx="250" cy="58" r="3.5" fill="#A1A1AA" opacity="0.4"/>
+                  <circle cx="350" cy="48" r="3.5" fill="#A1A1AA" opacity="0.4"/>
+                  <circle cx="450" cy="52" r="3.5" fill="#A1A1AA" opacity="0.4"/>
+                  <circle cx="550" cy="50" r="3.5" fill="#A1A1AA" opacity="0.4"/>
+                  <circle cx="650" cy="45" r="3.5" fill="#A1A1AA" opacity="0.4"/>
+                  <!-- This week line (solid accent) -->
+                  <polyline points="50,48 150,42 250,50 350,38 450,45 550,35 650,32" fill="none" stroke="#2563EB" stroke-width="2.5"/>
+                  <circle cx="50" cy="48" r="4" fill="#2563EB"/>
+                  <circle cx="150" cy="42" r="4" fill="#2563EB"/>
+                  <circle cx="250" cy="50" r="4" fill="#2563EB"/>
+                  <circle cx="350" cy="38" r="4" fill="#2563EB"/>
+                  <circle cx="450" cy="45" r="4" fill="#2563EB"/>
+                  <circle cx="550" cy="35" r="4" fill="#2563EB"/>
+                  <circle cx="650" cy="32" r="5" fill="#2563EB" stroke="white" stroke-width="2"/>
+                </svg>
+              </div>
+            </div>
+            <!-- X-axis -->
+            <div style="display: flex; margin-left: 40px; margin-top: 8px; justify-content: space-between; font-size: 10px; color: var(--text-muted); font-family: 'Fira Code', monospace;">
+              <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+            </div>
+          </div>
+          <div class="chart-legend">
+            <span><span class="legend-swatch" style="background: var(--accent);"></span>This week (71.2% avg, n=348)</span>
+            <span><span class="legend-swatch" style="background: #A1A1AA; opacity: 0.4;"></span>Last week (70.5% avg, n=347)</span>
+          </div>
+        </div>
+
+        <!-- Segment Breakdown: Tenant Tier Decomposition -->
+        <div class="card">
+          <div class="card-header">
+            <span>QSR by Tenant Tier — Decomposition</span>
+            <span class="card-header-right">contribution to blended Δ</span>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Segment</th><th>Queries</th><th>QSR</th><th>Δ QSR</th><th>Contribution</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="font-family: 'Fira Sans'; font-weight: 500;">Enterprise</td>
+                <td>89</td>
+                <td>73.8%</td>
+                <td style="font-weight: 600;">+2.1pp</td>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <div style="width: 60px; height: 6px; background: var(--bg-input); border-radius: 3px; overflow: hidden;">
+                      <div style="width: 68%; height: 100%; background: var(--accent); border-radius: 3px;"></div>
+                    </div>
+                    <span style="font-size: 11px;">68%</span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td style="font-family: 'Fira Sans'; font-weight: 500;">Premium</td>
+                <td>124</td>
+                <td>71.0%</td>
+                <td>+0.4pp</td>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <div style="width: 60px; height: 6px; background: var(--bg-input); border-radius: 3px; overflow: hidden;">
+                      <div style="width: 22%; height: 100%; background: var(--accent); opacity: 0.5; border-radius: 3px;"></div>
+                    </div>
+                    <span style="font-size: 11px;">22%</span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td style="font-family: 'Fira Sans'; font-weight: 500;">Standard</td>
+                <td>135</td>
+                <td>69.5%</td>
+                <td>+0.1pp</td>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <div style="width: 60px; height: 6px; background: var(--bg-input); border-radius: 3px; overflow: hidden;">
+                      <div style="width: 10%; height: 100%; background: var(--accent); opacity: 0.3; border-radius: 3px;"></div>
+                    </div>
+                    <span style="font-size: 11px;">10%</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <!-- Decomposition insight -->
+          <div style="padding: 10px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-secondary); background: var(--bg-elevated);">
+            <strong style="color: var(--text-primary);">Decomposition:</strong> Enterprise tier (n=89) drives 68% of the blended QSR movement at +2.1pp. Premium and Standard show small changes at +0.4pp and +0.1pp respectively.
+          </div>
+        </div>
+
+        <!-- Collapsible Methodology -->
+        <div class="collapsible" id="method-section">
+          <button class="collapsible-trigger" onclick="this.closest('.collapsible').classList.toggle('open')">
+            <span>Methodology & data source</span>
+            <span class="collapsible-chevron">›</span>
+          </button>
+          <div class="collapsible-body">
+            <div class="methodology-content">
+              Using <span class="code-inline">search_query_relevance_metrics_enriched</span>
+              (~695 queries; <strong>2026-02-03 → 2026-02-24</strong>), QSR is measured as
+              <strong>max(click_component, ai_trigger × ai_success)</strong>.
+              <ul style="margin-top: 8px; padding-left: 20px; line-height: 2;">
+                <li><strong>This week</strong> = 2026-02-17 to 2026-02-24</li>
+                <li><strong>Last week</strong> = 2026-02-10 to 2026-02-17</li>
+                <li>Filtered: <span class="code-inline">searchExperience = 'fullPageSearch'</span>, <span class="code-inline">is_hello = 0</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- SQL Query (dark block inside light page) -->
+        <div class="sql-card">
+          <div class="sql-header">
+            <span class="sql-header-left">Query used</span>
+            <span class="sql-header-right">View permalink ↗</span>
+          </div>
+          <div class="sql-body">
+            <span class="kw">SELECT</span><br>
+            &nbsp;&nbsp;day,<br>
+            &nbsp;&nbsp;<span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> queryId) <span class="kw">AS</span> total_queries,<br>
+            &nbsp;&nbsp;<span class="fn">AVG</span>(search_quality_success_value) <span class="kw">AS</span> qsr,<br>
+            &nbsp;&nbsp;<span class="fn">AVG</span>(click_quality_value) <span class="kw">AS</span> click_comp,<br>
+            &nbsp;&nbsp;<span class="fn">AVG</span>(ai_trigger) <span class="kw">AS</span> ai_trigger_rate<br>
+            <span class="kw">FROM</span> production.search_metrics_enriched<br>
+            <span class="kw">WHERE</span> day >= <span class="str">'2026-02-10'</span><br>
+            &nbsp;&nbsp;<span class="kw">AND</span> day &lt;= <span class="str">'2026-02-24'</span><br>
+            &nbsp;&nbsp;<span class="kw">AND</span> searchExperience = <span class="str">'fullPageSearch'</span><br>
+            &nbsp;&nbsp;<span class="kw">AND</span> is_hello = <span class="num">0</span><br>
+            <span class="kw">GROUP BY</span> day <span class="kw">ORDER BY</span> day
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════ -->
+    <!-- EXECUTION TRACE TAB                    -->
+    <!-- ═══════════════════════════════════════ -->
+    <div id="trace" class="panel">
+
+      <div class="trace-filters">
+        <button class="tf tf-on">All Steps</button>
+        <button class="tf tf-off"><span class="tf-dot" style="background: var(--purple);"></span> SQL</button>
+        <button class="tf tf-off"><span class="tf-dot" style="background: var(--teal);"></span> Knowledge</button>
+        <button class="tf tf-off"><span class="tf-dot" style="background: var(--coral);"></span> Reasoning</button>
+      </div>
+
+      <!-- Phase 0 -->
+      <div class="phase" onclick="this.classList.toggle('open')">
+        <div class="phase-card">
+          <div class="phase-trigger">
+            <div class="phase-dot d-done"></div>
+            <div class="phase-name">Phase 0: Classification</div>
+            <div class="phase-timing">4 steps · 1.1s</div>
+            <span class="phase-chevron">›</span>
+          </div>
+          <div class="steps">
+            <div class="step">
+              <div class="step-icon icon-reasoning">R</div>
+              <div class="step-body">
+                <div class="step-row">
+                  <span class="step-type t-reasoning">Reasoning</span>
+                  <span class="step-desc">Classify query intent and identify target metric</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 1: Schema Discovery -->
+      <div class="phase" onclick="this.classList.toggle('open')">
+        <div class="phase-card">
+          <div class="phase-trigger">
+            <div class="phase-dot d-done"></div>
+            <div class="phase-name">Phase 1: Schema Discovery</div>
+            <div class="phase-timing">2 steps · 0.0s</div>
+            <span class="phase-chevron">›</span>
+          </div>
+          <div class="steps">
+            <div class="step">
+              <div class="step-icon icon-knowledge">K</div>
+              <div class="step-body">
+                <div class="step-row">
+                  <span class="step-type t-knowledge">Knowledge</span>
+                  <span class="step-desc">metric_definitions.yaml</span>
+                </div>
+                <a class="step-link" href="#">← data/knowledge/metric_definitions.yaml</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 1: Data Quality (expanded by default) -->
+      <div class="phase open" onclick="this.classList.toggle('open')">
+        <div class="phase-card">
+          <div class="phase-trigger">
+            <div class="phase-dot d-done"></div>
+            <div class="phase-name">Phase 1: Data Quality</div>
+            <div class="phase-timing">3 steps · 11.9s</div>
+            <span class="phase-chevron">›</span>
+          </div>
+          <div class="steps" onclick="event.stopPropagation()">
+            <div class="step">
+              <div class="step-icon icon-knowledge">K</div>
+              <div class="step-body">
+                <div class="step-row">
+                  <span class="step-type t-knowledge">Knowledge</span>
+                  <span class="step-desc">corrections.yaml</span>
+                </div>
+                <a class="step-link" href="#">← knowledge/corrections/corrections.yaml</a>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-icon icon-sql">S</div>
+              <div class="step-body">
+                <div class="step-row">
+                  <span class="step-type t-sql">SQL Query</span>
+                  <span class="step-desc">Data quality gate — check latest day and row counts</span>
+                  <span class="step-time">11.9s · 3 rows</span>
+                </div>
+                <div class="step-sql">
+                  <span class="kw">SELECT</span> day, <span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> queryId) <span class="kw">AS</span> total<br>
+                  <span class="kw">FROM</span> production.search_metrics_enriched<br>
+                  <span class="kw">WHERE</span> day >= <span class="str">'2026-02-22'</span> <span class="kw">AND</span> day &lt;= <span class="str">'2026-02-25'</span><br>
+                  <span class="kw">GROUP BY</span> day <span class="kw">ORDER BY</span> day
+                </div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-icon icon-reasoning">R</div>
+              <div class="step-body">
+                <div class="step-row">
+                  <span class="step-type t-reasoning">Reasoning</span>
+                  <span class="step-desc">Phase 1: Data Quality — outcome</span>
+                </div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-icon icon-output">O</div>
+              <div class="step-body">
+                <div class="step-row">
+                  <span class="step-type t-output">Phase Output (JSON)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 2 -->
+      <div class="phase" onclick="this.classList.toggle('open')">
+        <div class="phase-card">
+          <div class="phase-trigger">
+            <div class="phase-dot d-done"></div>
+            <div class="phase-name">Phase 2: Trend Analysis</div>
+            <div class="phase-timing">3 steps · 42.4s</div>
+            <span class="phase-chevron">›</span>
+          </div>
+          <div class="steps"></div>
+        </div>
+      </div>
+
+      <!-- Phase 3 (Active) -->
+      <div class="phase">
+        <div class="phase-card">
+          <div class="phase-trigger">
+            <div class="phase-dot d-active"></div>
+            <div class="phase-name">Phase 3: Product Decomposition</div>
+            <div class="phase-timing">2 steps · 12.8s</div>
+            <span class="badge-progress">IN PROGRESS</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 4 (Pending) -->
+      <div class="phase">
+        <div class="phase-card" style="opacity: 0.5;">
+          <div class="phase-trigger" style="cursor: default;">
+            <div class="phase-dot d-pending"></div>
+            <div class="phase-name" style="color: var(--text-muted);">Phase 4: Synthesis</div>
+            <div class="phase-timing">pending</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+    </div>
+
+  </div>
+
+  <!-- ═══ Footer Status Bar ═══ -->
+  <div class="footer">
+    <span class="footer-verdict">Within Variance</span>
+    <span class="footer-text">QSR trending positive (+0.7pp WoW, +1.4pp over 3 weeks)</span>
+    <div class="footer-meta">
+      <span>695 total</span>
+      <span>2026-02-03 → 2026-02-24</span>
+    </div>
+  </div>
+
+  <!-- ═══ Input Bar ═══ -->
+  <div class="input-bar">
+    <input type="text" placeholder="Why did Click Quality drop for enterprise last week?">
+    <button>Diagnose</button>
+  </div>
+
+</div>
+
+<script>
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.remove('tab-active');
+    t.classList.add('tab-inactive');
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('panel-active'));
+  event.target.classList.remove('tab-inactive');
+  event.target.classList.add('tab-active');
+  document.getElementById(name).classList.add('panel-active');
+}
+</script>
+
+</body>
+</html>

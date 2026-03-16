@@ -67,6 +67,20 @@ Priority: fix during the wave where they naturally fit.
 - [ ] `CoMovementResult.runner_up` double-optional — `Optional[str]` + `total=False` is redundant. (Suggestion)
 - [ ] `InvestigationTrace.emit()` mutates span dict in-place — add docstring note. (Suggestion)
 
+### Knowledge Layer: Context Optimization (2026-03-14)
+- [x] Create knowledge routing table (`.claude/rules/04-knowledge-routing.md`)
+- [x] Enrich rule 01 with alert thresholds, baselines, blind spots
+- [x] Enrich rule 03 with decision points
+- [x] Create context layer architecture spec (`docs/plans/2026-03-14-context-layer-architecture.md`)
+- [x] Copy session record to `docs/research/`
+- [x] Code review — blocking issues fixed
+- [ ] Push + open PR for `feature/knowledge-routing-context-layer`
+- [ ] Add per-segment SQS baselines to rule 01 (when pipeline data available)
+- [ ] Add provenance fields to YAML entries during next knowledge audit (see spec Section 2)
+- [ ] Build optional `test_knowledge_routing.py` integrity checker (validates routing table section keys against actual YAMLs)
+- [ ] Minor: add one-line note in spec Section 3 acknowledging simplification from 3 correction categories to 2
+- [ ] Minor: add 4th scalability trigger (>500 entries) to rule 04 to match spec
+
 ---
 
 ## Deferred to v2.1+

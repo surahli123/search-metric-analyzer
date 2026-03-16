@@ -29,6 +29,27 @@ after 5 review rounds (DS Lead, PM Lead, Principal AI Eng, spec consistency, IC9
 
 ---
 
+## Knowledge Routing Table + Context Layer Architecture (2026-03-14)
+
+Knowledge layer optimization for context-efficient diagnostic sessions. Reduces
+always-loaded context from ~2,871 lines to 250 lines (~91% reduction) via intent-based
+routing to specific knowledge file sections.
+
+### Added
+- `.claude/rules/04-knowledge-routing.md` — routing table mapping 28 diagnostic intents to knowledge file sections, with composite intents, stop rules, fallback behavior, and scalability ceiling
+- `docs/plans/2026-03-14-context-layer-architecture.md` — full design spec for scaling to 100+ engineers: provenance fields (5), correction workflow, usage-driven refresh, feedback loop architecture, stakeholder vocabulary mapping, and scaling roadmap with migration triggers
+- `docs/research/session-record-context-layer-knowledge-refresh-2026-03-14.md` — a16z "Your Data Agents Need Context" industry analysis mapped to SAIN architecture
+
+### Changed
+- `.claude/rules/01-metric-invariants.md` — added alert thresholds (P0/P1/P2 for Click Quality and SQS), baselines by segment (5 segments including premium_tier, plus global SQS baseline with dynamic-change warning), known metric blind spots (demand suppression, zero-click success, multi-session attribution)
+- `.claude/rules/03-diagnostic-patterns.md` — added decision points section (5 branching rules for post-triage next steps)
+- `.claude/rules/02-architecture-boundaries.md` — first time tracked in git (existing content, no changes)
+
+### Review
+- Code review (superpowers:code-reviewer): 2 blocking issues found and fixed (Section 8 label accuracy, line count verification), 6 suggestions addressed (4 applied: premium_tier, explicit paths, SQS baseline, line count fix)
+
+---
+
 ## Tooling & Web App Scoping (2026-03-14)
 
 Installed 11 new Claude Code skills/agents from the everything-claude-code ecosystem,
