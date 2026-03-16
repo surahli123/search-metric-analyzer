@@ -5,6 +5,30 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Web App Architecture Design + Phase 2.1 Merge (2026-03-14)
+
+PR #7 merged Phase 2.1 foundation to main. Web app architecture design spec finalized
+after 5 review rounds (DS Lead, PM Lead, Principal AI Eng, spec consistency, IC9 SME).
+
+### Added
+- `docs/plans/2026-03-14-web-app-architecture-design.md` — 667-line architecture spec for web app layer (FastAPI + React + Tailwind). Covers: 2-view architecture (Agent + Dashboard), API contract with domain-concept response shapes, presenter.py transformation mapping, statistical honesty rules, co-movement evidence exposure, hypothesis elimination trail, data freshness degradation, SSE streaming lifecycle, phased build order.
+- `.superpowers/brainstorm/44661-1773549752/agent-view-v5.html` — Approved v5 mockup (light theme, OpenAI data agent style, Fira fonts, investigation-aligned charts)
+- `docs/plans/2026-03-14-web-app-scope-notes.md` — Updated: 3 views consolidated to 2, Latency/Dwell/Bounce deferred to v2
+
+### Changed
+- `docs/plans/2026-02-23-phase2-1-foundation-design.md` — Fusion rules corrected to match implementation
+- `harness/orchestrator.py` — Code review fixes: `agents_run` returns full AgentVerdict dicts (not just names), run_log uses relative timestamps, import fallback uses bare import
+- `tests/test_agent_orchestrator.py` — Updated assertions for dict-based agents_run, added 2 fusion tests (rejected+blocked, rejected+inconclusive)
+- `core/schema.py` — Fixed OrchestrationResult docstring for agents_run field
+
+### Merged
+- PR #7: `feature/phase2-1-foundation` → `main` (with merge conflict resolution for `tools/` → `core/` + `harness/` restructuring)
+
+### Tests
+- Suite status: `762 passed`, 0 failures (on main after merge)
+
+---
+
 ## Knowledge Routing Table + Context Layer Architecture (2026-03-14)
 
 Knowledge layer optimization for context-efficient diagnostic sessions. Reduces
