@@ -16,3 +16,6 @@ __pycache__/
 # Git worktrees
 .worktrees/
 .superpowers/
+
+# Vercel (local deployment config, auto-generated)
+.vercel/

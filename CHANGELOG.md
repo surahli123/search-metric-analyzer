@@ -5,6 +5,25 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Knowledge Layer Provenance + Routing Integrity Checker (2026-03-15)
+
+PR #12 on `feature/knowledge-layer-provenance`. Scaffolded provenance metadata across all knowledge YAML files and built automated routing table integrity checks.
+
+### Added
+- Provenance blocks (owner, usage, last_validated, confidence, scope) on 25 entries across 5 YAML knowledge files
+- Tiered `last_validated` dates by decay rate: formulas=2026-03-15, baselines=2026-03-01, patterns=2026-02-01
+- `tests/test_knowledge_routing.py` — 7 routing table integrity tests (file existence, section key resolution, nested key handling, composite intent parsing)
+- `TestProvenanceFields` class in `tests/test_knowledge.py` — 6 provenance enforcement tests
+- 4th scalability trigger (<500 entries) to routing table rule 04
+- Correction category simplification note in context layer spec Section 3
+
+### Design Decisions
+- Pipeline components classified as `empirical` (not `definitional`) — they contain benchmarks and model-specific data
+- `corrections.yaml` excluded from provenance — already has per-entry metadata (date, source, corrected_by)
+- Reviewed by Principal AI Eng + IC9 lens: 2 blockers resolved, 3 concerns addressed
+
+---
+
 ## Web App Architecture Design + Phase 2.1 Merge (2026-03-14)
 
 PR #7 merged Phase 2.1 foundation to main. Web app architecture design spec finalized
