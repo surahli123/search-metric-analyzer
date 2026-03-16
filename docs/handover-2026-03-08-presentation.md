@@ -1,7 +1,7 @@
 # Handover: Presentation Session (2026-03-08)
 
 ## Project
-**Search Metric Analyzer** — `/Users/surahli/Documents/New project/Search_Metric_Analyzer`
+**Search Metric Analyzer** — `/Users/surahli/Documents/projects/Search_Metric_Analyzer`
 
 ## Branch
 `feature/phase2-1-foundation` (main working branch)

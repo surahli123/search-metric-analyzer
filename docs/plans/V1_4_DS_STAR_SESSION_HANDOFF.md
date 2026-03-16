@@ -122,7 +122,7 @@ The `confirms_if`/`rejects_if` fields and `verify_diagnosis()` open up:
 ## How to Verify Everything Still Works
 
 ```bash
-cd "/Users/surahli/Documents/New project/Search_Metric_Analyzer"
+cd "/Users/surahli/Documents/projects/Search_Metric_Analyzer"
 
 # Unit tests
 python3 -m pytest tests/ -v

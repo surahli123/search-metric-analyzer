@@ -1,7 +1,7 @@
 # Search Metric Analyzer — Execution Kickoff Prompt
 
 > Copy everything below the line into a new Claude Code session opened in:
-> `/Users/surahli/Documents/New project/Search_Metric_Analyzer/`
+> `/Users/surahli/Documents/projects/Search_Metric_Analyzer/`
 
 ---
 

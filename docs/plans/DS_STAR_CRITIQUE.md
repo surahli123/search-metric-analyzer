@@ -745,7 +745,7 @@ Here is the full critique. I have read every line of your production codebase be
 
 **Implementation cost:** 15-20 days. **Ongoing maintenance:** HIGH (7 system prompts, 7 failure modes, version skew). **Expected accuracy improvement for YOUR problem:** NEAR ZERO.
 
-The reason is fundamental: DS-STAR solves open-ended data science tasks (Kaggle-style). You solve a CLOSED problem -- 4 metrics, ~10 archetypes in `ARCHETYPE_MAP` (at `/Users/surahli/Documents/New project/Search_Metric_Analyzer/tools/diagnose.py` lines 87-232), 6 decomposition dimensions, and a finite co-movement diagnostic table (at `/Users/surahli/Documents/New project/Search_Metric_Analyzer/data/knowledge/metric_definitions.yaml` lines 168-272). Your hypothesis space is already enumerated as deterministic Python. No LLM is needed for the core diagnostic logic.
+The reason is fundamental: DS-STAR solves open-ended data science tasks (Kaggle-style). You solve a CLOSED problem -- 4 metrics, ~10 archetypes in `ARCHETYPE_MAP` (at `/Users/surahli/Documents/projects/Search_Metric_Analyzer/tools/diagnose.py` lines 87-232), 6 decomposition dimensions, and a finite co-movement diagnostic table (at `/Users/surahli/Documents/projects/Search_Metric_Analyzer/data/knowledge/metric_definitions.yaml` lines 168-272). Your hypothesis space is already enumerated as deterministic Python. No LLM is needed for the core diagnostic logic.
 
 ### Verify-Route-Backtrack Loop
 
@@ -763,7 +763,7 @@ The reason is fundamental: DS-STAR solves open-ended data science tasks (Kaggle-
 
 **Implementation cost:** 2-3 days. **Expected improvement for us:** NEAR ZERO.
 
-**Verdict: Do not build.** Routing is for heterogeneous task types. You have one task type. Your pipeline at `/Users/surahli/Documents/New project/Search_Metric_Analyzer/tools/diagnose.py` (`run_diagnosis()`, lines 1005-1211) already runs the same 4 checks for every diagnosis. There is nothing to route.
+**Verdict: Do not build.** Routing is for heterogeneous task types. You have one task type. Your pipeline at `/Users/surahli/Documents/projects/Search_Metric_Analyzer/tools/diagnose.py` (`run_diagnosis()`, lines 1005-1211) already runs the same 4 checks for every diagnosis. There is nothing to route.
 
 ---
 
@@ -831,7 +831,7 @@ Add a `verify_diagnosis()` function to `diagnose.py` -- a Python function, not a
 - DS-STAR Reflector -> Add `sanity_check` rules in YAML (compile-time checks, not runtime reflection)
 
 ### Solve with Better Prompts (not architecture)
-- DS-STAR's 7 system prompts -> Improve the single skill prompt at `/Users/surahli/Documents/New project/Search_Metric_Analyzer/skills/search-metric-analyzer.md`. It is already 336 lines and well-structured. Adding examples is cheaper than adding agents.
+- DS-STAR's 7 system prompts -> Improve the single skill prompt at `/Users/surahli/Documents/projects/Search_Metric_Analyzer/skills/search-metric-analyzer.md`. It is already 336 lines and well-structured. Adding examples is cheaper than adding agents.
 - DS-STAR Backtrack -> Add "If first decomposition explains < 70%, try adding connector_type and query_type dimensions" to the skill prompt. This is a prompt instruction, not code.
 
 ### Solve with Better Eval (not runtime logic)
