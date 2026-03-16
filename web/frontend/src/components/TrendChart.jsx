@@ -16,7 +16,7 @@ export default function TrendChart({ title, current, previous, legendCurrent, le
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="day" tick={{ fontSize: 11, fill: 'var(--text-muted)', fontFamily: "'Fira Code', monospace" }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
-            <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)', fontFamily: "'Fira Code', monospace" }} axisLine={false} tickLine={false} width={40} />
+            <YAxis domain={['dataMin - 2', 'dataMax + 2']} tick={{ fontSize: 11, fill: 'var(--text-muted)', fontFamily: "'Fira Code', monospace" }} axisLine={false} tickLine={false} width={40} />
             <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, fontFamily: "'Fira Code', monospace", fontSize: 12 }} />
             <Line type="monotone" dataKey="previous" stroke="var(--text-muted)" strokeDasharray="5 5" strokeWidth={2} strokeOpacity={0.4} dot={{ r: 3, fill: 'var(--text-muted)', strokeWidth: 0, opacity: 0.4 }} name="Last week" />
             <Line type="monotone" dataKey="current" stroke="var(--accent)" strokeWidth={2} dot={{ r: 3, fill: 'var(--accent)', strokeWidth: 0 }} name="This week" />
