@@ -24,15 +24,18 @@ Last updated: 2026-03-15
 - [x] PR #11 created
 - Demo file: `docs/mockups/search-metric-analyzer-demo.html`
 
-### Web App Phase 1: React Frontend + FastAPI Backend (NEXT)
-- [ ] Scaffold `web/backend/` — FastAPI app, Pydantic schemas, mock fixtures, presenter.py
-- [ ] Scaffold `web/frontend/` — React + Vite + Tailwind, design tokens from demo CSS
-- [ ] Build Overview tab components (match demo HTML)
-- [ ] Build Execution Trace tab components (PhaseAccordion, StepRow, filter tabs)
-- [ ] Wire hardcoded mock investigation fixtures to API endpoint
-- [ ] Deploy backend to Render (free tier)
-- Spec: `docs/plans/2026-03-14-web-app-architecture-design.md`
-- Reference: `docs/mockups/search-metric-analyzer-demo.html` (visual target)
+### Web App Phase 1: React Frontend + FastAPI Backend (DONE — 2026-03-16)
+- [x] Scaffold `web/backend/` — FastAPI app, mock fixtures, diagnose route, health check
+- [x] Scaffold `web/frontend/` — React + Vite + Tailwind, design tokens from demo CSS
+- [x] Build 14 Overview tab components (match demo HTML visual target)
+- [x] Wire 2 hardcoded mock investigation fixtures with scenario switching
+- [x] 9 backend tests + 23 frontend tests (32 total)
+- [x] Fix DivergingBarChart overflow, text clipping, insight badges, TrendChart Y-axis
+- [x] Apply 3 DS Lead review fixes (SQS delta, hypothesis honesty, enterprise counts)
+- [ ] Build Execution Trace tab components (PhaseAccordion, StepRow, filter tabs) — deferred to Phase 2
+- [ ] Deploy backend to Render (free tier) — deferred, running locally for demo
+- PR #13 merged
+- Plan: `docs/superpowers/plans/2026-03-15-web-app-react-phase1.md`
 
 ### Web App Phase 2: SSE Streaming + Live Trace (after Phase 1)
 - [ ] Implement SSE streaming endpoint with in-memory buffer
