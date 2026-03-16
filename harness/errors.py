@@ -76,7 +76,7 @@ class LLMError(OrchestratorError):
     def __init__(
         self,
         message: str,
-        stage: str,
+        stage: str = "LLM",
         is_transient: bool = False,
         details: Optional[Dict[str, Any]] = None,
     ):
@@ -101,11 +101,16 @@ class LLMParseError(LLMError):
     def __init__(
         self,
         message: str,
-        stage: str,
+        stage: str = "LLM",
         raw_response: Optional[str] = None,
+        raw_text: Optional[str] = None,
+        strategies_tried: Optional[List[str]] = None,
         details: Optional[Dict[str, Any]] = None,
     ):
-        self.raw_response = raw_response
+        # Accept both raw_response and raw_text (llm.py uses raw_text)
+        self.raw_response = raw_response or raw_text
+        self.raw_text = self.raw_response  # alias for backwards compat
+        self.strategies_tried = strategies_tried or []
         # Parse errors are NOT transient — retrying won't help
         super().__init__(message, stage, is_transient=False, details=details)
 
@@ -125,10 +130,11 @@ class LLMAPIError(LLMError):
     def __init__(
         self,
         message: str,
-        stage: str,
+        stage: str = "LLM",
         status_code: Optional[int] = None,
+        is_transient: bool = True,
         details: Optional[Dict[str, Any]] = None,
     ):
         self.status_code = status_code
-        # API errors ARE transient — retrying usually helps
-        super().__init__(message, stage, is_transient=True, details=details)
+        # API errors default to transient — caller can override
+        super().__init__(message, stage, is_transient=is_transient, details=details)

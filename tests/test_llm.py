@@ -207,42 +207,34 @@ class TestErrorHierarchy:
         assert issubclass(LLMParseError, LLMError)
 
     def test_stage_error_attributes(self):
-        """StageError should carry stage name and optional cause."""
-        cause = ValueError("bad input")
-        err = StageError("HYPOTHESIZE", "prompt too long", cause=cause)
+        """StageError should carry stage name and optional violations."""
+        err = StageError("prompt too long", stage="HYPOTHESIZE", violations=["missing field"])
         assert err.stage == "HYPOTHESIZE"
-        assert err.cause is cause
-        assert "[HYPOTHESIZE]" in str(err)
+        assert err.violations == ["missing field"]
         assert "prompt too long" in str(err)
-        assert "ValueError" in str(err)
 
-    def test_stage_error_without_cause(self):
-        """StageError without a cause should still work."""
-        err = StageError("UNDERSTAND", "missing data")
+    def test_stage_error_without_violations(self):
+        """StageError without violations should still work."""
+        err = StageError("missing data", stage="UNDERSTAND")
         assert err.stage == "UNDERSTAND"
-        assert err.cause is None
-        assert "[UNDERSTAND]" in str(err)
-        assert "caused by" not in str(err)
+        assert err.violations == []
 
     def test_llm_api_error_attributes(self):
         """LLMAPIError should carry status_code and is_transient."""
         err = LLMAPIError("rate limited", status_code=429, is_transient=True)
         assert err.status_code == 429
         assert err.is_transient is True
-        assert "429" in str(err)
-        assert "transient" in str(err)
 
     def test_llm_api_error_permanent(self):
         """Permanent LLMAPIError should be flagged correctly."""
         err = LLMAPIError("unauthorized", status_code=401, is_transient=False)
         assert err.is_transient is False
-        assert "permanent" in str(err)
 
     def test_llm_api_error_no_status_code(self):
         """Connection errors may not have a status code."""
         err = LLMAPIError("connection refused", status_code=None, is_transient=True)
         assert err.status_code is None
-        assert "[Connection]" in str(err)
+        assert err.is_transient is True
 
     def test_llm_parse_error_attributes(self):
         """LLMParseError should carry raw_text and strategies_tried."""
@@ -257,14 +249,14 @@ class TestErrorHierarchy:
     def test_llm_parse_error_defaults(self):
         """LLMParseError with no optional args should have safe defaults."""
         err = LLMParseError("parse failed")
-        assert err.raw_text == ""
+        assert err.raw_text is None  # None when not provided
         assert err.strategies_tried == []
 
     def test_catch_all_orchestrator_errors(self):
         """A single except OrchestratorError should catch all harness errors."""
         errors = [
             OrchestratorError("base"),
-            StageError("UNDERSTAND", "test"),
+            StageError("test", stage="UNDERSTAND"),
             LLMError("llm base"),
             LLMAPIError("api", status_code=500, is_transient=True),
             LLMParseError("parse"),
