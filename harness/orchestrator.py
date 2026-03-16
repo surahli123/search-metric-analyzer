@@ -467,12 +467,14 @@ def orchestrate(
 # ---------------------------------------------------------------------------
 
 from core.anomaly import check_data_quality, detect_step_change, match_co_movement_pattern
+from core.corrections import load_corrections, find_relevant_corrections
 from core.decompose import run_decomposition
 from core.diagnose import run_diagnosis
 from contracts.seam_validator import validate_seam, SeamViolation
+from harness.errors import OrchestratorError, StageError, LLMParseError
+from harness.llm import extract_json
 from trace.collector import InvestigationTrace
 from trace.helpers import emit_deterministic_span
-from harness.errors import OrchestratorError, StageError
 
 
 class SearchMetricOrchestrator:
@@ -607,15 +609,28 @@ class SearchMetricOrchestrator:
                 ),
             )
 
-        # --- Stages 2-4: Not yet implemented ---
-        # These will be added in Tasks 9, 10, 11 respectively.
-        # For now, return the UNDERSTAND result as a partial report.
+        # --- Stage 2: HYPOTHESIZE (LLM-based) ---
+        try:
+            hypothesize_result = self._stage_hypothesize(
+                understand_result=understand_result,
+                trace=trace,
+            )
+        except StageError:
+            # HYPOTHESIZE StageError (e.g., JSON parse failure) — the
+            # investigation can't continue without hypotheses.
+            # Let it propagate to the caller.
+            raise
+
+        # --- Stages 3-4: Not yet implemented ---
+        # These will be added in Tasks 10, 11 respectively.
+        # For now, return UNDERSTAND + HYPOTHESIZE results as a partial report.
         return {
             "status": "partial",
             "question": question,
-            "stages_completed": ["UNDERSTAND"],
-            "stages_remaining": ["HYPOTHESIZE", "DISPATCH", "SYNTHESIZE"],
+            "stages_completed": ["UNDERSTAND", "HYPOTHESIZE"],
+            "stages_remaining": ["DISPATCH", "SYNTHESIZE"],
             "understand_result": understand_result,
+            "hypothesize_result": hypothesize_result,
             "trace": trace.to_dict(),
         }
 
@@ -800,24 +815,364 @@ class SearchMetricOrchestrator:
             "trace": trace.to_dict(),
         }
 
-    def _stage_hypothesize(self, understand_result, trace):
-        """Stage 2: HYPOTHESIZE — generate hypotheses using LLM.
+    def _stage_hypothesize(
+        self,
+        understand_result: Dict[str, Any],
+        trace: InvestigationTrace,
+    ) -> Dict[str, Any]:
+        """Stage 2: HYPOTHESIZE — LLM generates hypotheses from UNDERSTAND results.
 
-        NOT YET IMPLEMENTED (Task 9).
+        Returns a HypothesisSet dict conforming to contracts/hypothesize.py schema.
 
-        This stage will:
+        Steps:
         1. Load corrections from corrections.yaml (past diagnostic mistakes)
-        2. Build a prompt with UNDERSTAND context + domain knowledge
-        3. Call the LLM to generate 3+ hypotheses with confirms_if criteria
-        4. Validate with seam_validator (SOFT gate)
-        5. Check co-movement consistency (Amendment 2)
-        6. Check mix-shift consideration (Amendment 3)
+        2. Build system + user prompt with UNDERSTAND context + corrections
+        3. Call the LLM to generate 3+ hypotheses as JSON
+        4. Parse JSON response using extract_json()
+        5. Emit IC9 Invisible Decision #2 trace span (hypothesis_inclusion)
+        6. Validate with seam_validator (SOFT gate — log violations, continue)
+        7. Return HypothesisSet dict
+
+        Error handling:
+        - LLMAPIError (transient): propagates up to caller (retry handled externally)
+        - LLMParseError: wrapped in StageError with stage="HYPOTHESIZE"
+        - Seam validation failure: logged in trace but pipeline continues (SOFT gate)
+
+        Args:
+            understand_result: Output from _stage_understand().
+            trace: InvestigationTrace to record decisions to.
+
+        Returns:
+            HypothesisSet dict with keys: hypotheses, exclusions, investigation_context.
+
+        Raises:
+            StageError: If JSON extraction from LLM response fails.
+            LLMAPIError: If LLM call fails with a transient error (propagates).
         """
-        raise NotImplementedError(
-            "HYPOTHESIZE stage is not yet implemented (Task 9). "
-            "This stage will use the LLM callable to generate hypotheses "
-            "based on the UNDERSTAND result, domain knowledge, and past corrections."
+        # --- Step 1: Load corrections (past diagnostic mistakes to avoid) ---
+        # We load corrections for the current metric so the LLM knows what
+        # mistakes were made before and can avoid repeating them.
+        # Empty list is fine — new installs won't have corrections yet.
+        metric = understand_result.get("metric", "")
+        # Use the co-movement pattern's likely_cause as the "current archetype"
+        # for finding relevant corrections. This surfaces corrections from
+        # similar past situations.
+        co_movement = understand_result.get("co_movement_pattern", {})
+        current_archetype = co_movement.get("likely_cause", "unknown")
+        all_corrections = load_corrections()
+        relevant_corrections = find_relevant_corrections(
+            metric=metric,
+            archetype=current_archetype,
+            corrections=all_corrections,
         )
+
+        # --- Step 2: Build prompts ---
+        system_prompt = self._build_hypothesize_system_prompt()
+        user_prompt = self._build_hypothesize_user_prompt(
+            understand_result=understand_result,
+            corrections=relevant_corrections,
+            trace=trace,
+        )
+
+        # --- Step 3: Call the LLM ---
+        # LLMAPIError (transient) will propagate up — the caller
+        # (or _call_with_retry if used) handles retry logic.
+        raw_response = self._llm(user_prompt, system_prompt, 2000)
+
+        # --- Step 4: Parse JSON from LLM response ---
+        # If the LLM returns unparseable output, wrap in StageError.
+        # This is a persistent error — retrying the same prompt usually
+        # produces the same broken output.
+        try:
+            parsed = extract_json(raw_response)
+        except LLMParseError as e:
+            raise StageError(
+                message=(
+                    f"HYPOTHESIZE failed: could not extract valid JSON from LLM response. "
+                    f"Raw response preview: {str(e.raw_text)[:200]}"
+                ),
+                stage="HYPOTHESIZE",
+                violations=["LLM response did not contain parseable JSON"],
+                details={"raw_response_preview": str(e.raw_text)[:500]},
+            ) from e
+
+        # --- Step 4b: Normalize the parsed result into HypothesisSet shape ---
+        hypothesis_set = self._normalize_hypothesis_set(parsed)
+
+        # --- Step 5: Emit IC9 Invisible Decision #2 trace span ---
+        # hypothesis_inclusion: what hypotheses were included/excluded and why.
+        # This makes the LLM's selection process auditable — previously this
+        # was invisible (you only saw the final list, not what was considered).
+        included_archetypes = [
+            h.get("archetype", "unknown") for h in hypothesis_set.get("hypotheses", [])
+        ]
+        excluded_archetypes = [
+            e.get("archetype", "unknown") for e in hypothesis_set.get("exclusions", [])
+        ]
+        exclusion_reasons = [
+            f"{e.get('archetype', '?')}: {e.get('reason', 'no reason given')}"
+            for e in hypothesis_set.get("exclusions", [])
+        ]
+
+        # Use trace.emit() directly for LLM-generated spans (not deterministic)
+        # because emit_deterministic_span() sets code_enforced=True, which would
+        # be misleading for an LLM decision.
+        from trace.span import TraceSpan
+        trace.emit(TraceSpan(
+            stage="HYPOTHESIZE",
+            swimlane="llm_generated",
+            tool="harness.orchestrator.SearchMetricOrchestrator._stage_hypothesize",
+            decision="hypothesis_inclusion",
+            code_enforced=False,
+            value={
+                "included": included_archetypes,
+                "excluded": excluded_archetypes,
+            },
+            constrained_by=[
+                "rule_min_three_hypotheses",
+                "rule_has_contrarian_hypothesis",
+                "rule_hypotheses_consistent_with_co_movement",
+                "rule_mix_shift_considered_when_detected",
+            ],
+            human_summary=(
+                f"HYPOTHESIZE: {len(included_archetypes)} hypotheses generated, "
+                f"{len(excluded_archetypes)} excluded. "
+                f"Included: {', '.join(included_archetypes)}. "
+                f"Excluded: {'; '.join(exclusion_reasons) if exclusion_reasons else 'none'}."
+            ),
+            agent_context=(
+                f"hypotheses_count={len(included_archetypes)}, "
+                f"exclusions_count={len(excluded_archetypes)}, "
+                f"included_archetypes={included_archetypes}, "
+                f"has_contrarian={any(h.get('is_contrarian') for h in hypothesis_set.get('hypotheses', []))}"
+            ),
+        ))
+
+        # --- Step 6: Seam validation (SOFT gate) ---
+        # HYPOTHESIZE uses a SOFT gate — if validation fails, we log the
+        # violations in the trace but continue with whatever hypotheses exist.
+        # Rationale: a DS debugging a P0 needs *something*. 2 hypotheses with
+        # a warning is better than nothing.
+        validation = validate_seam(
+            result=hypothesis_set,
+            stage="HYPOTHESIZE",
+            trace=trace,
+            # Pass understand_result for cross-stage rules (Amendments 2 & 3):
+            # - rule_hypotheses_consistent_with_co_movement needs co_movement_pattern
+            # - rule_mix_shift_considered_when_detected needs mix_shift_result
+            understand_result=understand_result,
+        )
+
+        # SOFT gate: if validation failed, log a warning but DON'T halt.
+        # The violations are already recorded in the trace via validate_seam().
+        if not validation["passed"]:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "HYPOTHESIZE seam validation failed (SOFT gate — continuing): %s",
+                "; ".join(validation["violations"]),
+            )
+
+        # --- Step 7: Return the HypothesisSet ---
+        return hypothesis_set
+
+    def _build_hypothesize_system_prompt(self) -> str:
+        """Build the system prompt for HYPOTHESIZE stage.
+
+        Explains the LLM's role and the JSON schema it must produce.
+        Kept as a separate method for testability and readability.
+        """
+        return (
+            "You are a senior search relevance data scientist diagnosing metric movements "
+            "in an Enterprise Search platform (similar to Glean). Your task is to generate "
+            "hypotheses that explain a metric movement.\n\n"
+            "CRITICAL DOMAIN RULE — AI Adoption Trap:\n"
+            "AI answers and clicks have INVERSE co-movement by design. More AI answers → "
+            "fewer clicks → Click Quality drops → this is EXPECTED, not a regression. "
+            "If Click Quality is down but AI Trigger is up and AI Success is up, "
+            "this is a POSITIVE signal. Do NOT generate a 'click_quality_degradation' "
+            "hypothesis unless you mark it as contrarian (is_contrarian=True).\n\n"
+            "HYPOTHESIS PRIORITY ORDER (fixed — instrumentation first, behavior last):\n"
+            "1. Instrumentation/logging anomaly\n"
+            "2. Connector/data pipeline change\n"
+            "3. Query understanding regression\n"
+            "4. Algorithm/model change\n"
+            "5. Experiment ramp/de-ramp\n"
+            "6. AI feature effect\n"
+            "7. Seasonal/external\n"
+            "8. User behavior shift (check LAST)\n\n"
+            "Return ONLY a valid JSON object matching this schema:\n"
+            "{\n"
+            '  "hypotheses": [\n'
+            "    {\n"
+            '      "hypothesis_id": "hyp_001",\n'
+            '      "archetype": "ranking_regression",\n'
+            '      "priority": 1,\n'
+            '      "confirms_if": ["ranking logs show model change in date range"],\n'
+            '      "rejects_if": ["no model changes in deployment logs"],\n'
+            '      "expected_magnitude": "2-4% drop",\n'
+            '      "source": "data_driven",\n'
+            '      "is_contrarian": false\n'
+            "    }\n"
+            "  ],\n"
+            '  "exclusions": [\n'
+            '    {"archetype": "seasonal", "reason": "No calendar effects match this timing"}\n'
+            "  ],\n"
+            '  "investigation_context": "summary for downstream stages"\n'
+            "}\n\n"
+            "REQUIREMENTS:\n"
+            "- Generate at least 3 hypotheses\n"
+            "- At least one hypothesis MUST have is_contrarian=true\n"
+            "- Every hypothesis MUST have non-empty confirms_if and rejects_if\n"
+            "- Every hypothesis MUST have expected_magnitude\n"
+            "- source must be one of: data_driven, playbook, novel\n"
+            "- Include exclusions explaining what you considered but rejected\n"
+        )
+
+    def _build_hypothesize_user_prompt(
+        self,
+        understand_result: Dict[str, Any],
+        corrections: List[Dict[str, Any]],
+        trace: InvestigationTrace,
+    ) -> str:
+        """Build the user prompt for HYPOTHESIZE stage.
+
+        Provides the LLM with:
+        - Metric name, direction, severity from UNDERSTAND
+        - Co-movement pattern (pattern_name, likely_cause, movements)
+        - Mix-shift result if present
+        - Relevant corrections (past diagnostic mistakes to avoid)
+        - Token-budgeted context from the UNDERSTAND trace
+
+        Args:
+            understand_result: Output from _stage_understand().
+            corrections: Relevant past corrections for this metric.
+            trace: InvestigationTrace for agent_context_for().
+
+        Returns:
+            Formatted user prompt string.
+        """
+        metric = understand_result.get("metric", "unknown")
+        direction = understand_result.get("direction", "unknown")
+        severity = understand_result.get("severity", "unknown")
+        question = understand_result.get("question", "")
+
+        # Co-movement pattern details
+        co_movement = understand_result.get("co_movement_pattern", {})
+        pattern_name = co_movement.get("pattern_name", "unknown")
+        likely_cause = co_movement.get("likely_cause", "unknown")
+        match_score = co_movement.get("match_score", 0)
+
+        # Build the prompt in sections
+        sections = []
+
+        # Section 1: Investigation question and metric summary
+        sections.append(
+            f"INVESTIGATION: {question}\n\n"
+            f"METRIC SUMMARY:\n"
+            f"  Metric: {metric}\n"
+            f"  Direction: {direction}\n"
+            f"  Severity: {severity}\n"
+        )
+
+        # Section 2: Co-movement pattern
+        sections.append(
+            f"CO-MOVEMENT PATTERN:\n"
+            f"  Pattern: {pattern_name}\n"
+            f"  Likely cause: {likely_cause}\n"
+            f"  Match score: {match_score}\n"
+        )
+
+        # Section 3: Mix-shift result (if present)
+        mix_shift = understand_result.get("mix_shift_result")
+        if mix_shift and isinstance(mix_shift, dict):
+            detected = mix_shift.get("detected", False)
+            contribution = mix_shift.get("contribution_pct", 0)
+            sections.append(
+                f"MIX-SHIFT:\n"
+                f"  Detected: {detected}\n"
+                f"  Contribution: {contribution:.1%}\n"
+                f"  NOTE: If contribution > 25%, you MUST include a mix_shift "
+                f"or segment_mix_shift hypothesis.\n"
+            )
+
+        # Section 4: Relevant corrections (past mistakes to avoid)
+        if corrections:
+            correction_lines = ["PAST CORRECTIONS (avoid these mistakes):"]
+            for c in corrections[:5]:  # Cap at 5 to stay within token budget
+                correction_lines.append(
+                    f"  - Metric: {c.get('metric')}, "
+                    f"Originally called: {c.get('original_archetype')}, "
+                    f"Actually was: {c.get('corrected_to')}\n"
+                    f"    Context: {c.get('context', 'N/A')}\n"
+                    f"    Lesson: {c.get('lesson', 'N/A')}"
+                )
+            sections.append("\n".join(correction_lines))
+        else:
+            sections.append("PAST CORRECTIONS: None found for this metric.")
+
+        # Section 5: UNDERSTAND stage context (token-budgeted summary from trace)
+        understand_context = trace.agent_context_for("UNDERSTAND")
+        sections.append(
+            f"UNDERSTAND STAGE CONTEXT:\n{understand_context}"
+        )
+
+        # Section 6: Explicit instruction for contrarian hypothesis
+        sections.append(
+            "IMPORTANT: Include at least one contrarian hypothesis (is_contrarian=true) "
+            "that challenges the most obvious explanation. This prevents confirmation bias."
+        )
+
+        return "\n\n".join(sections)
+
+    def _normalize_hypothesis_set(self, parsed: Any) -> Dict[str, Any]:
+        """Normalize parsed LLM output into a valid HypothesisSet dict.
+
+        The LLM may return slightly malformed data (missing optional fields,
+        wrong types). This method applies defensive normalization without
+        silently changing semantics.
+
+        Args:
+            parsed: Raw parsed JSON from extract_json() (dict or list).
+
+        Returns:
+            Normalized HypothesisSet dict.
+        """
+        # If the LLM returned a list, assume it's the hypotheses list
+        if isinstance(parsed, list):
+            parsed = {"hypotheses": parsed, "exclusions": [], "investigation_context": ""}
+
+        hypotheses = parsed.get("hypotheses", [])
+        exclusions = parsed.get("exclusions", [])
+        investigation_context = parsed.get("investigation_context", "")
+
+        # Normalize each hypothesis — ensure required fields have defaults
+        normalized_hypotheses = []
+        for i, h in enumerate(hypotheses):
+            normalized_hypotheses.append({
+                "hypothesis_id": h.get("hypothesis_id", f"hyp_{i + 1:03d}"),
+                "archetype": h.get("archetype", "unknown"),
+                "priority": h.get("priority", i + 1),
+                "confirms_if": h.get("confirms_if", []),
+                "rejects_if": h.get("rejects_if", []),
+                "expected_magnitude": h.get("expected_magnitude", ""),
+                "source": h.get("source", "novel"),
+                "is_contrarian": bool(h.get("is_contrarian", False)),
+            })
+
+        # Normalize exclusions
+        normalized_exclusions = []
+        for e in exclusions:
+            normalized_exclusions.append({
+                "archetype": e.get("archetype", "unknown"),
+                "reason": e.get("reason", "no reason provided"),
+            })
+
+        return {
+            "hypotheses": normalized_hypotheses,
+            "exclusions": normalized_exclusions,
+            "investigation_context": str(investigation_context),
+        }
 
     def _stage_dispatch(self, hypothesize_result, understand_result, trace):
         """Stage 3: DISPATCH — investigate hypotheses using specialist agents.
