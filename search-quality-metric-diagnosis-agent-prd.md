@@ -54,7 +54,7 @@ Source:
 - Google SRE Book / Workbook: https://sre.google/books/
 
 Internal architecture context brief:
-- See `/Users/surahli/Documents/New project/Search_Metric_Analyzer/search-system-findings-brief.md` for workflow context, inferred QSR/DLCTR debugging challenges, and triage hypotheses.
+- See `/Users/surahli/Documents/projects/Search_Metric_Analyzer/search-system-findings-brief.md` for workflow context, inferred QSR/DLCTR debugging challenges, and triage hypotheses.
 
 ## 4) Product Vision
 An analyst copiloting agent that:
@@ -206,7 +206,7 @@ An analyst copiloting agent that:
 ## 11) Evaluation Plan
 
 Synthetic scenario validation pack:
-- See `/Users/surahli/Documents/New project/Search_Metric_Analyzer/synthetic-validation-scenarios.md` for seasonality, L3/interleaver, SAIN, overlap, and logging-anomaly validation scenarios with pass/fail assertions. Includes numeric scenario knobs, confidence rubric, and long-click edge rules.
+- See `/Users/surahli/Documents/projects/Search_Metric_Analyzer/synthetic-validation-scenarios.md` for seasonality, L3/interleaver, SAIN, overlap, and logging-anomaly validation scenarios with pass/fail assertions. Includes numeric scenario knobs, confidence rubric, and long-click edge rules.
 - Execution artifacts are written to `data/synthetic/synthetic_search_session_log.csv`, `data/synthetic/synthetic_metric_aggregate.csv`, `data/synthetic/validation_results.csv`, and `data/synthetic/validation_report.md`.
 
 Required validator artifact contract (must be present for every run):

@@ -8,7 +8,7 @@ This quickstart runs synthetic scenario validation for Search Quality diagnosis 
 - `pip3` (not required for this stdlib-only workflow)
 
 ## Run
-From `/Users/surahli/Documents/New project/Search_Metric_Analyzer`:
+From `/Users/surahli/Documents/projects/Search_Metric_Analyzer`:
 
 1. Write starter templates:
 ```bash

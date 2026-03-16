@@ -2,7 +2,7 @@
 
 ## Project
 - **Name:** Search Metric Analyzer
-- **Path:** `/Users/surahli/Documents/New project/Search_Metric_Analyzer`
+- **Path:** `/Users/surahli/Documents/projects/Search_Metric_Analyzer`
 - **Worktree:** `.worktrees/v2-holistic-redesign/` (branch: `feature/v2-holistic-redesign`)
 - **PR:** #4 (pushed to `origin/feature/v2-holistic-redesign`)
 

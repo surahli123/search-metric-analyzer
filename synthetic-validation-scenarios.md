@@ -143,7 +143,7 @@ No new raw data tables are required.
 6. Confidence rubric is deterministic and auditable; no learned calibration in this phase.
 
 ## 13) Execution
-Run from `/Users/surahli/Documents/New project/Search_Metric_Analyzer`:
+Run from `/Users/surahli/Documents/projects/Search_Metric_Analyzer`:
 
 1. Generate starter CSV templates:
 `python3 generators/generate_synthetic_data.py --write-templates-only`
@@ -175,5 +175,5 @@ Observed key outcomes:
   - `qsr_value == greatest(qsr_component_click, qsr_component_sain)`
 
 Evidence artifacts:
-- `/Users/surahli/Documents/New project/Search_Metric_Analyzer/data/synthetic/validation_results.csv`
-- `/Users/surahli/Documents/New project/Search_Metric_Analyzer/data/synthetic/validation_report.md`
+- `/Users/surahli/Documents/projects/Search_Metric_Analyzer/data/synthetic/validation_results.csv`
+- `/Users/surahli/Documents/projects/Search_Metric_Analyzer/data/synthetic/validation_report.md`

@@ -2,7 +2,7 @@
 
 ## Project
 - **Name:** Search Metric Analyzer
-- **Path:** `/Users/surahli/Documents/New project/Search_Metric_Analyzer`
+- **Path:** `/Users/surahli/Documents/projects/Search_Metric_Analyzer`
 - **Worktree:** `.worktrees/v2-holistic-redesign/` (branch: `feature/v2-holistic-redesign`)
 - **PR:** #4 (origin is 8 commits behind local — push needed before next PR update)
 

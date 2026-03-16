@@ -1,7 +1,7 @@
 # Handover: Knowledge Routing Table + Context Layer Architecture
 
 **Project:** Search Metric Analyzer
-**Path:** `/Users/surahli/Documents/New project/Search_Metric_Analyzer/`
+**Path:** `/Users/surahli/Documents/projects/Search_Metric_Analyzer/`
 **Branch:** `feature/knowledge-routing-context-layer` (1 commit ahead of main, not pushed)
 **Date:** 2026-03-14
 

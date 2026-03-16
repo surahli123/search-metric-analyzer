@@ -10,7 +10,7 @@
 
 **Design Doc:** `docs/plans/2026-02-21-search-metric-analyzer-design.md`
 
-**Working Directory:** `/Users/surahli/Documents/New project/Search_Metric_Analyzer/`
+**Working Directory:** `/Users/surahli/Documents/projects/Search_Metric_Analyzer/`
 
 ---
 
@@ -246,7 +246,7 @@ mkdir -p eval/scoring_specs eval/results templates data/knowledge
 **Step 6: Install dependencies**
 
 ```bash
-cd "/Users/surahli/Documents/New project/Search_Metric_Analyzer"
+cd "/Users/surahli/Documents/projects/Search_Metric_Analyzer"
 pip install -r requirements.txt
 ```
 
@@ -1931,7 +1931,7 @@ This requires significant modification to the existing `generate_synthetic_data.
 **Step 3: Run generator and verify**
 
 ```bash
-cd "/Users/surahli/Documents/New project/Search_Metric_Analyzer"
+cd "/Users/surahli/Documents/projects/Search_Metric_Analyzer"
 python generators/generate_synthetic_data.py --output-dir data/synthetic
 ```
 
