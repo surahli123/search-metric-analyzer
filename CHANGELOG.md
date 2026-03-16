@@ -5,6 +5,34 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Web App React + FastAPI — Phase 1 (2026-03-16)
+
+PR #13 merged. Full React + FastAPI web app with 2 mock investigation scenarios. Agent View with 14 components matching the approved demo mockup.
+
+### Added
+- `web/backend/` — FastAPI app with `POST /api/diagnose` serving 2 mock fixtures (ranking regression + within variance), health check endpoint, CORS for Vite dev server
+- `web/frontend/` — React + Vite + Tailwind frontend with 14 components: Header, VerdictStrip, DataQualityChecks, CoMovementIndicator, NarrativeBlock, HypothesisChecklist, ResultsTable, DivergingBarChart (CSS divs), TrendChart (Recharts), SegmentTable, MethodologyBlock, SqlBlock, Footer, QuestionInput
+- `web/frontend/src/data/scenarios.js` — Full client-side scenario data for both investigations
+- `web/frontend/src/styles/tokens.css` — Design system tokens + insight badge CSS classes
+- `tests/test_web_backend.py` — 9 backend tests (fixture routing, DS Lead fix validation)
+- `web/frontend/src/__tests__/` — 8 frontend test files, 23 tests (color logic, status filtering, chart override, collapse/expand)
+- `docs/superpowers/plans/2026-03-15-web-app-react-phase1.md` — Implementation plan (24 tasks, 5 chunks)
+
+### Fixed
+- DivergingBarChart: bar overflow (width now half-relative), small-bar text clipping (renders outside when bar < 12% width)
+- TrendChart: Y-axis auto-zooms to data range (was 0-based, compressed the visual delta)
+- Insight badges: "Regression detected" and "Expected co-movement" now render as styled pill badges
+
+### DS Lead Review Fixes Applied
+- SQS delta +0.3pp (was +0.7pp, which exceeded P1 threshold)
+- Hypotheses show only "matched" and "not_evaluated" (no fabricated "ruled_out")
+- Enterprise counts 130 vs 150 (was 89 vs 150, implausible volume drop)
+
+### Tests
+- Suite status: 32 new tests (9 backend + 23 frontend), existing suite unaffected
+
+---
+
 ## Web App Architecture Design + Phase 2.1 Merge (2026-03-14)
 
 PR #7 merged Phase 2.1 foundation to main. Web app architecture design spec finalized
