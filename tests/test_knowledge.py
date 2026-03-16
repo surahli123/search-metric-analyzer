@@ -222,3 +222,104 @@ class TestArchitectureTradeoffs:
             assert len(pat["failure_modes"]) >= 1, (
                 f"Pattern '{pat_name}' needs at least 1 failure mode"
             )
+
+
+# ──────────────────────────────────────────────────────────────
+# Provenance Enforcement Tests
+# WHY: Provenance fields prevent knowledge from silently going stale.
+# Without test enforcement, the next YAML edit will omit provenance
+# and the metadata layer rots. These tests lock the convention.
+# ──────────────────────────────────────────────────────────────
+
+PROVENANCE_REQUIRED_FIELDS = ["owner", "usage", "last_validated", "confidence", "scope"]
+
+
+def _assert_provenance_complete(entry_name: str, provenance: dict):
+    """Verify a provenance block has all 5 required fields."""
+    for field in PROVENANCE_REQUIRED_FIELDS:
+        assert field in provenance, (
+            f"Provenance on '{entry_name}' missing required field: {field}"
+        )
+
+
+class TestProvenanceFields:
+    """Verify every named knowledge entry has a complete provenance block.
+
+    WHY: The context layer spec (Section 2) requires 5 provenance fields
+    on every knowledge entry: owner, usage, last_validated, confidence, scope.
+    Without these tests, provenance will rot on the next YAML edit by someone
+    who doesn't know the convention.
+    """
+
+    def test_metric_definitions_have_provenance(self):
+        """Each metric entry must have provenance."""
+        with open(KNOWLEDGE_DIR / "metric_definitions.yaml") as f:
+            data = yaml.safe_load(f)
+        for metric_name, metric in data["metrics"].items():
+            assert "provenance" in metric, (
+                f"Metric '{metric_name}' in metric_definitions.yaml missing provenance block"
+            )
+            _assert_provenance_complete(f"metrics.{metric_name}", metric["provenance"])
+
+    def test_pipeline_components_have_provenance(self):
+        """Each pipeline component must have provenance."""
+        with open(KNOWLEDGE_DIR / "search_pipeline_knowledge.yaml") as f:
+            data = yaml.safe_load(f)
+        for comp_name, comp in data["pipeline_components"].items():
+            assert "provenance" in comp, (
+                f"Pipeline component '{comp_name}' missing provenance block"
+            )
+            _assert_provenance_complete(f"pipeline_components.{comp_name}", comp["provenance"])
+
+    def test_cost_patterns_have_provenance(self):
+        """Each cost optimization pattern must have provenance."""
+        with open(KNOWLEDGE_DIR / "architecture_tradeoffs.yaml") as f:
+            data = yaml.safe_load(f)
+        for pat_name, pat in data["cost_optimization_patterns"].items():
+            assert "provenance" in pat, (
+                f"Cost pattern '{pat_name}' missing provenance block"
+            )
+            _assert_provenance_complete(f"cost_optimization_patterns.{pat_name}", pat["provenance"])
+
+    def test_evaluation_approaches_have_provenance(self):
+        """Each evaluation approach must have provenance."""
+        with open(KNOWLEDGE_DIR / "evaluation_methods.yaml") as f:
+            data = yaml.safe_load(f)
+        for approach_name, approach in data["evaluation_approaches"].items():
+            assert "provenance" in approach, (
+                f"Evaluation approach '{approach_name}' missing provenance block"
+            )
+            _assert_provenance_complete(f"evaluation_approaches.{approach_name}", approach["provenance"])
+
+    def test_seasonal_patterns_have_provenance(self):
+        """Each seasonal pattern must have provenance."""
+        with open(KNOWLEDGE_DIR / "historical_patterns.yaml") as f:
+            data = yaml.safe_load(f)
+        for pattern in data["seasonal_patterns"]:
+            name = pattern.get("name", "unnamed")
+            assert "provenance" in pattern, (
+                f"Seasonal pattern '{name}' missing provenance block"
+            )
+            _assert_provenance_complete(f"seasonal_patterns.{name}", pattern["provenance"])
+
+    def test_section_level_provenance_exists(self):
+        """Section-level provenance keys must exist for array/table sections."""
+        checks = [
+            ("metric_definitions.yaml", "co_movement_diagnostic_table_provenance"),
+            ("metric_definitions.yaml", "hypothesis_priority_provenance"),
+            ("search_pipeline_knowledge.yaml", "causal_chains_provenance"),
+            ("search_pipeline_knowledge.yaml", "benchmarks_provenance"),
+            ("architecture_tradeoffs.yaml", "token_economics_provenance"),
+            ("architecture_tradeoffs.yaml", "diagnostic_implications_provenance"),
+            ("evaluation_methods.yaml", "measurement_pitfalls_provenance"),
+            ("evaluation_methods.yaml", "diagnostic_implications_provenance"),
+            ("historical_patterns.yaml", "known_incidents_provenance"),
+            ("historical_patterns.yaml", "diagnostic_shortcuts_provenance"),
+        ]
+        for filename, prov_key in checks:
+            with open(KNOWLEDGE_DIR / filename) as f:
+                data = yaml.safe_load(f)
+            assert prov_key in data, (
+                f"Section provenance key '{prov_key}' missing from {filename}"
+            )
+            _assert_provenance_complete(prov_key, data[prov_key])

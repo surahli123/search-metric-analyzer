@@ -91,6 +91,8 @@ provenance:
 
 ### Two Categories, Designed for Volume
 
+*Note: The session research identified 3 categories (Factual/Judgment/Context). This spec simplifies to 2 (Corrections/Additions) for operational clarity — the distinction between Factual and Judgment errors doesn't change the workflow action.*
+
 At 100+ users, expect 10–20 corrections/month and 5–10 additions/month. The workflow must be low-friction for capture and lightweight for processing.
 
 #### Corrections (something is wrong → fix directly)

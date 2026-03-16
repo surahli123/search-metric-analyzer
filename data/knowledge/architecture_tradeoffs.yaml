@@ -42,6 +42,12 @@ cost_optimization_patterns:
         diagnostic_check: >
           Segment NDCG delta by query frequency tier. If head queries are stable
           but tail queries regressed, the cheaper model lacks reasoning depth.
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-01"
+      confidence: empirical
+      scope: "all segments"
 
   batch_processing:
     # WHY: Offline LLM enrichment trades freshness for cost/latency savings.
@@ -78,6 +84,12 @@ cost_optimization_patterns:
         diagnostic_check: >
           Compare batch run timestamp to catalog change log. If catalog changed
           significantly since last batch, staleness is the likely root cause.
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-01"
+      confidence: empirical
+      scope: "all segments"
 
   semantic_caching:
     # WHY: Course used intfloat/e5-small-v2 embeddings with 0.95 threshold
@@ -130,6 +142,12 @@ cost_optimization_patterns:
         diagnostic_check: >
           After any LLM/prompt change, check if cache was invalidated.
           If cache-miss queries perform BETTER than cache-hit, cache is stale.
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-01"
+      confidence: empirical
+      scope: "all segments"
 
   constraint_reduction:
     # WHY: "Hallucinate + embedding lookup" removes Literal constraint from prompt,
@@ -169,6 +187,19 @@ cost_optimization_patterns:
         diagnostic_check: >
           After LLM update, compare hallucinated label distributions before/after.
           If vocabulary shifted, embedding resolution may have changed silently.
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-01"
+      confidence: empirical
+      scope: "all segments"
+
+token_economics_provenance:
+  owner: "ds_team"
+  usage: active
+  last_validated: "2026-03-01"
+  confidence: empirical
+  scope: "all segments"
 
 token_economics:
   # WHY: Concrete cost numbers help SMA assess cost-quality tradeoff magnitude.
@@ -200,6 +231,13 @@ token_economics:
       cost_note: >
         Local model (intfloat/e5-small-v2) computes query embedding.
         No LLM cost on cache hit. On miss, falls through to full LLM call.
+
+diagnostic_implications_provenance:
+  owner: "ds_team"
+  usage: active
+  last_validated: "2026-03-01"
+  confidence: empirical
+  scope: "all segments"
 
 diagnostic_implications:
   step_2d_evidence: >

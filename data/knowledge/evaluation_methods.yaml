@@ -45,6 +45,12 @@ evaluation_approaches:
       - "Requires more capable (expensive) model due to task difficulty"
       - "~27% disagreement with human labelers on exact grade match"
       - "Grade boundaries are subjective (what separates 'related' from 'somewhat answers'?)"
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-01"
+      confidence: empirical
+      scope: "all segments"
 
   pairwise:
     name: "Pairwise Preference with Double-Check"
@@ -90,10 +96,23 @@ evaluation_approaches:
       - "O(n^2) comparisons needed: 10 results = 45 pairs (90 with double-check)"
       - "Cannot directly compute DCG/NDCG without converting to pointwise (via Elo)"
       - "Coverage loss from filtering inconsistent judgments (25% dropped at 80% threshold)"
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-01"
+      confidence: empirical
+      scope: "all segments"
 
 # WHY these pitfalls matter: When SMA sees a metric change, it needs to
 # distinguish "the search system actually got worse" from "our measurement
 # changed." Each pitfall below is a way measurement can fool you.
+measurement_pitfalls_provenance:
+  owner: "ds_team"
+  usage: active
+  last_validated: "2026-02-01"
+  confidence: empirical
+  scope: "all segments"
+
 measurement_pitfalls:
   - name: unlabeled_not_irrelevant
     description: >
@@ -160,6 +179,13 @@ measurement_pitfalls:
       bias offset.
 
 # WHY diagnostic_implications: Maps evaluation knowledge to specific SMA
+diagnostic_implications_provenance:
+  owner: "ds_team"
+  usage: active
+  last_validated: "2026-02-01"
+  confidence: empirical
+  scope: "all segments"
+
 # workflow steps so the agent knows WHEN to apply this knowledge.
 diagnostic_implications:
   step_1e_context: >

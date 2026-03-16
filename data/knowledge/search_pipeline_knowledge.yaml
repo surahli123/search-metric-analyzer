@@ -41,6 +41,12 @@ pipeline_components:
           - "Validate predicted pairs exist in product taxonomy"
           - "Use fully-qualified leaf classifications to eliminate illegal combos"
         affected_query_segment: "Queries where category and subcategory are ambiguous"
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-01"
+      confidence: empirical
+      scope: "all segments"
 
   query_corrections:
     function: "Expand or correct queries via synonym generation, spelling fixes, or alt-labels"
@@ -68,6 +74,12 @@ pipeline_components:
         diagnostic_checks:
           - "Count queries harmed vs helped — if roughly equal, do not ship"
         affected_query_segment: "Broad vocabulary queries with many near-synonyms"
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-01"
+      confidence: empirical
+      scope: "all segments"
 
   content_classification:
     function: "Enrich product docs with structured attributes (room, material, item type) via LLM"
@@ -101,6 +113,12 @@ pipeline_components:
           - "Compute similarity between constrained and unconstrained item types"
           - "Filter products below similarity threshold (e.g., 0.50)"
         affected_query_segment: "Niche products not in the constrained vocabulary"
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-01"
+      confidence: empirical
+      scope: "all segments"
 
   ranking:
     function: "Combine scoring signals (BM25, attribute boosts, corrections) into final relevance score"
@@ -133,6 +151,12 @@ pipeline_components:
           - "Compare additive vs interaction model NDCG"
           - "Check if best boost for a signal is near zero — may need interaction"
         affected_query_segment: "Queries requiring conditional relevance logic"
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-01"
+      confidence: empirical
+      scope: "all segments"
 
   vector_search:
     function: "Use embedding similarity for semantic retrieval and hybrid re-ranking"
@@ -164,9 +188,22 @@ pipeline_components:
           - "Compare hybrid NDCG to full-scoring interaction NDCG"
           - "Increase K and measure recovery"
         affected_query_segment: "Broad queries with relevant docs spread across embedding space"
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-01"
+      confidence: empirical
+      scope: "all segments"
 
 # WHY cross-component: Failures cascade downstream.
 # These chains diagnose multi-metric drops with a single root cause.
+causal_chains_provenance:
+  owner: "ds_team"
+  usage: active
+  last_validated: "2026-03-01"
+  confidence: empirical
+  scope: "all segments"
+
 causal_chains:
   - trigger_component: "query_understanding"
     trigger_failure: "misclassification_to_wrong_category"
@@ -193,6 +230,13 @@ causal_chains:
 
 # WHY benchmarks: Reference numbers give concrete anchors to judge
 # whether an observed metric is in expected range or anomalous.
+benchmarks_provenance:
+  owner: "ds_team"
+  usage: active
+  last_validated: "2026-03-01"
+  confidence: empirical
+  scope: "all segments"
+
 benchmarks:
   bm25_ndcg: { value: 0.541, source: "Lesson 02, BM25 Win-Loss notebook (WANDS dataset)" }
   bm25_plus_synonyms_ndcg: { value: 0.546, source: "Lesson 02 synonym expansion" }

@@ -73,6 +73,12 @@ metrics:
       p0: 0.05    # >5% movement — critical
       p1: 0.02    # 2-5% — significant
       p2: 0.005   # 0.5-2% — minor
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-15"
+      confidence: definitional
+      scope: "all segments"
 
   search_quality_success:
     full_name: "Query Success Rate"
@@ -103,6 +109,12 @@ metrics:
       p0: 0.04
       p1: 0.015
       p2: 0.005
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-15"
+      confidence: definitional
+      scope: "all segments"
 
   ai_trigger_rate:
     full_name: "AI Answer Trigger Rate"
@@ -118,6 +130,12 @@ metrics:
     normal_range:
       mean: 0.220
       weekly_std: 0.010
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-15"
+      confidence: definitional
+      scope: "all segments"
 
   ai_success_rate:
     full_name: "AI Answer Success Rate"
@@ -138,6 +156,12 @@ metrics:
     normal_range:
       mean: 0.620
       weekly_std: 0.015
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-15"
+      confidence: definitional
+      scope: "all segments"
 
   zero_result_rate:
     full_name: "Zero Result Rate"
@@ -148,6 +172,12 @@ metrics:
     normal_range:
       mean: 0.03
       weekly_std: 0.005
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-15"
+      confidence: definitional
+      scope: "all segments"
 
   latency_p50:
     full_name: "Search Latency (p50)"
@@ -158,12 +188,25 @@ metrics:
     normal_range:
       mean: 200
       weekly_std: 20
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-03-15"
+      confidence: definitional
+      scope: "all segments"
 
 # ──────────────────────────────────────────────────────────────
 # Co-Movement Diagnostic Table
 # Checked at Step 1 (Intake). The pattern narrows hypothesis space
 # BEFORE running any decomposition.
 # ──────────────────────────────────────────────────────────────
+
+co_movement_diagnostic_table_provenance:
+  owner: "ds_team"
+  usage: active
+  last_validated: "2026-02-01"
+  confidence: empirical
+  scope: "all segments"
 
 co_movement_diagnostic_table:
   # ── Patterns use 4 core metrics: click_quality, search_quality_success, ai_trigger, ai_success ──
@@ -275,6 +318,13 @@ co_movement_diagnostic_table:
 # Hypothesis Priority Ordering
 # Fixed priority for investigation — instrumentation first, behavior last.
 # ──────────────────────────────────────────────────────────────
+
+hypothesis_priority_provenance:
+  owner: "ds_team"
+  usage: active
+  last_validated: "2026-02-01"
+  confidence: empirical
+  scope: "all segments"
 
 hypothesis_priority:
   - category: instrumentation
