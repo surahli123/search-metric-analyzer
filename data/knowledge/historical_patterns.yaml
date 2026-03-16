@@ -16,6 +16,12 @@ seasonal_patterns:
       Segment by tenant_age — if drop is concentrated in tenants < 30 days
       old, this is expected onboarding noise.
     recovery: "Metrics recover as new tenants configure more connectors (30-90 days)."
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-02-01"
+      confidence: empirical
+      scope: "all segments"
 
   - name: "AI Feature Batch Rollout"
     trigger: "Batch AI enablement for tenant cohort"
@@ -30,6 +36,12 @@ seasonal_patterns:
       Always segment by ai_enablement. If drop is entirely in ai_on cohort
       and ai_answer_rate increased, this is a positive signal.
     is_positive: true
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-02-01"
+      confidence: empirical
+      scope: "all segments"
 
   - name: "Connector Outage Pattern"
     trigger: "Third-party connector service degradation"
@@ -43,6 +55,12 @@ seasonal_patterns:
     key_check: >
       Segment by connector_type. Check connector health/sync status.
     diagnostic_shortcut: "Check connector health dashboard first — if status shows failure, skip decomposition."
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-02-01"
+      confidence: empirical
+      scope: "all segments"
 
   - name: "End of Quarter Surge"
     trigger: "Enterprise end-of-quarter (finance, compliance searches)"
@@ -54,6 +72,12 @@ seasonal_patterns:
       These tend to be more exploratory, lower click-through.
       Mix-shift from query type composition change.
     key_check: "Check calendar alignment. Compare to same period last year."
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-02-01"
+      confidence: empirical
+      scope: "all segments"
 
   - name: "Weekend/Weekday Cycle"
     trigger: "Normal weekly usage pattern"
@@ -64,6 +88,19 @@ seasonal_patterns:
       Weekend has fewer queries, skewed toward power users who click more.
       Apparent Click Quality increase is mix-shift, not quality improvement.
     key_check: "Always compare same day-of-week (WoW), not consecutive days."
+    provenance:
+      owner: "ds_team"
+      usage: active
+      last_validated: "2026-02-01"
+      confidence: empirical
+      scope: "all segments"
+
+known_incidents_provenance:
+  owner: "ds_team"
+  usage: active
+  last_validated: "2026-02-01"
+  confidence: empirical
+  scope: "all segments"
 
 known_incidents:
   - date: "2025-11-15"
@@ -99,6 +136,13 @@ known_incidents:
       concentrated_in_tier: "standard"
       concentrated_in_position: "3-5"
       experiment_temporal_match: true
+
+diagnostic_shortcuts_provenance:
+  owner: "ds_team"
+  usage: active
+  last_validated: "2026-02-01"
+  confidence: empirical
+  scope: "all segments"
 
 diagnostic_shortcuts:
   - name: "Connector health check"

@@ -90,6 +90,6 @@ But if the question involves a specific segment, time period, or magnitude thres
 
 ## Scalability Ceiling
 
-This routing table is valid while: <15 knowledge files, <60 intents, and correction volume <30/month.
+This routing table is valid while: <15 knowledge files, <60 intents, correction volume <30/month, and <500 total entries across all files.
 At 100+ users, expect to hit these limits within 2–3 months — plan for semantic retrieval migration.
 Track routing misses and unmatched intents to inform the migration timeline.

@@ -1,6 +1,6 @@
 # Backlog — Search Metric Analyzer v2.0 Holistic Redesign
 
-Last updated: 2026-03-08
+Last updated: 2026-03-15
 
 ---
 
@@ -15,16 +15,24 @@ Last updated: 2026-03-08
 - [x] Task 6: Create `core/corrections.py` + `data/knowledge/corrections.yaml` (read/write/CLI, 90-day expiry)
 - [x] Task 7: Wave 3a verification (full test suite + eval)
 
-### Web App Phase 1: Agent View with Mock Data (SPEC APPROVED — 2026-03-14)
-- [ ] Write implementation plan (invoke `superpowers:writing-plans`)
-- [ ] Scaffold `web/backend/` — FastAPI app, routes, fixtures, presenter.py
-- [ ] Scaffold `web/frontend/` — React + Vite + Tailwind, design token CSS
-- [ ] Build Overview tab components (VerdictStrip, CoMovementIndicator, ResultsTable, DivergingBarChart, TrendChart, SegmentTable, SqlBlock)
+### Web App Phase 0: Demo Mockup (DONE — 2026-03-15)
+- [x] Enhanced v5 mockup with scenario switching (Within Variance + Ranking Regression)
+- [x] Fixed Critical chart color issue (all bars blue for AI adoption pattern)
+- [x] Added data quality badges, hypothesis evaluation checklist
+- [x] 3-role IC9 review + design critique → 10 UI fixes applied
+- [x] Deployed to Vercel: https://search-metric-analyzer-demo.vercel.app
+- [x] PR #11 created
+- Demo file: `docs/mockups/search-metric-analyzer-demo.html`
+
+### Web App Phase 1: React Frontend + FastAPI Backend (NEXT)
+- [ ] Scaffold `web/backend/` — FastAPI app, Pydantic schemas, mock fixtures, presenter.py
+- [ ] Scaffold `web/frontend/` — React + Vite + Tailwind, design tokens from demo CSS
+- [ ] Build Overview tab components (match demo HTML)
 - [ ] Build Execution Trace tab components (PhaseAccordion, StepRow, filter tabs)
 - [ ] Wire hardcoded mock investigation fixtures to API endpoint
-- [ ] Employer demo ready
+- [ ] Deploy backend to Render (free tier)
 - Spec: `docs/plans/2026-03-14-web-app-architecture-design.md`
-- Mockup: `.superpowers/brainstorm/44661-1773549752/agent-view-v5.html`
+- Reference: `docs/mockups/search-metric-analyzer-demo.html` (visual target)
 
 ### Web App Phase 2: SSE Streaming + Live Trace (after Phase 1)
 - [ ] Implement SSE streaming endpoint with in-memory buffer
@@ -74,12 +82,13 @@ Priority: fix during the wave where they naturally fit.
 - [x] Create context layer architecture spec (`docs/plans/2026-03-14-context-layer-architecture.md`)
 - [x] Copy session record to `docs/research/`
 - [x] Code review — blocking issues fixed
-- [ ] Push + open PR for `feature/knowledge-routing-context-layer`
+- [x] Push + open PR for `feature/knowledge-routing-context-layer` (merged PR #10)
 - [ ] Add per-segment SQS baselines to rule 01 (when pipeline data available)
-- [ ] Add provenance fields to YAML entries during next knowledge audit (see spec Section 2)
-- [ ] Build optional `test_knowledge_routing.py` integrity checker (validates routing table section keys against actual YAMLs)
-- [ ] Minor: add one-line note in spec Section 3 acknowledging simplification from 3 correction categories to 2
-- [ ] Minor: add 4th scalability trigger (>500 entries) to rule 04 to match spec
+- [x] Add provenance fields to YAML entries — tiered by decay rate (2026-03-15)
+- [x] Build `test_knowledge_routing.py` integrity checker — 7 tests + 6 provenance tests (2026-03-15)
+- [x] Minor: add one-line note in spec Section 3 (2026-03-15)
+- [x] Minor: add 4th scalability trigger (>500 entries) to rule 04 (2026-03-15)
+- [ ] Add process note to spec: after corrections, update `last_validated` on referenced entry
 
 ---
 
