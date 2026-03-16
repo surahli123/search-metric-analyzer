@@ -1,0 +1,2112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Metric Analyzer — Building Complex AI Systems Without Writing Code</title>
+
+    <!-- Fonts: Satoshi (≈ Charlie Display/Text), IBM Plex Mono for code -->
+    <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <style>
+        /* ===========================================
+           CSS CUSTOM PROPERTIES (THEME)
+           Brand blue palette + Satoshi typography
+           =========================================== */
+        :root {
+            /* Brand colors */
+            --blue-primary: #1868db;
+            --blue-mid: #1254b5;
+            --blue-dark: #09326c;
+            --blue-glow: rgba(24, 104, 219, 0.25);
+
+            /* Surfaces */
+            --bg-dark: #0f0f0f;
+            --bg-card: #181818;
+            --bg-card-hover: #1e1e1e;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+
+            /* Text */
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.65);
+            --text-muted: rgba(255, 255, 255, 0.4);
+
+            /* Typography — all clamp() for viewport fitting */
+            --font-display: 'Satoshi', sans-serif;
+            --font-mono: 'IBM Plex Mono', monospace;
+            --title-size: clamp(1.8rem, 4.5vw, 3.5rem);
+            --h2-size: clamp(1.4rem, 3.5vw, 2.5rem);
+            --h3-size: clamp(1rem, 2vw, 1.4rem);
+            --body-size: clamp(0.75rem, 1.3vw, 1.05rem);
+            --small-size: clamp(0.65rem, 1vw, 0.85rem);
+            --mono-size: clamp(0.6rem, 0.9vw, 0.8rem);
+
+            /* Spacing scale — consistent vertical rhythm */
+            --slide-padding: clamp(1.5rem, 4vw, 4rem);
+            --space-xs: clamp(0.2rem, 0.4vh, 0.35rem);   /* label → value */
+            --space-sm: clamp(0.4rem, 0.8vh, 0.6rem);     /* between tight siblings */
+            --space-md: clamp(0.8rem, 1.6vh, 1.2rem);     /* heading → body, body → content */
+            --space-lg: clamp(1.2rem, 2.4vh, 1.8rem);     /* between major sections */
+
+            /* Animation */
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+            --duration: 0.6s;
+        }
+
+        /* ===========================================
+           RESET & BASE
+           =========================================== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        /* ===========================================
+           VIEWPORT FITTING: MANDATORY BASE STYLES
+           =========================================== */
+        html, body {
+            height: 100%;
+            overflow-x: hidden;
+        }
+        html {
+            scroll-snap-type: y mandatory;
+            scroll-behavior: smooth;
+        }
+        .slide {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            scroll-snap-align: start;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        .slide-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            max-height: 100%;
+            overflow: hidden;
+            padding: var(--slide-padding);
+        }
+        .card, .container, .content-box {
+            max-width: min(90vw, 1000px);
+            max-height: min(80vh, 700px);
+        }
+        .feature-list, .bullet-list {
+            gap: clamp(0.4rem, 1vh, 1rem);
+        }
+        .feature-list li, .bullet-list li {
+            font-size: var(--body-size);
+            line-height: 1.4;
+        }
+        img, .image-container {
+            max-width: 100%;
+            max-height: min(50vh, 400px);
+            object-fit: contain;
+        }
+
+        /* Short viewports */
+        @media (max-height: 700px) {
+            :root {
+                --slide-padding: clamp(0.75rem, 3vw, 2rem);
+                --content-gap: clamp(0.4rem, 1.5vw, 1rem);
+                --title-size: clamp(1.25rem, 4.5vw, 2.5rem);
+                --h2-size: clamp(1rem, 3vw, 1.75rem);
+            }
+        }
+        @media (max-height: 600px) {
+            :root {
+                --slide-padding: clamp(0.5rem, 2.5vw, 1.5rem);
+                --content-gap: clamp(0.3rem, 1vw, 0.75rem);
+                --title-size: clamp(1.1rem, 4vw, 2rem);
+                --body-size: clamp(0.7rem, 1.2vw, 0.95rem);
+            }
+            .nav-dots, .keyboard-hint, .decorative { display: none; }
+        }
+        @media (max-height: 500px) {
+            :root {
+                --slide-padding: clamp(0.4rem, 2vw, 1rem);
+                --title-size: clamp(1rem, 3.5vw, 1.5rem);
+                --h2-size: clamp(0.9rem, 2.5vw, 1.25rem);
+                --body-size: clamp(0.65rem, 1vw, 0.85rem);
+            }
+        }
+        @media (max-width: 600px) {
+            :root { --title-size: clamp(1.25rem, 7vw, 2.5rem); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.2s !important;
+            }
+            html { scroll-behavior: auto; }
+        }
+
+        /* ===========================================
+           GLOBAL SLIDE STYLES
+           =========================================== */
+        body {
+            font-family: var(--font-display);
+            background: var(--bg-dark);
+            color: var(--text-primary);
+        }
+
+        /* Default dark slide background */
+        .slide {
+            background: var(--bg-dark);
+        }
+
+        /* === PROGRESS BAR === */
+        .progress-bar {
+            position: fixed;
+            top: 0; left: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--blue-primary), var(--blue-mid));
+            z-index: 9999;
+            transition: width 0.3s ease;
+        }
+
+        /* === NAV DOTS === */
+        .nav-dots {
+            position: fixed;
+            right: clamp(0.8rem, 1.5vw, 1.5rem);
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: clamp(6px, 0.8vh, 10px);
+            z-index: 9998;
+        }
+        .nav-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            padding: 0;
+        }
+        .nav-dot.active {
+            background: var(--blue-primary);
+            box-shadow: 0 0 8px var(--blue-glow);
+        }
+
+        /* ===========================================
+           REVEAL ANIMATIONS
+           =========================================== */
+        .reveal {
+            opacity: 0;
+            transform: translateY(25px);
+            transition: opacity var(--duration) var(--ease-out-expo),
+                        transform var(--duration) var(--ease-out-expo);
+        }
+        .slide.visible .reveal {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .reveal:nth-child(1) { transition-delay: 0.1s; }
+        .reveal:nth-child(2) { transition-delay: 0.2s; }
+        .reveal:nth-child(3) { transition-delay: 0.3s; }
+        .reveal:nth-child(4) { transition-delay: 0.4s; }
+        .reveal:nth-child(5) { transition-delay: 0.5s; }
+        .reveal:nth-child(6) { transition-delay: 0.6s; }
+
+        /* ===========================================
+           SLIDE TYPE: TITLE (split panel)
+           =========================================== */
+        .slide-title {
+            flex-direction: row;
+        }
+        .slide-title .panel-left {
+            width: 55%; height: 100%;
+            background: linear-gradient(155deg, var(--blue-primary) 0%, var(--blue-mid) 55%, var(--blue-dark) 100%);
+            display: flex; flex-direction: column;
+            justify-content: center;
+            padding: var(--slide-padding);
+            padding-bottom: clamp(3rem, 6vw, 6rem);
+            position: relative; overflow: hidden;
+        }
+        /* Radial glow on blue panel */
+        .slide-title .panel-left::before {
+            content: '';
+            position: absolute;
+            width: 600px; height: 600px;
+            top: -15%; right: -10%;
+            background: radial-gradient(circle, rgba(255,255,255,0.08), transparent 65%);
+            border-radius: 50%;
+            z-index: 1;
+        }
+        /* Geometric circle accent */
+        .slide-title .panel-left::after {
+            content: '';
+            position: absolute;
+            bottom: 8%; left: 6%;
+            width: clamp(40px, 6vw, 80px);
+            height: clamp(40px, 6vw, 80px);
+            border: 1.5px solid rgba(255,255,255,0.12);
+            border-radius: 50%;
+            z-index: 1;
+        }
+        .slide-title .panel-right {
+            width: 45%; height: 100%;
+            background: var(--bg-dark);
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            padding: var(--slide-padding);
+            position: relative;
+        }
+        .slide-title .glow-line {
+            position: absolute;
+            left: 0; top: 0;
+            width: 2px; height: 100%;
+            background: linear-gradient(180deg, transparent, rgba(24,104,219,0.5), transparent);
+            box-shadow: 0 0 12px var(--blue-glow);
+            animation: glowPulse 3s ease-in-out infinite;
+        }
+        .slide-title .glow-shape {
+            position: absolute;
+            width: 350px; height: 350px;
+            top: 5%; right: 5%;
+            background: radial-gradient(circle, rgba(24,104,219,0.15), transparent 70%);
+            border-radius: 50%;
+            filter: blur(80px);
+        }
+
+        /* Terminal badge */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5em;
+            font-family: var(--font-mono);
+            font-size: var(--small-size);
+            font-weight: 500;
+            color: rgba(255,255,255,0.9);
+            z-index: 2; position: relative;
+        }
+        .badge::before { content: '>'; color: rgba(255,255,255,0.5); }
+        .badge::after { content: '_'; animation: blink 1s step-end infinite; color: rgba(255,255,255,0.6); }
+
+        .slide-title h1 {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: var(--title-size);
+            color: var(--text-primary);
+            line-height: 1.2;
+            margin-top: clamp(0.8rem, 1.5vw, 1.5rem);
+            z-index: 2; position: relative;
+        }
+        .slide-title .subtitle {
+            font-family: var(--font-display);
+            font-weight: 400;
+            font-size: var(--body-size);
+            color: var(--text-secondary);
+            margin-top: clamp(1.2rem, 2.5vw, 2rem);
+            z-index: 2; position: relative;
+            line-height: 1.6;
+            max-width: 400px;
+        }
+        .slide-title .subtitle::before {
+            content: '';
+            display: block;
+            width: 32px; height: 1px;
+            background: rgba(255,255,255,0.35);
+            margin-bottom: clamp(0.6rem, 1vw, 1rem);
+        }
+
+        /* Pipeline on right panel */
+        .pipeline { display: flex; flex-direction: column; width: 100%; max-width: 260px; }
+        .stage {
+            display: flex; align-items: center;
+            gap: clamp(0.8rem, 1.2vw, 1.2rem);
+            opacity: 0; transform: translateX(25px);
+            animation: stageIn 0.5s ease-out forwards;
+        }
+        .stage:nth-child(1) { animation-delay: 0.8s; }
+        .stage:nth-child(3) { animation-delay: 1.05s; }
+        .stage:nth-child(5) { animation-delay: 1.3s; }
+        .stage:nth-child(7) { animation-delay: 1.55s; }
+        .stage-num {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: clamp(2.2rem, 3.5vw, 3.2rem);
+            color: var(--blue-primary);
+            min-width: 2.5ch; line-height: 1;
+        }
+        .stage-label {
+            font-family: var(--font-display);
+            font-size: clamp(0.85rem, 1.3vw, 1.05rem);
+            font-weight: 500;
+            color: rgba(255,255,255,0.9);
+        }
+        .stage-connector {
+            width: 2px; height: clamp(0.8rem, 1.5vh, 1.2rem);
+            background: rgba(24,104,219,0.35);
+            margin-left: clamp(0.9rem, 1.4vw, 1.3rem);
+            opacity: 0; animation: lineIn 0.3s ease-out forwards;
+        }
+        .stage-connector:nth-child(2) { animation-delay: 0.95s; }
+        .stage-connector:nth-child(4) { animation-delay: 1.2s; }
+        .stage-connector:nth-child(6) { animation-delay: 1.45s; }
+
+        /* ===========================================
+           SLIDE TYPE: CONTENT (dark bg, left-aligned)
+           =========================================== */
+        .slide-content-standard {
+            padding: var(--slide-padding);
+            padding-left: clamp(3rem, 8vw, 8rem);
+            padding-right: clamp(3rem, 6vw, 6rem);
+            display: flex; flex-direction: column;
+            justify-content: center;
+        }
+        .slide-content-standard .slide-number {
+            font-family: var(--font-mono);
+            font-size: var(--small-size);
+            color: var(--blue-primary);
+            margin-bottom: var(--space-sm);
+            letter-spacing: 0.1em;
+        }
+        .slide-content-standard h2 {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: var(--h2-size);
+            color: var(--text-primary);
+            line-height: 1.2;
+            margin-bottom: var(--space-md);
+        }
+        .slide-content-standard p {
+            font-family: var(--font-display);
+            font-weight: 400;
+            font-size: var(--body-size);
+            color: var(--text-secondary);
+            line-height: 1.7;
+            max-width: 650px;
+        }
+        .slide-content-standard p + p {
+            margin-top: var(--space-sm);
+        }
+
+        /* Consistent gap: body text → content block */
+        .slide-content-standard .pipeline-full,
+        .slide-content-standard .card-grid,
+        .slide-content-standard .code-block,
+        .slide-content-standard .two-col,
+        .slide-content-standard .flow,
+        .slide-content-standard .arch-diagram,
+        .slide-content-standard .fc,
+        .slide-content-standard .report-mockup,
+        .slide-content-standard .trace-panel,
+        .slide-content-standard .content-list {
+            margin-top: var(--space-lg);
+        }
+
+        /* Consistent gap: content block → footer text */
+        .slide-content-standard .pipeline-full + p,
+        .slide-content-standard .card-grid + p,
+        .slide-content-standard .code-block + p,
+        .slide-content-standard .two-col + p,
+        .slide-content-standard .flow + p,
+        .slide-content-standard .fc + p,
+        .slide-content-standard .report-mockup + p,
+        .slide-content-standard .trace-panel + p,
+        .slide-content-standard .content-list + p {
+            margin-top: var(--space-md);
+        }
+
+        /* Bullet list */
+        .content-list {
+            list-style: none;
+            display: flex; flex-direction: column;
+            gap: var(--space-sm);
+            max-width: 700px;
+        }
+        .content-list li {
+            font-family: var(--font-display);
+            font-size: var(--body-size);
+            color: var(--text-secondary);
+            line-height: 1.6;
+            padding-left: 1.5em;
+            position: relative;
+        }
+        .content-list li::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0.6em;
+            width: 6px; height: 6px;
+            background: var(--blue-primary);
+            border-radius: 50%;
+        }
+
+        /* Emphasis text */
+        .emphasis {
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+        .blue { color: var(--blue-primary); }
+
+        /* ===========================================
+           SLIDE TYPE: QUOTE (centered, large text)
+           =========================================== */
+        .slide-quote {
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            padding: var(--slide-padding);
+            text-align: center;
+        }
+        .slide-quote blockquote {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: clamp(1.3rem, 3.5vw, 2.5rem);
+            color: var(--text-primary);
+            line-height: 1.3;
+            max-width: 750px;
+        }
+        .slide-quote .attribution {
+            font-family: var(--font-display);
+            font-weight: 400;
+            font-size: var(--small-size);
+            color: var(--text-muted);
+            margin-top: var(--space-lg);
+        }
+        .slide-quote .accent-line {
+            width: 40px; height: 2px;
+            background: var(--blue-primary);
+            margin-bottom: var(--space-lg);
+        }
+
+        /* ===========================================
+           SLIDE TYPE: PIPELINE (animated stages)
+           =========================================== */
+        .pipeline-full {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-sm);
+            max-width: 800px;
+        }
+        .pipeline-stage {
+            display: flex; align-items: flex-start;
+            gap: clamp(0.8rem, 1.5vw, 1.5rem);
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: clamp(0.6rem, 1.2vh, 1rem) clamp(0.8rem, 1.5vw, 1.5rem);
+            transition: border-color 0.3s ease;
+        }
+        .pipeline-stage:hover {
+            border-color: rgba(24, 104, 219, 0.3);
+        }
+        .pipeline-stage .p-num {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: clamp(1.2rem, 2vw, 1.6rem);
+            color: var(--blue-primary);
+            min-width: 2.5ch;
+            line-height: 1.3;
+        }
+        .pipeline-stage .p-info h3 {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: var(--h3-size);
+            color: var(--text-primary);
+            margin-bottom: var(--space-xs);
+        }
+        .pipeline-stage .p-info p {
+            font-family: var(--font-display);
+            font-weight: 400;
+            font-size: var(--small-size);
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* ===========================================
+           SLIDE TYPE: GRID (cards layout)
+           =========================================== */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+            gap: var(--space-sm);
+            max-width: 900px;
+        }
+        .info-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: var(--space-md) clamp(0.8rem, 1.5vw, 1.2rem);
+            transition: border-color 0.3s ease;
+        }
+        .info-card:hover {
+            border-color: rgba(24, 104, 219, 0.3);
+        }
+        .info-card .card-label {
+            font-family: var(--font-mono);
+            font-size: var(--mono-size);
+            color: var(--blue-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: var(--space-xs);
+        }
+        .info-card .card-value {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: var(--h3-size);
+            color: var(--text-primary);
+            margin-bottom: var(--space-xs);
+        }
+        .info-card .card-desc {
+            font-family: var(--font-display);
+            font-weight: 400;
+            font-size: var(--small-size);
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* ===========================================
+           SLIDE TYPE: CODE (terminal-style)
+           =========================================== */
+        .code-block {
+            background: #0a0a0a;
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: var(--space-md) clamp(1rem, 2vw, 1.5rem);
+            max-width: 800px;
+            overflow: hidden;
+        }
+        .code-block pre {
+            font-family: var(--font-mono);
+            font-size: var(--mono-size);
+            color: rgba(255,255,255,0.85);
+            line-height: 1.7;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .code-block .prompt { color: var(--blue-primary); }
+        .code-block .comment { color: var(--text-muted); }
+        .code-block .string { color: #98d4bb; }
+        .code-block .key { color: #c7b8ea; }
+
+        /* Terminal dots header */
+        .terminal-dots {
+            display: flex; gap: 6px;
+            margin-bottom: clamp(0.5rem, 1vh, 0.8rem);
+        }
+        .terminal-dots span {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+        }
+        .terminal-dots .red { background: #ff5f57; }
+        .terminal-dots .yellow { background: #febc2e; }
+        .terminal-dots .green { background: #28c840; }
+
+        /* ===========================================
+           SLIDE TYPE: ARCHITECTURE DIAGRAM
+           =========================================== */
+        .arch-diagram {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: clamp(0.5rem, 1vh, 0.8rem);
+        }
+        .arch-layer {
+            display: flex;
+            gap: clamp(0.4rem, 0.8vw, 0.8rem);
+            align-items: center;
+        }
+        .arch-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            padding: clamp(0.4rem, 0.8vh, 0.6rem) clamp(0.6rem, 1.2vw, 1rem);
+            font-family: var(--font-display);
+            font-size: var(--small-size);
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-align: center;
+            min-width: clamp(80px, 12vw, 140px);
+        }
+        .arch-box.active {
+            border-color: var(--blue-primary);
+            color: var(--text-primary);
+            box-shadow: 0 0 12px var(--blue-glow);
+        }
+        .arch-box.core {
+            background: rgba(24, 104, 219, 0.1);
+            border-color: rgba(24, 104, 219, 0.4);
+            color: var(--text-primary);
+        }
+        .arch-arrow {
+            font-size: var(--small-size);
+            color: var(--text-muted);
+        }
+        .arch-connector {
+            width: 1px; height: clamp(0.4rem, 0.8vh, 0.6rem);
+            background: rgba(24, 104, 219, 0.3);
+            margin: 0 auto;
+        }
+        .arch-label {
+            font-family: var(--font-mono);
+            font-size: clamp(0.55rem, 0.8vw, 0.7rem);
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        /* ===========================================
+           SLIDE TYPE: TWO-COLUMN
+           =========================================== */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: clamp(1.5rem, 3vw, 3rem);
+            max-width: 900px;
+        }
+        .two-col .col h3 {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: var(--h3-size);
+            color: var(--text-primary);
+            margin-bottom: var(--space-sm);
+        }
+        .two-col .col p {
+            font-family: var(--font-display);
+            font-size: var(--small-size);
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+        @media (max-width: 700px) {
+            .two-col { grid-template-columns: 1fr; }
+            .slide-title { flex-direction: column; }
+            .slide-title .panel-left,
+            .slide-title .panel-right { width: 100%; height: 50%; }
+        }
+
+        /* ===========================================
+           FLOW DIAGRAM (demo slide)
+           =========================================== */
+        .flow {
+            display: flex;
+            align-items: center;
+            gap: clamp(0.3rem, 0.6vw, 0.6rem);
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: clamp(1rem, 2vh, 1.5rem);
+        }
+        .flow-step {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: clamp(0.5rem, 1vh, 0.8rem) clamp(0.6rem, 1.2vw, 1rem);
+            text-align: center;
+            min-width: clamp(80px, 10vw, 120px);
+        }
+        .flow-step .flow-icon {
+            font-size: clamp(1rem, 2vw, 1.5rem);
+            margin-bottom: clamp(0.2rem, 0.3vh, 0.3rem);
+        }
+        .flow-step .flow-label {
+            font-family: var(--font-display);
+            font-size: var(--small-size);
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        .flow-step .flow-desc {
+            font-family: var(--font-display);
+            font-size: clamp(0.55rem, 0.7vw, 0.65rem);
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        .flow-step.active-step {
+            border-color: var(--blue-primary);
+            box-shadow: 0 0 12px var(--blue-glow);
+        }
+        .flow-arrow {
+            color: var(--text-muted);
+            font-size: var(--small-size);
+        }
+
+        /* ===========================================
+           ANIMATIONS (keyframes)
+           =========================================== */
+        @keyframes glowPulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+        @keyframes stageIn {
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes lineIn {
+            to { opacity: 1; }
+        }
+
+        /* ===========================================
+           INLINE EDITING (user opted in)
+           =========================================== */
+        .edit-hotzone {
+            position: fixed; top: 0; left: 0;
+            width: 80px; height: 80px;
+            z-index: 10000;
+            cursor: pointer;
+        }
+        .edit-toggle {
+            position: fixed;
+            top: 12px; left: 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            padding: 6px 10px;
+            cursor: pointer;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 10001;
+        }
+        .edit-toggle.show,
+        .edit-toggle.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .edit-toggle.active {
+            border-color: var(--blue-primary);
+            color: var(--blue-primary);
+        }
+
+        [contenteditable="true"] {
+            outline: 1px dashed rgba(24, 104, 219, 0.4);
+            outline-offset: 4px;
+            border-radius: 4px;
+            cursor: text;
+        }
+        [contenteditable="true"]:focus {
+            outline-color: var(--blue-primary);
+        }
+
+        /* ===========================================
+           AUDIENCE TAG (marks eng-only slides)
+           =========================================== */
+        .audience-tag {
+            position: absolute;
+            top: clamp(0.6rem, 1.2vh, 1rem);
+            right: clamp(2.5rem, 5vw, 4rem);
+            font-family: var(--font-mono);
+            font-size: clamp(0.5rem, 0.7vw, 0.65rem);
+            color: var(--blue-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            opacity: 0.6;
+        }
+
+        /* ===========================================
+           INVESTIGATION REPORT MOCKUP
+           =========================================== */
+        .report-mockup {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: var(--space-md);
+            max-width: 850px;
+        }
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--space-sm);
+        }
+        .report-id {
+            font-family: var(--font-mono);
+            font-size: var(--mono-size);
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+        }
+        .report-status {
+            font-family: var(--font-mono);
+            font-size: clamp(0.55rem, 0.7vw, 0.65rem);
+            padding: 2px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+        .status-complete {
+            background: rgba(40, 200, 64, 0.15);
+            color: #28c840;
+        }
+        .report-question {
+            font-family: var(--font-display);
+            font-size: var(--body-size);
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: var(--space-sm);
+        }
+        .report-bottomline {
+            background: rgba(24, 104, 219, 0.08);
+            border-left: 3px solid var(--blue-primary);
+            padding: var(--space-sm) var(--space-md);
+            font-family: var(--font-display);
+            font-size: var(--small-size);
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: var(--space-md);
+            border-radius: 0 6px 6px 0;
+        }
+        .report-bl-label {
+            display: block;
+            font-family: var(--font-mono);
+            font-size: var(--mono-size);
+            color: var(--blue-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: var(--space-xs);
+        }
+        .report-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: var(--space-sm);
+        }
+        .report-stat {
+            text-align: center;
+            padding: var(--space-sm) var(--space-xs);
+            background: rgba(255,255,255,0.02);
+            border-radius: 6px;
+        }
+        .report-stat-label {
+            font-family: var(--font-mono);
+            font-size: clamp(0.5rem, 0.65vw, 0.6rem);
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: var(--space-xs);
+        }
+        .report-stat-value {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: var(--h3-size);
+            color: var(--text-primary);
+        }
+        .report-stat-value.down { color: #ff5f57; }
+        .report-stat-value.up { color: #28c840; }
+        .report-stat-value.neutral { color: #febc2e; }
+        .report-stat-context {
+            font-family: var(--font-display);
+            font-size: clamp(0.5rem, 0.65vw, 0.6rem);
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        @media (max-width: 700px) {
+            .report-stats-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+
+        /* ===========================================
+           EXECUTION TRACE PANEL
+           =========================================== */
+        .trace-panel {
+            max-width: 750px;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            background: var(--border-subtle);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .trace-phase {
+            background: var(--bg-card);
+        }
+        .trace-phase-header {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            padding: var(--space-sm) var(--space-md);
+        }
+        .trace-phase-icon {
+            font-family: var(--font-mono);
+            font-size: var(--small-size);
+            color: var(--text-muted);
+            min-width: 1em;
+        }
+        .trace-phase-name {
+            font-family: var(--font-display);
+            font-size: var(--small-size);
+            font-weight: 500;
+            color: var(--text-primary);
+            flex: 1;
+        }
+        .trace-phase-time {
+            font-family: var(--font-mono);
+            font-size: var(--mono-size);
+            color: var(--text-muted);
+        }
+        .trace-steps {
+            display: none;
+            flex-direction: column;
+            padding: 0 var(--space-md) var(--space-sm);
+            gap: var(--space-xs);
+        }
+        .trace-phase.expanded .trace-steps {
+            display: flex;
+        }
+        .trace-step {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            padding-left: clamp(1rem, 2vw, 1.5rem);
+        }
+        .trace-badge {
+            font-family: var(--font-mono);
+            font-size: clamp(0.5rem, 0.6vw, 0.55rem);
+            padding: 1px 6px;
+            border-radius: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+            min-width: clamp(60px, 8vw, 80px);
+            text-align: center;
+        }
+        .trace-badge.knowledge {
+            background: rgba(200, 217, 230, 0.15);
+            color: #a8d8ea;
+        }
+        .trace-badge.query {
+            background: rgba(24, 104, 219, 0.15);
+            color: var(--blue-primary);
+        }
+        .trace-badge.reasoning {
+            background: rgba(199, 184, 234, 0.15);
+            color: #c7b8ea;
+        }
+        .trace-desc {
+            font-family: var(--font-display);
+            font-size: var(--small-size);
+            color: var(--text-secondary);
+            flex: 1;
+        }
+        .trace-dur {
+            font-family: var(--font-mono);
+            font-size: var(--mono-size);
+            color: var(--text-muted);
+        }
+
+        /* ===========================================
+           VERTICAL FLOWCHART (multi-agent architecture)
+           Faithful to the architecture diagram: top→bottom
+           with knowledge sources branching from the left
+           =========================================== */
+        .fc {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 800px;
+        }
+        /* Vertical connector line */
+        .fc-conn {
+            width: 2px;
+            height: clamp(6px, 1vh, 12px);
+            background: rgba(255, 255, 255, 0.2);
+        }
+        /* Base node styling */
+        .fc-node {
+            padding: clamp(0.2rem, 0.45vh, 0.35rem) clamp(0.5rem, 1.2vw, 1rem);
+            border-radius: 8px;
+            font-family: var(--font-display);
+            font-size: clamp(0.6rem, 0.85vw, 0.78rem);
+            font-weight: 500;
+            text-align: center;
+            line-height: 1.35;
+            background: var(--bg-card);
+            border: 1.5px solid var(--border-subtle);
+        }
+        /* Node color variants (matching diagram) */
+        .fc-node.fc-blue-light {
+            border-color: #4da6ff;
+            color: #4da6ff;
+        }
+        .fc-node.fc-orange {
+            border-color: #f0a030;
+            background: rgba(240, 160, 48, 0.08);
+            color: #f0a030;
+        }
+        .fc-node.fc-blue {
+            border-color: var(--blue-primary);
+            background: rgba(24, 104, 219, 0.1);
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+        .fc-node.fc-green {
+            border-color: #28c840;
+            background: rgba(40, 200, 64, 0.06);
+            color: #28c840;
+        }
+        .fc-node.fc-red {
+            border-color: #e74c3c;
+            background: rgba(231, 76, 60, 0.08);
+            color: #e74c3c;
+        }
+        /* Diamond (DISPATCH) — CSS clip-path */
+        .fc-diamond-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .fc-diamond {
+            width: clamp(90px, 12vw, 130px);
+            height: clamp(44px, 5vh, 60px);
+            clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+            background: rgba(240, 160, 48, 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-mono);
+            font-size: clamp(0.58rem, 0.8vw, 0.72rem);
+            font-weight: 700;
+            color: #f0a030;
+            letter-spacing: 0.08em;
+        }
+        /* Row with knowledge sources on left + main node */
+        .fc-side-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            width: 100%;
+        }
+        /* Knowledge source group (left side) */
+        .fc-knowledge-group {
+            display: flex;
+            gap: clamp(0.2rem, 0.4vw, 0.3rem);
+            align-items: center;
+            margin-right: clamp(0.3rem, 0.6vw, 0.5rem);
+        }
+        .fc-ksource {
+            padding: clamp(0.15rem, 0.3vh, 0.25rem) clamp(0.3rem, 0.6vw, 0.5rem);
+            border: 1.5px dashed #9b59b6;
+            border-radius: 4px;
+            background: rgba(155, 89, 182, 0.06);
+            font-family: var(--font-mono);
+            font-size: clamp(0.48rem, 0.62vw, 0.56rem);
+            color: #b07cc8;
+            white-space: nowrap;
+        }
+        /* Dashed connector from knowledge → node */
+        .fc-dash {
+            width: clamp(12px, 2vw, 28px);
+            border-top: 1.5px dashed #9b59b6;
+            flex-shrink: 0;
+        }
+        /* Fan-out: DISPATCH → 3 sub-agents */
+        .fc-branch-bar {
+            width: clamp(180px, 32vw, 320px);
+            height: clamp(8px, 1vh, 14px);
+            border-left: 2px solid rgba(255, 255, 255, 0.15);
+            border-right: 2px solid rgba(255, 255, 255, 0.15);
+            border-bottom: 2px solid rgba(255, 255, 255, 0.15);
+            position: relative;
+        }
+        /* Center drop-line from branch bar */
+        .fc-branch-bar::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: calc(-1 * clamp(6px, 1vh, 12px));
+            width: 2px;
+            height: clamp(6px, 1vh, 12px);
+            background: rgba(255, 255, 255, 0.2);
+        }
+        /* Sub-agent row */
+        .fc-sub-row {
+            display: flex;
+            gap: clamp(0.3rem, 0.8vw, 0.6rem);
+            justify-content: center;
+        }
+        /* Fan-in: 3 sub-agents → single node */
+        .fc-merge-bar {
+            width: clamp(180px, 32vw, 320px);
+            height: clamp(8px, 1vh, 14px);
+            border-left: 2px solid rgba(255, 255, 255, 0.15);
+            border-right: 2px solid rgba(255, 255, 255, 0.15);
+            border-top: 2px solid rgba(255, 255, 255, 0.15);
+            position: relative;
+        }
+        .fc-merge-bar::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            bottom: calc(-1 * clamp(6px, 1vh, 12px));
+            width: 2px;
+            height: clamp(6px, 1vh, 12px);
+            background: rgba(255, 255, 255, 0.2);
+        }
+        @media (max-width: 600px) {
+            .fc-side-row { flex-wrap: wrap; justify-content: center; }
+            .fc-knowledge-group { margin-right: 0; margin-bottom: var(--space-xs); }
+            .fc-dash { display: none; }
+            .fc-sub-row { flex-wrap: wrap; }
+        }
+
+        /* ===========================================
+           CLOSING SLIDE
+           =========================================== */
+        .slide-closing {
+            flex-direction: row;
+        }
+        .slide-closing .panel-left {
+            width: 55%; height: 100%;
+            background: linear-gradient(155deg, var(--blue-primary) 0%, var(--blue-mid) 55%, var(--blue-dark) 100%);
+            display: flex; flex-direction: column;
+            justify-content: center;
+            padding: var(--slide-padding);
+            position: relative;
+        }
+        .slide-closing .panel-right {
+            width: 45%; height: 100%;
+            background: var(--bg-dark);
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            padding: var(--slide-padding);
+        }
+        .closing-title {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: var(--title-size);
+            color: var(--text-primary);
+            line-height: 1.2;
+            z-index: 2; position: relative;
+        }
+        .closing-subtitle {
+            font-family: var(--font-display);
+            font-weight: 400;
+            font-size: var(--body-size);
+            color: rgba(255,255,255,0.7);
+            margin-top: var(--space-lg);
+            z-index: 2; position: relative;
+            max-width: 400px;
+            line-height: 1.6;
+        }
+        .closing-badge {
+            margin-top: var(--space-lg);
+        }
+        .closing-right-content { text-align: center; }
+        .closing-label {
+            font-family: var(--font-mono);
+            font-size: var(--small-size);
+            color: var(--text-muted);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+        .closing-tool {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: var(--h3-size);
+            color: var(--text-primary);
+            margin-top: var(--space-xs);
+        }
+        .closing-method {
+            font-family: var(--font-display);
+            font-weight: 400;
+            font-size: var(--small-size);
+            color: var(--text-secondary);
+            margin-top: var(--space-xs);
+        }
+        .closing-stats {
+            margin-top: var(--space-lg);
+        }
+        .closing-stats-text {
+            font-family: var(--font-mono);
+            font-size: var(--mono-size);
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+<!-- Progress bar -->
+<div class="progress-bar" id="progressBar"></div>
+
+<!-- Navigation dots -->
+<nav class="nav-dots" id="navDots"></nav>
+
+<!-- Edit mode controls -->
+<div class="edit-hotzone" id="editHotzone"></div>
+<button class="edit-toggle" id="editToggle">Edit</button>
+
+
+<!-- ===========================================
+     SLIDE 1: TITLE
+     =========================================== -->
+<section class="slide slide-title" id="slide-1">
+    <div class="panel-left">
+        <div class="badge">0 &rarr; 1 builder journey</div>
+        <h1>Search Metric<br>Analyzer</h1>
+        <p class="subtitle">Building a complex AI system through systematic architecture — without writing code</p>
+    </div>
+    <div class="panel-right">
+        <div class="glow-shape"></div>
+        <div class="glow-line"></div>
+        <div class="pipeline">
+            <div class="stage"><span class="stage-num">01</span><span class="stage-label">Understand</span></div>
+            <div class="stage-connector"></div>
+            <div class="stage"><span class="stage-num">02</span><span class="stage-label">Hypothesize</span></div>
+            <div class="stage-connector"></div>
+            <div class="stage"><span class="stage-num">03</span><span class="stage-label">Dispatch</span></div>
+            <div class="stage-connector"></div>
+            <div class="stage"><span class="stage-num">04</span><span class="stage-label">Synthesize</span></div>
+        </div>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 2: THE PROBLEM
+     =========================================== -->
+<section class="slide" id="slide-2">
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">02</span>
+        <h2 class="reveal">The Problem:<br>Knowledge Is Scattered</h2>
+        <ul class="content-list">
+            <li class="reveal"><span class="emphasis">Data tables</span> — metric logs, dimensional breakdowns, time series across tenant tiers and connector types</li>
+            <li class="reveal"><span class="emphasis">DS domain knowledge</span> — metric formulas, co-movement patterns, what "normal" looks like per segment — lives in people's heads</li>
+            <li class="reveal"><span class="emphasis">Eng domain knowledge</span> — what systems changed, connector health, model rollouts, experiment ramps — scattered across teams</li>
+        </ul>
+        <p class="reveal">Every investigation re-assembles the same puzzle from scratch. The structured legwork repeats, while the judgment calls that matter get squeezed.</p>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 3: THE INSIGHT
+     =========================================== -->
+<section class="slide" id="slide-3">
+    <div class="slide-quote">
+        <div class="accent-line reveal"></div>
+        <blockquote class="reveal">What if we liberate DS productivity — let a tool do the structured legwork, so humans focus on the judgment calls that actually matter?</blockquote>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 4: WHY A 4-STAGE PIPELINE
+     =========================================== -->
+<section class="slide" id="slide-4">
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">04</span>
+        <h2 class="reveal">Why a 4-Stage Pipeline?</h2>
+        <p class="reveal">Because that's how a senior DS actually investigates. The pipeline encodes that discipline.</p>
+        <div class="pipeline-full">
+            <div class="pipeline-stage reveal">
+                <span class="p-num">01</span>
+                <div class="p-info">
+                    <h3>Understand</h3>
+                    <p>What moved? By how much? Is the data even trustworthy?</p>
+                </div>
+            </div>
+            <div class="pipeline-stage reveal">
+                <span class="p-num">02</span>
+                <div class="p-info">
+                    <h3>Hypothesize</h3>
+                    <p>What could explain this? Rank theories by likelihood.</p>
+                </div>
+            </div>
+            <div class="pipeline-stage reveal">
+                <span class="p-num">03</span>
+                <div class="p-info">
+                    <h3>Dispatch</h3>
+                    <p>Test each theory against the data. Supported, rejected, or inconclusive.</p>
+                </div>
+            </div>
+            <div class="pipeline-stage reveal">
+                <span class="p-num">04</span>
+                <div class="p-info">
+                    <h3>Synthesize</h3>
+                    <p>What's the answer? How confident are we? What should we do next?</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 5: DEMO — A REAL INVESTIGATION (moved up)
+     =========================================== -->
+<section class="slide" id="slide-5">
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">05</span>
+        <h2 class="reveal">Demo: A Real Investigation</h2>
+        <p class="reveal">Click Quality drops 6.2% for Standard tier. The tool runs:</p>
+        <div class="pipeline-full">
+            <div class="pipeline-stage reveal">
+                <span class="p-num" style="color: #28c840;">&#x2713;</span>
+                <div class="p-info">
+                    <h3>Understand</h3>
+                    <p>Data quality passes. Step-change detected 3 days ago. Concentrated in Standard tier.</p>
+                </div>
+            </div>
+            <div class="pipeline-stage reveal">
+                <span class="p-num" style="color: #28c840;">&#x2713;</span>
+                <div class="p-info">
+                    <h3>Hypothesize</h3>
+                    <p>Top theory: ranking model change. AI metrics stable — rules out AI adoption effect.</p>
+                </div>
+            </div>
+            <div class="pipeline-stage reveal">
+                <span class="p-num" style="color: #28c840;">&#x2713;</span>
+                <div class="p-info">
+                    <h3>Dispatch</h3>
+                    <p>Standard tier explains 92% of the movement. Top-3 positions most affected.</p>
+                </div>
+            </div>
+            <div class="pipeline-stage reveal">
+                <span class="p-num" style="color: #28c840;">&#x2713;</span>
+                <div class="p-info">
+                    <h3>Synthesize</h3>
+                    <p>High confidence: ranking model regression. Recommends rollback review &rarr; Ranking team.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 6: INVESTIGATION REPORT (anonymized mockup)
+     =========================================== -->
+<section class="slide" id="slide-6">
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">06</span>
+        <h2 class="reveal">Real Output: Investigation Report</h2>
+        <div class="report-mockup reveal">
+            <div class="report-header">
+                <div class="report-id">INV-2024-037</div>
+                <div class="report-status status-complete">Complete</div>
+            </div>
+            <div class="report-question">Why did Click Quality drop 6.2% for Standard tier last week?</div>
+            <div class="report-bottomline">
+                <span class="report-bl-label">Bottom Line</span>
+                Ranking model v3.2 rollout degraded result relevance for Standard tier. Top-3 position click-through rates dropped 8.1%. Recommend rollback review with Ranking team.
+            </div>
+            <div class="report-stats-grid">
+                <div class="report-stat">
+                    <div class="report-stat-label">Click Quality</div>
+                    <div class="report-stat-value down">-6.2%</div>
+                    <div class="report-stat-context">Standard tier</div>
+                </div>
+                <div class="report-stat">
+                    <div class="report-stat-label">Search Quality</div>
+                    <div class="report-stat-value neutral">-1.1%</div>
+                    <div class="report-stat-context">AI offset</div>
+                </div>
+                <div class="report-stat">
+                    <div class="report-stat-label">AI Trigger</div>
+                    <div class="report-stat-value up">+2.4%</div>
+                    <div class="report-stat-context">Stable</div>
+                </div>
+                <div class="report-stat">
+                    <div class="report-stat-label">Confidence</div>
+                    <div class="report-stat-value">HIGH</div>
+                    <div class="report-stat-context">3 evidence lines</div>
+                </div>
+                <div class="report-stat">
+                    <div class="report-stat-label">Explained</div>
+                    <div class="report-stat-value">92%</div>
+                    <div class="report-stat-context">of movement</div>
+                </div>
+            </div>
+        </div>
+        <p class="reveal">Structured output ready to drop into Slack or an incident review — root cause, evidence, confidence, and next steps.</p>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 6b: EXECUTION TRACE (transparency)
+     =========================================== -->
+<section class="slide" id="slide-6b">
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">07</span>
+        <h2 class="reveal">Full Transparency:<br>Execution Trace</h2>
+        <p class="reveal">Every decision is logged. Reviewers can expand any phase to see exactly what the tool did and why.</p>
+        <div class="trace-panel reveal">
+            <div class="trace-phase">
+                <div class="trace-phase-header">
+                    <span class="trace-phase-icon">&#x25B8;</span>
+                    <span class="trace-phase-name">Phase 0: Classification</span>
+                    <span class="trace-phase-time">1.2s</span>
+                </div>
+                <div class="trace-steps">
+                    <div class="trace-step">
+                        <span class="trace-badge knowledge">KNOWLEDGE</span>
+                        <span class="trace-desc">Load metric definitions</span>
+                        <span class="trace-dur">0.3s</span>
+                    </div>
+                    <div class="trace-step">
+                        <span class="trace-badge reasoning">REASONING</span>
+                        <span class="trace-desc">Classify metric type &rarr; click-based</span>
+                        <span class="trace-dur">0.9s</span>
+                    </div>
+                </div>
+            </div>
+            <div class="trace-phase expanded">
+                <div class="trace-phase-header">
+                    <span class="trace-phase-icon">&#x25BE;</span>
+                    <span class="trace-phase-name">Phase 1: Data Quality &amp; Schema</span>
+                    <span class="trace-phase-time">3.8s</span>
+                </div>
+                <div class="trace-steps">
+                    <div class="trace-step">
+                        <span class="trace-badge query">SQL QUERY</span>
+                        <span class="trace-desc">Validate data completeness (7-day window)</span>
+                        <span class="trace-dur">1.1s</span>
+                    </div>
+                    <div class="trace-step">
+                        <span class="trace-badge knowledge">KNOWLEDGE</span>
+                        <span class="trace-desc">Load co-movement patterns</span>
+                        <span class="trace-dur">0.2s</span>
+                    </div>
+                    <div class="trace-step">
+                        <span class="trace-badge reasoning">REASONING</span>
+                        <span class="trace-desc">Data quality gate &rarr; PASS</span>
+                        <span class="trace-dur">0.8s</span>
+                    </div>
+                    <div class="trace-step">
+                        <span class="trace-badge query">SQL QUERY</span>
+                        <span class="trace-desc">Dimensional decomposition (6 dims)</span>
+                        <span class="trace-dur">1.7s</span>
+                    </div>
+                </div>
+            </div>
+            <div class="trace-phase">
+                <div class="trace-phase-header">
+                    <span class="trace-phase-icon">&#x25B8;</span>
+                    <span class="trace-phase-name">Phase 2: Hypothesis Testing</span>
+                    <span class="trace-phase-time">5.2s</span>
+                </div>
+                <div class="trace-steps">
+                    <div class="trace-step">
+                        <span class="trace-badge reasoning">REASONING</span>
+                        <span class="trace-desc">Generate 7 candidate hypotheses</span>
+                        <span class="trace-dur">1.4s</span>
+                    </div>
+                    <div class="trace-step">
+                        <span class="trace-badge query">SQL QUERY</span>
+                        <span class="trace-desc">Test ranking model change hypothesis</span>
+                        <span class="trace-dur">2.1s</span>
+                    </div>
+                </div>
+            </div>
+            <div class="trace-phase">
+                <div class="trace-phase-header">
+                    <span class="trace-phase-icon">&#x25B8;</span>
+                    <span class="trace-phase-name">Phase 3: Synthesis &amp; Report</span>
+                    <span class="trace-phase-time">2.1s</span>
+                </div>
+                <div class="trace-steps">
+                    <div class="trace-step">
+                        <span class="trace-badge reasoning">REASONING</span>
+                        <span class="trace-desc">Synthesize findings &rarr; root cause</span>
+                        <span class="trace-dur">1.5s</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <p class="reveal">Total: 12.3s &middot; 4 phases &middot; 11 steps &middot; Full audit trail for every investigation</p>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 7: ENTERPRISE SEARCH 101 (relabeled for DS)
+     =========================================== -->
+<section class="slide" id="slide-7">
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">08</span>
+        <h2 class="reveal">The Domain:<br>Enterprise Search</h2>
+        <p class="reveal">A multi-layered system where a change at any level ripples through every metric downstream.</p>
+        <div class="arch-diagram reveal">
+            <div class="arch-layer">
+                <div class="arch-box active">Query Understanding</div>
+            </div>
+            <div class="arch-connector"></div>
+            <div class="arch-layer">
+                <div class="arch-box active">Document Retrieval</div>
+            </div>
+            <div class="arch-connector"></div>
+            <div class="arch-layer">
+                <div class="arch-box active">Result Ranking</div>
+            </div>
+            <div class="arch-connector"></div>
+            <div class="arch-layer">
+                <div class="arch-box active">Final Results + AI Answers</div>
+            </div>
+        </div>
+        <div class="two-col reveal">
+            <div class="col">
+                <h3>50+ Data Sources</h3>
+                <p>Confluence, Jira, Slack, Google Drive, SharePoint — each a potential source of metric movement when something breaks.</p>
+            </div>
+            <div class="col">
+                <h3>Segments Mask Each Other</h3>
+                <p>Standard, Premium, Enterprise tiers. AI answers on top. A regression in one segment can mask improvement in another.</p>
+            </div>
+        </div>
+        <p class="reveal">The tool encodes domain knowledge as structured YAML — metric formulas, co-movement patterns, known incident signatures, hypothesis priority order — not just prompt instructions.</p>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 8: MULTI-AGENT ARCHITECTURE (vertical flowchart)
+     Matches the real architecture diagram layout
+     =========================================== -->
+<section class="slide" id="slide-8">
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">09</span>
+        <h2 class="reveal">How It Works Under the Hood</h2>
+        <div class="fc reveal">
+            <!-- User Question -->
+            <div class="fc-node fc-blue-light">User Question</div>
+            <div class="fc-conn"></div>
+            <!-- Phase 0: Classify -->
+            <div class="fc-node fc-orange">Phase 0: Classify</div>
+            <div class="fc-conn"></div>
+            <!-- Lead Agent + knowledge sources from left -->
+            <div class="fc-side-row">
+                <div class="fc-knowledge-group">
+                    <div class="fc-ksource">Playbook</div>
+                    <div class="fc-ksource">SEV Archive</div>
+                    <div class="fc-ksource">Metric Registry</div>
+                </div>
+                <div class="fc-dash"></div>
+                <div class="fc-node fc-blue">Lead Agent</div>
+            </div>
+            <div class="fc-conn"></div>
+            <!-- DISPATCH diamond -->
+            <div class="fc-diamond-wrap">
+                <div class="fc-diamond">DISPATCH</div>
+            </div>
+            <!-- Fan-out: branch bar splits to 3 sub-agents -->
+            <div class="fc-branch-bar"></div>
+            <!-- Sub-agents -->
+            <div class="fc-sub-row">
+                <div class="fc-node fc-green">Sub-Agent H0<br>Rate Decomp</div>
+                <div class="fc-node fc-green">Sub-Agent H1<br>Playbook</div>
+                <div class="fc-node fc-green">Sub-Agent H2<br>User or Playbook</div>
+            </div>
+            <!-- Fan-in: merge bar converges to Query/Compare/Explain -->
+            <div class="fc-merge-bar"></div>
+            <!-- Query, Compare, Explain + knowledge from left -->
+            <div class="fc-side-row">
+                <div class="fc-knowledge-group">
+                    <div class="fc-ksource">Schema Catalog</div>
+                    <div class="fc-ksource">Corrections Index</div>
+                </div>
+                <div class="fc-dash"></div>
+                <div class="fc-node fc-blue">Query, Compare, Explain</div>
+            </div>
+            <div class="fc-conn"></div>
+            <!-- Report + Transparency Log -->
+            <div class="fc-node fc-red">Report + Transparency Log</div>
+        </div>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 9: THE BUILDER JOURNEY (DS language)
+     =========================================== -->
+<section class="slide" id="slide-9">
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">10</span>
+        <h2 class="reveal">The Builder Journey</h2>
+        <p class="reveal">Not vibe coding. This system was built by giving AI the right context — specs, tests, and domain knowledge — so it could build something complex on my behalf.</p>
+        <div class="card-grid">
+            <div class="info-card reveal">
+                <div class="card-label">Method</div>
+                <div class="card-value">Specs Before Code</div>
+                <div class="card-desc">Every feature starts with a written spec: what it does, what "done" looks like, edge cases. The AI builds against the spec, not a vague prompt.</div>
+            </div>
+            <div class="info-card reveal">
+                <div class="card-label">Method</div>
+                <div class="card-value">Tests Before Code</div>
+                <div class="card-desc">571 tests define the expected behavior. The AI writes code that passes them — not code that "looks right."</div>
+            </div>
+            <div class="info-card reveal">
+                <div class="card-label">Method</div>
+                <div class="card-value">Expert Reviews Before Building</div>
+                <div class="card-desc">Architecture decisions stress-tested against DS Lead, PM Lead, and Senior Eng personas — simulating the IC review that separates good from great.</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 10: DOMAIN EXPERT ON DEMAND
+     =========================================== -->
+<section class="slide" id="slide-10">
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">11</span>
+        <h2 class="reveal">Domain Expert on Demand</h2>
+        <p class="reveal">Domain-specific AI agents fail without expert pressure-testing. Generic LLMs get easy cases right and hard cases catastrophically wrong.</p>
+        <div class="two-col">
+            <div class="col reveal">
+                <h3>Why Generic AI Fails Here</h3>
+                <ul class="content-list">
+                    <li>Doesn't know your metric formulas</li>
+                    <li>Can't tell a real regression from an AI adoption signal</li>
+                    <li>Hallucinate plausible-sounding but wrong diagnoses</li>
+                </ul>
+            </div>
+            <div class="col reveal">
+                <h3>Persona-Based Review</h3>
+                <ul class="content-list">
+                    <li><span class="emphasis">DS Lead</span> — metric validity, methodology gaps</li>
+                    <li><span class="emphasis">PM Lead</span> — business value, adoption risk</li>
+                    <li><span class="emphasis">Senior Eng</span> — system design, failure modes</li>
+                </ul>
+            </div>
+        </div>
+        <p class="reveal">One review caught that the system's quality checks were weakest at the most critical stage — the final diagnosis. That single finding reshaped the entire v2.</p>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 11: V2 — WHAT CHANGED (DS framing)
+     =========================================== -->
+<section class="slide" id="slide-11">
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">12</span>
+        <h2 class="reveal">v2: Better Diagnosis Quality,<br>Structurally Enforced</h2>
+        <p class="reveal">v1 worked but relied on the AI "following instructions." v2 makes quality checks structural — the system validates its own reasoning at every stage.</p>
+        <div class="card-grid">
+            <div class="info-card reveal">
+                <div class="card-label">What changed</div>
+                <div class="card-value">Validation Rules</div>
+                <div class="card-desc">11 domain rules checked at every stage boundary. Example: "If AI metrics are stable, do not attribute click quality drops to AI adoption."</div>
+            </div>
+            <div class="info-card reveal">
+                <div class="card-label">What changed</div>
+                <div class="card-value">Decision Audit Trail</div>
+                <div class="card-desc">Every key decision — which direction is "bad," which theories were tested, what conclusion was drawn — is logged and reviewable.</div>
+            </div>
+            <div class="info-card reveal">
+                <div class="card-label">What changed</div>
+                <div class="card-value">Graduated Strictness</div>
+                <div class="card-desc">Early stages (data parsing) fail hard on errors. Later stages (final diagnosis) get a second chance before failing — matching the stakes at each step.</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 12: BUILDING RIGOR, HONESTLY
+     =========================================== -->
+<section class="slide" id="slide-12">
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">13</span>
+        <h2 class="reveal">Building Rigor, Honestly</h2>
+        <p class="reveal">Rigorous offline and online eval is still being built. Here's where we are.</p>
+        <div class="two-col">
+            <div class="col reveal">
+                <h3 style="color: #28c840;">What We Have</h3>
+                <ul class="content-list">
+                    <li><span class="emphasis">571 tests</span> — all passing, 0 failures</li>
+                    <li><span class="emphasis">6 eval scenarios</span> with scoring rubrics</li>
+                    <li><span class="emphasis">Known-answer tests</span> — must find the right root cause, must not blame the wrong thing</li>
+                </ul>
+            </div>
+            <div class="col reveal">
+                <h3 style="color: #febc2e;">What We're Building</h3>
+                <ul class="content-list">
+                    <li><span class="emphasis">More scenarios</span> — edge cases, adversarial inputs</li>
+                    <li><span class="emphasis">Online eval</span> — compare against real human investigations</li>
+                    <li><span class="emphasis">Confidence calibration</span> — does "High confidence" actually mean high accuracy?</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 13: WHY AI-DRIVEN DS SOLUTIONS ARE HARD
+     =========================================== -->
+<section class="slide" id="slide-13">
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">14</span>
+        <h2 class="reveal">Why AI-Driven DS<br>Solutions Are Hard</h2>
+        <p class="reveal">Building it is 30%. Getting people to trust and use it is 70%.</p>
+        <div class="card-grid">
+            <div class="info-card reveal">
+                <div class="card-label">Challenge</div>
+                <div class="card-value">Domain Accuracy</div>
+                <div class="card-desc">One bad diagnosis erodes months of trust. Domain constraints are non-negotiable.</div>
+            </div>
+            <div class="info-card reveal">
+                <div class="card-label">Challenge</div>
+                <div class="card-value">Hallucination Risk</div>
+                <div class="card-desc">A plausible-sounding wrong root cause is worse than no answer. Senior ICs will test it on known cases.</div>
+            </div>
+            <div class="info-card reveal">
+                <div class="card-label">Challenge</div>
+                <div class="card-value">Internal Adoption</div>
+                <div class="card-desc">Trust is earned one investigation at a time. Show the work, state confidence honestly, be useful on day one.</div>
+            </div>
+        </div>
+        <p class="reveal">The critical path: <span class="emphasis">show the work</span>, <span class="emphasis">earn IC trust</span>, <span class="emphasis">start with structured legwork, add judgment later</span>.</p>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 14: WHAT'S NEXT (outcome language)
+     =========================================== -->
+<section class="slide" id="slide-14">
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">15</span>
+        <h2 class="reveal">What's Next</h2>
+        <div class="pipeline-full">
+            <div class="pipeline-stage reveal">
+                <span class="p-num">W3</span>
+                <div class="p-info">
+                    <h3>The Tool Learns From Corrections</h3>
+                    <p>When a DS says "that's wrong," the system remembers. Accumulated corrections improve future investigations.</p>
+                </div>
+            </div>
+            <div class="pipeline-stage reveal">
+                <span class="p-num">W4</span>
+                <div class="p-info">
+                    <h3>End-to-End Automated Pipeline</h3>
+                    <p>Full investigation runs autonomously. Self-assessment at the final stage: "How confident am I in this diagnosis?"</p>
+                </div>
+            </div>
+            <div class="pipeline-stage reveal">
+                <span class="p-num">v3</span>
+                <div class="p-info">
+                    <h3>Eval Against Real Investigations</h3>
+                    <p>Compare tool output against how experienced DSs actually diagnosed the same metric movements.</p>
+                </div>
+            </div>
+        </div>
+        <p class="reveal">North star: a tool that earns trust by being <span class="emphasis">transparent</span>, <span class="emphasis">domain-accurate</span>, and <span class="emphasis">honest about what it doesn't know</span>.</p>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 15: [ENG] WHAT THE TOOL KNOWS ABOUT YOUR SYSTEM
+     =========================================== -->
+<section class="slide" id="slide-15">
+    <span class="audience-tag">Eng Focus</span>
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">E1</span>
+        <h2 class="reveal">What the Tool Knows<br>About Your System</h2>
+        <p class="reveal">Domain knowledge is encoded as structured YAML — not prompt instructions. The tool reasons from data, not vibes.</p>
+        <div class="code-block reveal">
+            <div class="terminal-dots"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+            <pre><span class="comment"># The AI adoption trap — encoded as a rule, not a suggestion</span>
+<span class="key">pattern</span>: ai_answers_working
+<span class="key">signal</span>:
+  click_quality: <span class="string">DOWN</span>
+  search_quality_success: <span class="string">STABLE or UP</span>
+  ai_trigger: <span class="string">UP</span>
+<span class="key">verdict</span>: <span class="string">POSITIVE — AI answers cannibalizing clicks by design</span>
+<span class="key">action</span>: <span class="string">Do NOT treat as regression</span>
+
+<span class="comment"># Connector outage signature — skip 30min of decomposition</span>
+<span class="key">pattern</span>: connector_auth_expiry
+<span class="key">signal</span>:
+  zero_result_rate: <span class="string">SPIKE</span>
+  connector_health: <span class="string">FAILURES in single connector</span>
+  onset: <span class="string">gradual</span>
+<span class="key">shortcut</span>: <span class="string">Jump to connector root cause directly</span></pre>
+        </div>
+        <p class="reveal">5 YAML knowledge files: metric definitions, co-movement patterns, historical incidents, hypothesis priority, architecture tradeoffs.</p>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 16: [ENG] V2 ARCHITECTURE DEEP DIVE
+     =========================================== -->
+<section class="slide" id="slide-16">
+    <span class="audience-tag">Eng Focus</span>
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">E2</span>
+        <h2 class="reveal">v2 Architecture:<br>How Enforcement Works</h2>
+        <p class="reveal">Quality rules run at stage boundaries — not as prompt instructions the AI might ignore.</p>
+        <div class="code-block reveal">
+            <div class="terminal-dots"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+            <pre><span class="comment"># Seam validator: runs between HYPOTHESIZE → DISPATCH</span>
+<span class="key">rule</span>: hypotheses_consistent_with_co_movement
+<span class="key">check</span>: <span class="string">"If AI metrics stable, no hypothesis may</span>
+        <span class="string">attribute click_quality drop to AI adoption"</span>
+<span class="key">on_violation</span>: <span class="string">REJECT hypothesis, log to trace</span>
+
+<span class="comment"># Seam validator: runs at SYNTHESIZE output</span>
+<span class="key">rule</span>: effect_size_proportionality
+<span class="key">check</span>: <span class="string">"Root cause segment contribution must be</span>
+        <span class="string">proportional to claimed severity (P0/P1/P2)"</span>
+<span class="key">on_violation</span>: <span class="string">RETRY once, then SOFT WARN</span></pre>
+        </div>
+        <ul class="content-list reveal">
+            <li><span class="emphasis">11 rules</span> across 4 stage boundaries — from data quality gates to narrative coherence checks</li>
+            <li><span class="emphasis">Tiered enforcement</span> — hard fail early (data parsing), retry + soft warn late (final diagnosis)</li>
+            <li><span class="emphasis">Full trace</span> — every decision logged: which direction was "bad," which hypotheses tested, what conclusion drawn</li>
+        </ul>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 17: [ENG] BUILD YOUR OWN
+     =========================================== -->
+<section class="slide" id="slide-17">
+    <span class="audience-tag">Eng Focus</span>
+    <div class="slide-content-standard">
+        <span class="slide-number reveal">E3</span>
+        <h2 class="reveal">Build Your Own:<br>The Reusable Pattern</h2>
+        <p class="reveal">This isn't a one-off project. It's a pattern any eng team can follow to build domain-specific AI agents.</p>
+        <div class="pipeline-full">
+            <div class="pipeline-stage reveal">
+                <span class="p-num">01</span>
+                <div class="p-info">
+                    <h3>Pick a Repetitive Investigation</h3>
+                    <p>What does your team debug the same way every time? Incident triage, regression analysis, capacity planning — any structured legwork.</p>
+                </div>
+            </div>
+            <div class="pipeline-stage reveal">
+                <span class="p-num">02</span>
+                <div class="p-info">
+                    <h3>Encode Domain Knowledge as Data</h3>
+                    <p>YAML files, not prompt instructions. Metric formulas, known patterns, decision trees. Structured and versionable.</p>
+                </div>
+            </div>
+            <div class="pipeline-stage reveal">
+                <span class="p-num">03</span>
+                <div class="p-info">
+                    <h3>Build Stages That Mirror Expert Thinking</h3>
+                    <p>How does your best IC investigate? Encode that sequence. Add validation rules between stages.</p>
+                </div>
+            </div>
+            <div class="pipeline-stage reveal">
+                <span class="p-num">04</span>
+                <div class="p-info">
+                    <h3>Review With Domain Experts Before Shipping</h3>
+                    <p>Have your senior ICs stress-test the tool on known cases. Their "that's wrong" is your best test suite.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     SLIDE 18: CLOSING
+     =========================================== -->
+<section class="slide slide-closing" id="slide-19">
+    <div class="panel-left">
+        <h1 class="closing-title">Thank You</h1>
+        <p class="closing-subtitle">Search Metric Analyzer — built from zero through specs, tests, and expert reviews.</p>
+        <div class="badge closing-badge">questions welcome</div>
+    </div>
+    <div class="panel-right">
+        <div class="closing-right-content">
+            <p class="closing-label">Built with</p>
+            <p class="closing-tool">Claude Code</p>
+            <p class="closing-method">Specs + Tests + Expert Reviews</p>
+            <div class="closing-stats">
+                <p class="closing-stats-text">571 tests &middot; 6 eval scenarios &middot; 11 validation rules</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+<!-- ===========================================
+     JAVASCRIPT: Presentation Controller
+     =========================================== -->
+<script>
+    class SlidePresentation {
+        constructor() {
+            this.slides = document.querySelectorAll('.slide');
+            this.currentSlide = 0;
+            this.isScrolling = false;
+
+            this.setupIntersectionObserver();
+            this.setupKeyboardNav();
+            this.setupTouchNav();
+            this.setupWheelNav();
+            this.setupProgressBar();
+            this.setupNavDots();
+            this.slides[0].classList.add('visible');
+        }
+
+        setupIntersectionObserver() {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                        const index = Array.from(this.slides).indexOf(entry.target);
+                        if (index !== -1) {
+                            this.currentSlide = index;
+                            this.updateNavDots();
+                            this.updateProgressBar();
+                        }
+                    }
+                });
+            }, { threshold: 0.5 });
+            this.slides.forEach(slide => observer.observe(slide));
+        }
+
+        setupKeyboardNav() {
+            document.addEventListener('keydown', (e) => {
+                if (e.target.getAttribute('contenteditable')) return;
+                switch(e.key) {
+                    case 'ArrowDown': case 'ArrowRight': case ' ': case 'PageDown':
+                        e.preventDefault(); this.goToSlide(this.currentSlide + 1); break;
+                    case 'ArrowUp': case 'ArrowLeft': case 'PageUp':
+                        e.preventDefault(); this.goToSlide(this.currentSlide - 1); break;
+                    case 'Home': e.preventDefault(); this.goToSlide(0); break;
+                    case 'End': e.preventDefault(); this.goToSlide(this.slides.length - 1); break;
+                }
+            });
+        }
+
+        setupTouchNav() {
+            let startY = 0;
+            document.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; }, { passive: true });
+            document.addEventListener('touchend', (e) => {
+                const delta = startY - e.changedTouches[0].clientY;
+                if (Math.abs(delta) > 50) {
+                    if (delta > 0) this.goToSlide(this.currentSlide + 1);
+                    else this.goToSlide(this.currentSlide - 1);
+                }
+            }, { passive: true });
+        }
+
+        setupWheelNav() {
+            document.addEventListener('wheel', (e) => {
+                if (this.isScrolling) return;
+                this.isScrolling = true;
+                if (e.deltaY > 30) this.goToSlide(this.currentSlide + 1);
+                else if (e.deltaY < -30) this.goToSlide(this.currentSlide - 1);
+                setTimeout(() => { this.isScrolling = false; }, 800);
+            }, { passive: true });
+        }
+
+        goToSlide(index) {
+            if (index < 0 || index >= this.slides.length) return;
+            this.currentSlide = index;
+            this.slides[index].scrollIntoView({ behavior: 'smooth' });
+        }
+
+        setupProgressBar() {
+            this.progressBar = document.getElementById('progressBar');
+            this.updateProgressBar();
+        }
+
+        updateProgressBar() {
+            if (!this.progressBar) return;
+            this.progressBar.style.width = ((this.currentSlide + 1) / this.slides.length) * 100 + '%';
+        }
+
+        setupNavDots() {
+            const container = document.getElementById('navDots');
+            if (!container) return;
+            this.slides.forEach((_, i) => {
+                const dot = document.createElement('button');
+                dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+                dot.setAttribute('aria-label', 'Go to slide ' + (i + 1));
+                dot.addEventListener('click', () => this.goToSlide(i));
+                container.appendChild(dot);
+            });
+        }
+
+        updateNavDots() {
+            document.querySelectorAll('.nav-dot').forEach((dot, i) => {
+                dot.classList.toggle('active', i === this.currentSlide);
+            });
+        }
+    }
+
+    class InlineEditor {
+        constructor() {
+            this.isActive = false;
+            this.editToggle = document.getElementById('editToggle');
+            this.hotzone = document.getElementById('editHotzone');
+            this.hideTimeout = null;
+            this.setupHotzone();
+            this.setupKeyboard();
+            this.loadSavedEdits();
+        }
+
+        setupHotzone() {
+            this.hotzone.addEventListener('mouseenter', () => {
+                clearTimeout(this.hideTimeout);
+                this.editToggle.classList.add('show');
+            });
+            this.hotzone.addEventListener('mouseleave', () => {
+                this.hideTimeout = setTimeout(() => {
+                    if (!this.isActive) this.editToggle.classList.remove('show');
+                }, 400);
+            });
+            this.editToggle.addEventListener('mouseenter', () => { clearTimeout(this.hideTimeout); });
+            this.editToggle.addEventListener('mouseleave', () => {
+                this.hideTimeout = setTimeout(() => {
+                    if (!this.isActive) this.editToggle.classList.remove('show');
+                }, 400);
+            });
+            this.editToggle.addEventListener('click', () => this.toggleEditMode());
+            this.hotzone.addEventListener('click', () => this.toggleEditMode());
+        }
+
+        setupKeyboard() {
+            document.addEventListener('keydown', (e) => {
+                if ((e.key === 'e' || e.key === 'E') && !e.target.getAttribute('contenteditable')) {
+                    this.toggleEditMode();
+                }
+                if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                    e.preventDefault();
+                    this.saveEdits();
+                }
+            });
+        }
+
+        toggleEditMode() {
+            this.isActive = !this.isActive;
+            this.editToggle.classList.toggle('active', this.isActive);
+            this.editToggle.textContent = this.isActive ? 'Editing' : 'Edit';
+            const sel = 'h1, h2, h3, p, li, blockquote, .card-value, .card-desc, .card-label, .stage-label, .subtitle, .badge';
+            document.querySelectorAll(sel).forEach(el => {
+                if (this.isActive) el.setAttribute('contenteditable', 'true');
+                else { el.removeAttribute('contenteditable'); this.saveEdits(); }
+            });
+        }
+
+        saveEdits() {
+            const data = {};
+            document.querySelectorAll('.slide').forEach((slide, i) => { data['slide-' + i] = slide.innerHTML; });
+            localStorage.setItem('sma-presentation-edits', JSON.stringify(data));
+        }
+
+        loadSavedEdits() {
+            const saved = localStorage.getItem('sma-presentation-edits');
+            if (!saved) return;
+            try {
+                const data = JSON.parse(saved);
+                document.querySelectorAll('.slide').forEach((slide, i) => {
+                    if (data['slide-' + i]) slide.innerHTML = data['slide-' + i];
+                });
+            } catch(e) {}
+        }
+    }
+
+    const presentation = new SlidePresentation();
+    const editor = new InlineEditor();
+</script>
+
+</body>
+</html>
