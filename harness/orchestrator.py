@@ -471,7 +471,7 @@ from core.corrections import load_corrections, find_relevant_corrections
 from core.decompose import run_decomposition
 from core.diagnose import run_diagnosis
 from contracts.seam_validator import validate_seam, SeamViolation
-from harness.errors import OrchestratorError, StageError, LLMParseError
+from harness.errors import OrchestratorError, StageError, LLMParseError, LLMAPIError
 from harness.llm import extract_json
 from trace.collector import InvestigationTrace
 from trace.helpers import emit_deterministic_span
@@ -539,9 +539,8 @@ class SearchMetricOrchestrator:
     ) -> Dict[str, Any]:
         """Run the full 4-stage investigation pipeline.
 
-        Currently only UNDERSTAND is implemented. The remaining stages
-        raise NotImplementedError with descriptive messages explaining
-        what they will do when implemented.
+        Executes: UNDERSTAND → HYPOTHESIZE → DISPATCH → SYNTHESIZE.
+        Each stage validates its output via seam_validator before proceeding.
 
         Args:
             question: The investigation question (e.g., "Click Quality dropped 6.2% WoW").
@@ -553,14 +552,17 @@ class SearchMetricOrchestrator:
 
         Returns:
             InvestigationReport dict with keys:
-            - status: "completed" | "blocked" | "partial"
+            - status: "complete" | "blocked"
             - question: The original question
+            - stages_completed: List of completed stage names
             - understand_result: Output from UNDERSTAND stage
+            - hypothesize_result: Output from HYPOTHESIZE stage
+            - dispatch_result: Output from DISPATCH stage (FindingSet)
+            - synthesis: Output from SYNTHESIZE stage (SynthesisReport)
             - trace: Full investigation trace as dict
-            - (future) hypothesize_result, dispatch_result, synthesize_result
 
         Raises:
-            StageError: If the UNDERSTAND stage fails due to seam validation.
+            StageError: If a stage fails (e.g., seam validation, JSON parse).
             OrchestratorError: For unexpected pipeline failures.
         """
         # Create a fresh trace for this investigation
@@ -621,16 +623,35 @@ class SearchMetricOrchestrator:
             # Let it propagate to the caller.
             raise
 
-        # --- Stages 3-4: Not yet implemented ---
-        # These will be added in Tasks 10, 11 respectively.
-        # For now, return UNDERSTAND + HYPOTHESIZE results as a partial report.
+        # --- Stage 3: DISPATCH (LLM or agent-based) ---
+        try:
+            dispatch_result = self._stage_dispatch(
+                hypothesis_set=hypothesize_result,
+                understand_result=understand_result,
+                trace=trace,
+            )
+        except StageError:
+            # DISPATCH StageError (e.g., all hypotheses failed) — propagate.
+            # The caller can inspect stage="DISPATCH" to know what broke.
+            raise
+
+        # --- Stage 4: SYNTHESIZE (LLM-based, RETRY(1) then SOFT gate) ---
+        synthesis_result = self._stage_synthesize(
+            dispatch_result=dispatch_result,
+            understand_result=understand_result,
+            hypothesize_result=hypothesize_result,
+            trace=trace,
+        )
+
+        # --- All 4 stages completed — return full investigation report ---
         return {
-            "status": "partial",
+            "status": "complete",
             "question": question,
-            "stages_completed": ["UNDERSTAND", "HYPOTHESIZE"],
-            "stages_remaining": ["DISPATCH", "SYNTHESIZE"],
+            "stages_completed": ["UNDERSTAND", "HYPOTHESIZE", "DISPATCH", "SYNTHESIZE"],
             "understand_result": understand_result,
             "hypothesize_result": hypothesize_result,
+            "dispatch_result": dispatch_result,
+            "synthesis": synthesis_result,
             "trace": trace.to_dict(),
         }
 
@@ -1174,41 +1195,622 @@ class SearchMetricOrchestrator:
             "investigation_context": str(investigation_context),
         }
 
-    def _stage_dispatch(self, hypothesize_result, understand_result, trace):
+    def _stage_dispatch(self, hypothesis_set, understand_result, trace):
         """Stage 3: DISPATCH — investigate hypotheses using specialist agents.
 
-        NOT YET IMPLEMENTED (Task 10).
+        Routes each hypothesis to either:
+        - Agent callables (if config["agents"] is provided)
+        - LLM callable (default — one call per hypothesis)
 
-        This stage will:
-        1. Route each hypothesis to the appropriate specialist agent
-        2. Agents gather evidence (connector checks, timeline analysis, etc.)
-        3. Each agent returns findings with raw data evidence
-        4. Validate with seam_validator (SOFT gate)
-        5. Check narrative-data coherence
+        Per-hypothesis error isolation: individual failures produce an
+        inconclusive finding (NOT a pipeline halt). Only raises StageError
+        if the hypothesis set is empty OR all hypotheses fail.
+
+        Steps:
+        1. Validate hypothesis set is non-empty
+        2. For each hypothesis: investigate via agent or LLM
+        3. Collect findings with per-hypothesis error isolation
+        4. Emit IC9 Invisible Decision #3 trace span (context_construction)
+        5. Validate with seam_validator (SOFT gate)
+        6. Return FindingSet dict
+
+        Args:
+            hypothesis_set: Output from _stage_hypothesize() (HypothesisSet dict).
+            understand_result: Output from _stage_understand().
+            trace: InvestigationTrace to record decisions to.
+
+        Returns:
+            FindingSet dict with keys: findings, context_construction_trace.
+
+        Raises:
+            StageError: If hypothesis set is empty or all investigations fail.
         """
-        raise NotImplementedError(
-            "DISPATCH stage is not yet implemented (Task 10). "
-            "This stage will dispatch hypotheses to specialist agents "
-            "for evidence gathering and return structured findings."
+        hypotheses = hypothesis_set.get("hypotheses", [])
+
+        # --- Pre-condition: must have at least one hypothesis ---
+        if not hypotheses:
+            raise StageError(
+                message="DISPATCH failed: no hypotheses to investigate.",
+                stage="DISPATCH",
+                violations=["Empty hypothesis set — nothing to dispatch"],
+            )
+
+        # --- Build context for investigators ---
+        # Get token-budgeted summary from HYPOTHESIZE stage for context
+        hypothesize_context = trace.agent_context_for("HYPOTHESIZE", max_tokens=1500)
+
+        # Build a diagnosis context dict for agent callables
+        diagnosis_context = {
+            "understand_result": understand_result,
+            "hypothesize_context": hypothesize_context,
+        }
+
+        # Track what context was given to each investigator (IC9 #3)
+        context_construction_log = []
+
+        # --- Investigate each hypothesis ---
+        findings = []
+        agents = self._config.get("agents")
+
+        for hyp in hypotheses:
+            hyp_id = hyp.get("hypothesis_id", "unknown")
+
+            try:
+                if agents:
+                    # --- Agent callable path ---
+                    # Run each agent on this hypothesis, take the first result
+                    finding = self._dispatch_via_agents(
+                        agents=agents,
+                        diagnosis_context=diagnosis_context,
+                        hypothesis=hyp,
+                    )
+                else:
+                    # --- LLM path ---
+                    finding = self._dispatch_via_llm(
+                        hypothesis=hyp,
+                        understand_result=understand_result,
+                        hypothesize_context=hypothesize_context,
+                    )
+
+                findings.append(finding)
+                context_construction_log.append(
+                    f"Hypothesis {hyp_id}: investigated successfully"
+                )
+
+            except Exception as e:
+                # Per-hypothesis error isolation: failures → inconclusive finding.
+                # Expected exceptions: LLMAPIError (timeout/rate limit),
+                # LLMParseError (bad JSON), StageError (validation failure).
+                # We catch broadly because unexpected exceptions should also
+                # produce inconclusive findings, not crash the pipeline.
+                findings.append({
+                    "agent_name": "llm_investigator",
+                    "hypothesis_id": hyp_id,
+                    "verdict": "inconclusive",
+                    "confidence": 0.0,
+                    "evidence": [],
+                    "narrative": f"Investigation failed: {str(e)[:200]}",
+                    "adjacent_observations": [],
+                })
+                context_construction_log.append(
+                    f"Hypothesis {hyp_id}: investigation failed ({type(e).__name__})"
+                )
+
+        # --- Check if ALL hypotheses failed ---
+        # If every finding is inconclusive with 0.0 confidence, all failed
+        all_failed = all(
+            f.get("verdict") == "inconclusive" and f.get("confidence", 1.0) == 0.0
+            for f in findings
+        )
+        if all_failed:
+            raise StageError(
+                message=(
+                    f"DISPATCH failed: all {len(hypotheses)} hypothesis investigations "
+                    f"failed. No evidence was gathered."
+                ),
+                stage="DISPATCH",
+                violations=[
+                    f"All {len(hypotheses)} investigations failed"
+                ],
+            )
+
+        # Build the FindingSet result
+        context_trace_str = "; ".join(context_construction_log)
+        finding_set = {
+            "findings": findings,
+            "context_construction_trace": context_trace_str,
+        }
+
+        # --- Emit IC9 Invisible Decision #3: context_construction ---
+        # What context did each investigator receive? This was previously
+        # invisible — you saw findings but not what information the
+        # investigator was given to work with.
+        from trace.span import TraceSpan
+        trace.emit(TraceSpan(
+            stage="DISPATCH",
+            swimlane="llm_generated",
+            tool="harness.orchestrator.SearchMetricOrchestrator._stage_dispatch",
+            decision="context_construction",
+            code_enforced=False,
+            value={
+                "hypotheses_investigated": len(hypotheses),
+                "findings_count": len(findings),
+                "successful": len([f for f in findings if f.get("confidence", 0) > 0]),
+                "inconclusive": len([f for f in findings if f.get("verdict") == "inconclusive"]),
+            },
+            constrained_by=[
+                "rule_each_finding_has_evidence",
+                "rule_narrative_data_coherence",
+            ],
+            human_summary=(
+                f"DISPATCH: investigated {len(hypotheses)} hypotheses, "
+                f"produced {len(findings)} findings. "
+                f"Context: {context_trace_str[:200]}"
+            ),
+            agent_context=(
+                f"hypotheses_investigated={len(hypotheses)}, "
+                f"findings_count={len(findings)}, "
+                f"context_trace={context_trace_str[:300]}"
+            ),
+        ))
+
+        # --- Seam validation (SOFT gate) ---
+        # DISPATCH uses a SOFT gate — if one finding has no evidence,
+        # we log it but don't halt. One bad finding shouldn't kill
+        # an otherwise useful investigation.
+        validation = validate_seam(
+            result=finding_set,
+            stage="DISPATCH",
+            trace=trace,
         )
 
-    def _stage_synthesize(self, dispatch_result, understand_result, trace):
+        if not validation["passed"]:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "DISPATCH seam validation failed (SOFT gate — continuing): %s",
+                "; ".join(validation["violations"]),
+            )
+
+        return finding_set
+
+    def _dispatch_via_agents(self, agents, diagnosis_context, hypothesis):
+        """Dispatch a hypothesis to agent callables and convert to SubAgentFinding.
+
+        The agent callable signature is (diagnosis_context, hypothesis) -> dict.
+        Agent results use the v1 AgentVerdict format, which we convert to
+        SubAgentFinding format for the DISPATCH contract.
+
+        Tries agents sequentially — returns the first successful result.
+        If an agent crashes, tries the next one. If all agents fail,
+        returns an inconclusive finding.
+        """
+        hyp_id = hypothesis.get("hypothesis_id", "unknown")
+
+        # Try agents sequentially — first success wins.
+        # If an agent crashes, try the next one. This prevents a single
+        # broken agent from blocking the investigation.
+        for agent_fn in agents:
+            try:
+                agent_result = agent_fn(diagnosis_context, hypothesis)
+
+                # Convert AgentVerdict → SubAgentFinding.
+                # v1 AgentVerdict has no confidence field, so we infer from verdict.
+                # TODO(v2): When agent adapters add confidence, use agent_result.get("confidence") directly.
+                verdict = agent_result.get("verdict", "inconclusive")
+                inferred_confidence = (
+                    0.75 if verdict == "confirmed"
+                    else 0.5 if verdict == "rejected"
+                    else 0.3
+                )
+
+                return {
+                    "agent_name": agent_result.get("agent", "unknown_agent"),
+                    "hypothesis_id": hyp_id,
+                    "verdict": verdict,
+                    "confidence": agent_result.get("confidence", inferred_confidence),
+                    "evidence": agent_result.get("evidence", []),
+                    "narrative": agent_result.get("reason", f"Agent investigation of {hyp_id}"),
+                    "adjacent_observations": [],
+                }
+            except Exception:
+                # Agent failed — try the next one
+                continue
+
+        # All agents failed or list was empty
+        return {
+            "agent_name": "no_agent",
+            "hypothesis_id": hyp_id,
+            "verdict": "inconclusive",
+            "confidence": 0.0,
+            "evidence": [],
+            "narrative": "No agents were able to investigate this hypothesis.",
+            "adjacent_observations": [],
+        }
+
+    def _dispatch_via_llm(self, hypothesis, understand_result, hypothesize_context):
+        """Investigate a single hypothesis using the LLM callable.
+
+        Builds a per-hypothesis prompt, calls the LLM, and parses the
+        response into a SubAgentFinding dict.
+        """
+        hyp_id = hypothesis.get("hypothesis_id", "unknown")
+
+        system_prompt = self._build_dispatch_system_prompt()
+        user_prompt = self._build_dispatch_user_prompt(
+            hypothesis=hypothesis,
+            understand_result=understand_result,
+            hypothesize_context=hypothesize_context,
+        )
+
+        raw_response = self._llm(user_prompt, system_prompt, 1500)
+
+        try:
+            parsed = extract_json(raw_response)
+        except LLMParseError as e:
+            raise StageError(
+                message=(
+                    f"DISPATCH failed for {hyp_id}: could not extract valid JSON. "
+                    f"Raw response preview: {str(e.raw_text)[:200]}"
+                ),
+                stage="DISPATCH",
+                violations=[f"JSON extraction failed for hypothesis {hyp_id}"],
+            ) from e
+
+        # Normalize the finding — ensure required fields exist
+        return {
+            "agent_name": parsed.get("agent_name", "llm_investigator"),
+            "hypothesis_id": parsed.get("hypothesis_id", hyp_id),
+            "verdict": parsed.get("verdict", "inconclusive"),
+            "confidence": float(parsed.get("confidence", 0.5)),
+            "evidence": parsed.get("evidence", []),
+            "narrative": parsed.get("narrative", ""),
+            "adjacent_observations": parsed.get("adjacent_observations", []),
+        }
+
+    def _build_dispatch_system_prompt(self) -> str:
+        """Build the system prompt for DISPATCH stage.
+
+        Must contain 'investigating a specific hypothesis' to match the
+        test mock LLM routing.
+        """
+        return (
+            "You are a senior search relevance data scientist investigating a specific hypothesis "
+            "about why a metric moved in an Enterprise Search platform.\n\n"
+            "Your task: investigate the given hypothesis by examining the evidence and "
+            "producing a structured finding with your verdict.\n\n"
+            "Return a JSON object with these fields:\n"
+            "- agent_name (str): 'llm_investigator'\n"
+            "- hypothesis_id (str): the hypothesis ID you're investigating\n"
+            "- verdict (str): 'confirmed' | 'rejected' | 'inconclusive'\n"
+            "- confidence (float): 0.0 to 1.0\n"
+            "- evidence (list): raw data citations [{metric, value, delta, direction}]\n"
+            "- narrative (str): human-readable explanation of your investigation\n"
+            "- adjacent_observations (list of str): unexpected findings\n\n"
+            "CRITICAL: Every finding MUST include at least one evidence item with real "
+            "data values. A finding without evidence is an opinion, not a diagnosis."
+        )
+
+    def _build_dispatch_user_prompt(self, hypothesis, understand_result, hypothesize_context):
+        """Build the per-hypothesis user prompt for DISPATCH.
+
+        Includes hypothesis details and UNDERSTAND context so the
+        investigator has the full picture.
+        """
+        hyp_id = hypothesis.get("hypothesis_id", "unknown")
+        archetype = hypothesis.get("archetype", "unknown")
+        confirms_if = hypothesis.get("confirms_if", [])
+        rejects_if = hypothesis.get("rejects_if", [])
+
+        # Direction and severity from UNDERSTAND
+        direction = understand_result.get("direction", "unknown")
+        severity = understand_result.get("severity", "unknown")
+        metric = understand_result.get("metric", "unknown")
+
+        sections = [
+            f"HYPOTHESIS TO INVESTIGATE:",
+            f"ID: {hyp_id}",
+            f"Archetype: {archetype}",
+            f"Confirms if: {', '.join(confirms_if) if confirms_if else 'N/A'}",
+            f"Rejects if: {', '.join(rejects_if) if rejects_if else 'N/A'}",
+            "",
+            f"UNDERSTAND CONTEXT:",
+            f"Metric: {metric}, Direction: {direction}, Severity: {severity}",
+        ]
+
+        if hypothesize_context:
+            sections.append(f"\nHYPOTHESIZE CONTEXT:\n{hypothesize_context}")
+
+        return "\n".join(sections)
+
+    def _stage_synthesize(self, dispatch_result, understand_result,
+                          hypothesize_result, trace):
         """Stage 4: SYNTHESIZE — produce the final investigation report.
 
-        NOT YET IMPLEMENTED (Task 11).
+        Builds a prompt from all prior stages, calls the LLM, and validates
+        the report against the SynthesisReport contract.
 
-        This stage will:
-        1. Build a prompt with all prior stage context (token-budgeted)
-        2. Call the LLM to produce a structured report (7 mandatory sections)
-        3. Validate with seam_validator (RETRY gate — retry once, then soft)
-        4. Check effect-size proportionality for P0 severity
-        5. Require upgrade_condition statement
-        6. Add self-evaluation confidence score
+        Uses RETRY(1) then SOFT gate:
+        - First attempt: validate with seam_validator
+        - If fails: retry once with violations appended to prompt
+        - If second attempt also fails: continue with completeness_warnings
+          (expensive investigation work is NOT discarded)
+
+        Steps:
+        1. Build system + user prompt with all stage context
+        2. Call the LLM to produce a structured report
+        3. Validate with seam_validator (RETRY gate)
+        4. If validation fails, retry with violation feedback
+        5. If retry also fails, degrade gracefully with warnings
+        6. Emit IC9 Invisible Decision #4 trace span (narrative_selection)
+        7. Return SynthesisReport dict
+
+        Args:
+            dispatch_result: Output from _stage_dispatch() (FindingSet dict).
+            understand_result: Output from _stage_understand().
+            hypothesize_result: Output from _stage_hypothesize().
+            trace: InvestigationTrace to record decisions to.
+
+        Returns:
+            SynthesisReport dict with 7 mandatory sections + metadata.
+
+        Raises:
+            StageError: If JSON extraction from LLM response fails on both attempts.
         """
-        raise NotImplementedError(
-            "SYNTHESIZE stage is not yet implemented (Task 11). "
-            "This stage will use the LLM callable to produce a final "
-            "investigation report with 7 mandatory sections and confidence grading."
+        system_prompt = self._build_synthesize_system_prompt()
+        user_prompt = self._build_synthesize_user_prompt(
+            understand_result=understand_result,
+            hypothesize_result=hypothesize_result,
+            dispatch_result=dispatch_result,
+            trace=trace,
+        )
+
+        # --- First attempt ---
+        raw_response = self._llm(user_prompt, system_prompt, 3000)
+
+        try:
+            report = extract_json(raw_response)
+        except LLMParseError as e:
+            raise StageError(
+                message=(
+                    f"SYNTHESIZE failed: could not extract valid JSON from LLM response. "
+                    f"Raw response preview: {str(e.raw_text)[:200]}"
+                ),
+                stage="SYNTHESIZE",
+                violations=["LLM response did not contain parseable JSON"],
+            ) from e
+
+        # Normalize the report — ensure all expected fields exist
+        report = self._normalize_synthesis_report(report, trace)
+
+        # Save the first attempt so we can fall back to it if retry also fails.
+        # (I1 fix: explicit save prevents stale variable bugs in the retry path.)
+        first_attempt_report = report
+
+        # --- RETRY(1) then SOFT validation gate ---
+        # validate_seam raises SeamViolation for "retry" tier.
+        # We catch it, retry once, then fall back to soft if the retry also fails.
+        completeness_warnings = []
+
+        try:
+            validation = validate_seam(
+                result=report,
+                stage="SYNTHESIZE",
+                trace=trace,
+            )
+        except SeamViolation as first_violation:
+            # First attempt failed — retry with violation feedback
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "SYNTHESIZE first attempt failed validation — retrying: %s",
+                "; ".join(first_violation.violations),
+            )
+
+            # Build retry prompt with violations appended
+            retry_prompt = self._build_synthesize_retry_prompt(
+                original_prompt=user_prompt,
+                violations=first_violation.violations,
+            )
+
+            # --- Second attempt (retry) ---
+            raw_response_2 = self._llm(retry_prompt, system_prompt, 3000)
+
+            try:
+                report = extract_json(raw_response_2)
+            except LLMParseError:
+                # Second attempt also failed to produce valid JSON.
+                # Fall back to the first attempt's report with warnings.
+                report = first_attempt_report
+                completeness_warnings.append(
+                    f"SEAM VIOLATION: retry also failed to produce valid JSON. "
+                    f"Using first attempt with known deficiencies: "
+                    f"{'; '.join(first_violation.violations)}"
+                )
+                report["completeness_warnings"] = completeness_warnings
+                # Still emit trace and return (soft fallback)
+                self._emit_synthesize_trace(report, trace)
+                return report
+
+            report = self._normalize_synthesis_report(report, trace)
+
+            # Validate the retry result
+            try:
+                validation = validate_seam(
+                    result=report,
+                    stage="SYNTHESIZE",
+                    trace=trace,
+                )
+            except SeamViolation as second_violation:
+                # Both attempts failed — SOFT fallback.
+                # Don't discard expensive investigation work.
+                # Add completeness_warnings so the reader knows the report
+                # has known deficiencies.
+                for v in second_violation.violations:
+                    completeness_warnings.append(f"SEAM VIOLATION: {v}")
+                logger.warning(
+                    "SYNTHESIZE retry also failed validation — "
+                    "continuing with best-effort report: %s",
+                    "; ".join(second_violation.violations),
+                )
+
+        # Apply any accumulated warnings
+        if completeness_warnings:
+            report["completeness_warnings"] = completeness_warnings
+
+        # --- Emit IC9 Invisible Decision #4: narrative_selection ---
+        self._emit_synthesize_trace(report, trace)
+
+        return report
+
+    def _normalize_synthesis_report(self, parsed, trace):
+        """Normalize a parsed LLM response into SynthesisReport shape.
+
+        Ensures all required fields exist with safe defaults.
+        """
+        return {
+            "tldr": str(parsed.get("tldr", "")),
+            "confidence_grade": str(parsed.get("confidence_grade", "")),
+            "severity": str(parsed.get("severity", "")),
+            "root_cause": str(parsed.get("root_cause", "")),
+            "dimensional_breakdown": str(parsed.get("dimensional_breakdown", "")),
+            "hypothesis_and_evidence": str(parsed.get("hypothesis_and_evidence", "")),
+            "validation_summary": str(parsed.get("validation_summary", "")),
+            "recommended_actions": parsed.get("recommended_actions", []),
+            "upgrade_condition": str(parsed.get("upgrade_condition", "")),
+            "investigation_id": trace.trace_id,
+            "completeness_warnings": parsed.get("completeness_warnings", []),
+        }
+
+    def _emit_synthesize_trace(self, report, trace):
+        """Emit IC9 Invisible Decision #4: narrative_selection.
+
+        Records what narrative framing the LLM chose for the report.
+        Previously invisible — you saw the report but not why the LLM
+        chose that particular confidence grade, severity, or framing.
+        """
+        from trace.span import TraceSpan
+        trace.emit(TraceSpan(
+            stage="SYNTHESIZE",
+            swimlane="llm_generated",
+            tool="harness.orchestrator.SearchMetricOrchestrator._stage_synthesize",
+            decision="narrative_selection",
+            code_enforced=False,
+            value={
+                "confidence_grade": report.get("confidence_grade", ""),
+                "severity": report.get("severity", ""),
+                "action_count": len(report.get("recommended_actions", [])),
+                "has_upgrade_condition": bool(report.get("upgrade_condition")),
+            },
+            constrained_by=[
+                "rule_all_mandatory_sections_present",
+                "rule_effect_size_proportionality",
+                "rule_upgrade_condition_stated",
+            ],
+            human_summary=(
+                f"SYNTHESIZE: {report.get('confidence_grade', '?')} confidence, "
+                f"{report.get('severity', '?')} severity, "
+                f"{len(report.get('recommended_actions', []))} actions recommended. "
+                f"Upgrade condition: {'stated' if report.get('upgrade_condition') else 'missing'}."
+            ),
+            agent_context=(
+                f"confidence_grade={report.get('confidence_grade', '')}, "
+                f"severity={report.get('severity', '')}, "
+                f"action_count={len(report.get('recommended_actions', []))}, "
+                f"has_upgrade_condition={bool(report.get('upgrade_condition'))}"
+            ),
+        ))
+
+    def _build_synthesize_system_prompt(self) -> str:
+        """Build the system prompt for SYNTHESIZE stage.
+
+        Must contain 'final' and 'investigation report' to match the
+        test mock LLM routing.
+        """
+        return (
+            "You are a senior search relevance data scientist writing the final "
+            "investigation report for a metric movement in an Enterprise Search platform.\n\n"
+            "Produce a complete, structured JSON report with these mandatory sections:\n"
+            "1. tldr (str): 3 sentences max summarizing the finding\n"
+            "2. confidence_grade (str): 'High' | 'Medium' | 'Low'\n"
+            "3. severity (str): 'P0' | 'P1' | 'P2' | 'normal'\n"
+            "4. root_cause (str): primary explanation for the metric movement\n"
+            "5. dimensional_breakdown (str): which dimensions drove the movement\n"
+            "6. hypothesis_and_evidence (str): what was investigated and found\n"
+            "7. validation_summary (str): cross-checks and coherence\n\n"
+            "Additional required fields:\n"
+            "- recommended_actions (list): [{action, owner, priority, rationale}]\n"
+            "- upgrade_condition (str): 'Would upgrade to X if Y'\n"
+            "- completeness_warnings (list of str): known gaps (empty if none)\n\n"
+            "STATISTICAL HONESTY RULES:\n"
+            "- Use raw n only, no fake confidence intervals\n"
+            "- Hedge when n < 500\n"
+            "- Never fabricate statistical outputs\n\n"
+            "EFFECT-SIZE PROPORTIONALITY:\n"
+            "- If severity is P0, do NOT use minimizing words (minor, slight, small)\n"
+            "- Language must match severity — P0 is a critical incident"
+        )
+
+    def _build_synthesize_user_prompt(self, understand_result, hypothesize_result,
+                                       dispatch_result, trace):
+        """Build the user prompt for SYNTHESIZE stage.
+
+        Combines all prior stage outputs into a structured prompt
+        for the LLM to synthesize into a final report.
+        """
+        # Get token-budgeted context from DISPATCH stage
+        dispatch_context = trace.agent_context_for("DISPATCH", max_tokens=1500)
+
+        # Key fields from UNDERSTAND
+        direction = understand_result.get("direction", "unknown")
+        severity = understand_result.get("severity", "unknown")
+        metric = understand_result.get("metric", "unknown")
+
+        # Hypotheses summary
+        hypotheses = hypothesize_result.get("hypotheses", [])
+        hyp_summary = "\n".join([
+            f"  - {h.get('archetype', '?')} (priority {h.get('priority', '?')}): "
+            f"{h.get('hypothesis_id', '?')}"
+            for h in hypotheses
+        ])
+
+        # Findings summary
+        findings = dispatch_result.get("findings", [])
+        findings_summary = "\n".join([
+            f"  - {f.get('hypothesis_id', '?')}: verdict={f.get('verdict', '?')}, "
+            f"confidence={f.get('confidence', '?')}"
+            for f in findings
+        ])
+
+        sections = [
+            f"INVESTIGATION SUMMARY:",
+            f"Metric: {metric}, Direction: {direction}, Severity: {severity}",
+            "",
+            f"HYPOTHESES INVESTIGATED:",
+            hyp_summary,
+            "",
+            f"DISPATCH FINDINGS:",
+            findings_summary,
+            "",
+            f"DISPATCH CONTEXT:",
+            dispatch_context if dispatch_context else "No context available.",
+        ]
+
+        return "\n".join(sections)
+
+    def _build_synthesize_retry_prompt(self, original_prompt, violations):
+        """Build the retry prompt for SYNTHESIZE with violation feedback.
+
+        Appends the specific violations from the first attempt so the LLM
+        knows exactly what to fix. This is how the LLM "learns" from its
+        mistake within a single investigation.
+        """
+        violation_text = "\n".join([f"  - {v}" for v in violations])
+        return (
+            f"{original_prompt}\n\n"
+            f"IMPORTANT: Your previous response had issues that MUST be fixed:\n"
+            f"{violation_text}\n\n"
+            f"Please regenerate the complete report addressing ALL of the above issues."
         )
 
     # --- Helper methods ---
