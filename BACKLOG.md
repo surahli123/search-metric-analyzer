@@ -47,14 +47,14 @@ Last updated: 2026-03-15
 - [ ] Clickable cards → pre-filled Agent investigation
 - [ ] Tenant tier filter tabs
 
-### Wave 3b: Full 4-Stage Orchestrator (PLAN APPROVED — after web app)
-- [ ] Task 8: OrchestratorError hierarchy + SearchMetricOrchestrator skeleton + UNDERSTAND stage
-- [ ] Task 9: HYPOTHESIZE stage (LLM + corrections context + IC9 #2: hypothesis_inclusion trace)
-- [ ] Task 10: DISPATCH stage (reuse orchestrate() + IC9 #3: context_construction trace)
-- [ ] Task 11: SYNTHESIZE stage (LLM + retry gate + IC9 #4: narrative_selection trace)
-- [ ] Task 12: Error handling integration tests
-- [ ] Task 13: make_anthropic_llm() factory with timeout + optional SDK
-- [ ] Task 14: Wave 3b verification (all 4 IC9 decisions traced end-to-end)
+### Wave 3b: Full 4-Stage Orchestrator (DONE — 2026-03-17, PR #14 open)
+- [x] Task 8: OrchestratorError hierarchy + SearchMetricOrchestrator skeleton + UNDERSTAND stage
+- [x] Task 9: HYPOTHESIZE stage (LLM + corrections context + IC9 #2: hypothesis_inclusion trace)
+- [x] Task 10: DISPATCH stage (per-hypothesis LLM/agent investigation + IC9 #3: context_construction trace)
+- [x] Task 11: SYNTHESIZE stage (LLM + RETRY(1) then SOFT gate + IC9 #4: narrative_selection trace)
+- [x] Task 12: Error handling integration tests (28 tests)
+- [x] Task 13: make_anthropic_llm() factory with timeout + optional SDK
+- [x] Task 14: Wave 3b verification (949 tests pass, all 4 IC9 decisions traced end-to-end)
 
 ### Wave 4: Skill File + Eval
 - [ ] Update `skills/search-metric-analyzer.md` — add seam validator subprocess calls after each stage

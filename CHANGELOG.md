@@ -5,6 +5,33 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Wave 3b: SearchMetricOrchestrator — Full 4-Stage Pipeline (2026-03-17)
+
+PR #14 open. Completes the v2 orchestrator with all 4 pipeline stages. 949 tests GREEN.
+
+### Added
+- `harness/orchestrator.py` — DISPATCH stage (Task 10): per-hypothesis LLM/agent investigation with error isolation, IC9 #3 trace span (context_construction), SOFT gate validation
+- `harness/orchestrator.py` — SYNTHESIZE stage (Task 11): LLM report generation with 7 mandatory sections, RETRY(1) then SOFT gate, IC9 #4 trace span (narrative_selection)
+- Agent callable path at DISPATCH: supports `config["agents"]` with AgentVerdict → SubAgentFinding conversion
+- Full pipeline wiring in `run()`: returns `status="complete"` with all 4 stage outputs
+
+### Fixed
+- Agent fallback on crash in `_dispatch_via_agents` (C1 from code review)
+- Stale `report` variable in SYNTHESIZE retry fallback path (I1 from code review)
+- Redundant exception hierarchy in DISPATCH error handling (I3)
+- Stale `run()` docstring still saying "not yet implemented" (I4)
+
+### Changed
+- `harness/errors.py` — added `LLMAPIError` to orchestrator imports
+- `run()` now returns `status="complete"` instead of `"partial"` when all 4 stages succeed
+
+### Notes
+- Cherry-picked 5 Wave 3b commits from messy `feature/wave-3b-orchestrator` to clean `feature/wave-3b-clean` (zero conflicts)
+- IC9 review of handover spec caught 3 blockers + 4 gaps before implementation
+- Code review (superpowers:code-reviewer) caught 1 Critical + 4 Important issues, all fixed
+
+---
+
 ## Web App React + FastAPI — Phase 1 (2026-03-16)
 
 PR #13 merged. Full React + FastAPI web app with 2 mock investigation scenarios. Agent View with 14 components matching the approved demo mockup.
