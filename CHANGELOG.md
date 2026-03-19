@@ -5,6 +5,39 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## UI Redesign — 3-Tab Architecture (2026-03-19)
+
+Complete frontend redesign based on founder feedback at GTC party. Combined Impeccable Critique + gstack Design Review found 8 issues (2 blocker, 3 major, 3 minor). All fixed.
+
+### Added
+- 3-tab navigation: Investigate (search-style, query at top), Trace (pipeline debug), Knowledge Base (domain knowledge browser)
+- `InvestigateTab` — progressive disclosure with 3 collapsible tiers (Answer → Evidence → Technical)
+- `CollapsibleSection` — reusable expand/collapse wrapper component
+- `TraceTab` + `TracePhaseCard` + `TraceStep` — 4-stage pipeline viewer with filter pills (SQL/Knowledge/Reasoning/Output)
+- `KnowledgeBaseTab` + `KnowledgeCard` — expandable browser for 6 YAML knowledge files
+- `knowledge_index.js` — static metadata for knowledge file sections
+- Mock trace data (`TRACE_DATA`) for both scenarios
+- 95 new tests (8 new files + 2 augmented) — total 194 frontend tests
+
+### Changed
+- Header: added tagline, replaced Dashboard/Agent tabs with 3-tab navigation, removed BETA badge
+- VerdictStrip: plain English verdict primary ("Normal fluctuation — no action needed"), severity labels ("Minor (P2)"), removed AI-slop left-border pattern
+- CoMovementIndicator: conclusion-first rendering with icon reinforcement, "Metric Movement Pattern" section header
+- HypothesisChecklist: inverted framing — matched hypothesis first, rest collapsed behind expand toggle, "not indicated" replaces "not evaluated"
+- DataQualityChecks: human-readable labels ("Data integrity", "Coverage", "Data quality")
+- All sections: added clear labeled headers
+- DivergingBarChart, TrendChart: added titles, axis labels, units
+- SqlBlock: wrapped in CollapsibleSection, collapsed by default
+- SegmentTable: "Contribution" column renamed to "Share of Movement"
+- QuestionInput: pills derived from SCENARIOS (no longer hardcoded), moved to top of Investigate tab
+
+### Fixed
+- Removed internal metric name "Customer Cohort FPS" from all display text (frontend + backend fixtures)
+- Expanded "SQS" to "Search Quality Success (SQS)" on first use
+- Added `dangerouslySetInnerHTML` safety comments to DivergingBarChart and SegmentTable
+
+---
+
 ## Web App React + FastAPI — Phase 1 (2026-03-16)
 
 PR #13 merged. Full React + FastAPI web app with 2 mock investigation scenarios. Agent View with 14 components matching the approved demo mockup.

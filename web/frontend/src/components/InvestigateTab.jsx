@@ -100,6 +100,7 @@ export default function InvestigateTab({ scenario, scenarioKey, onScenarioChange
 
             {/* ═══ EVIDENCE LAYER — collapsible, default open ═══ */}
 
+            {/* count={5} must match child components below: Hypothesis, Results, DivergingBar, Trend, Segment */}
             <CollapsibleSection title="Supporting Evidence" count={5} defaultOpen={true}>
               <HypothesisChecklist hypotheses={diagnosis.hypotheses_evaluated} />
 
@@ -136,6 +137,7 @@ export default function InvestigateTab({ scenario, scenarioKey, onScenarioChange
 
             {/* ═══ TECHNICAL LAYER — collapsible, default collapsed ═══ */}
 
+            {/* count={3} must match child components below: DataQuality, Methodology, SQL */}
             <CollapsibleSection title="Technical Details" count={3} defaultOpen={false}>
               <DataQualityChecks checks={diagnosis.validation_checks} />
               <MethodologyBlock dataContext={data_context} />

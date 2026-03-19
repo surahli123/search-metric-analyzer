@@ -14,7 +14,7 @@
 //     - status    {string}  — 'done' | 'active' | 'pending'
 //     - duration_s {number} — Total phase execution time
 //     - steps     {array}   — Array of step objects (passed to TraceStep)
-//   filter {string} — Active filter type: 'all' | 'sql' | 'knowledge' | 'reasoning'
+//   filter {string} — Active filter type: 'all' | 'sql' | 'knowledge' | 'reasoning' | 'output'
 
 import { useState } from 'react'
 import TraceStep from './TraceStep'
