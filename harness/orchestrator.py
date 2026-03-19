@@ -1525,6 +1525,86 @@ class SearchMetricOrchestrator:
         from harness.prompts import build_synthesize_retry_prompt
         return build_synthesize_retry_prompt(original_prompt, violations)
 
+    # --- Parallel dispatch (Complex mode) ---
+
+    def _stage_dispatch_parallel(
+        self,
+        hypothesis_set: Dict[str, Any],
+        understand_result: Dict[str, Any],
+        trace,
+    ) -> Dict[str, Any]:
+        """Stage 3 (Complex mode): Parallel hypothesis investigation via DAGExecutor.
+
+        Uses ThreadPoolExecutor to investigate hypotheses concurrently.
+        Each hypothesis gets its own thread with error isolation —
+        one failure produces an inconclusive finding, not a pipeline halt.
+
+        Circuit breaker: if 3+ hypotheses fail, raises StageError with
+        partial findings available in the error details.
+        """
+        from harness.dag_executor import DAGExecutor
+
+        hypotheses = hypothesis_set.get("hypotheses", [])
+        if not hypotheses:
+            raise StageError(
+                message="DISPATCH failed: no hypotheses to investigate.",
+                stage="DISPATCH",
+                violations=["Empty hypothesis set — nothing to dispatch"],
+            )
+
+        hypothesize_context = trace.agent_context_for("HYPOTHESIZE", max_tokens=1500)
+
+        # Build context dict for the investigate function
+        dispatch_context = {
+            "understand_result": understand_result,
+            "hypothesize_context": hypothesize_context,
+        }
+
+        # The investigate function wraps _dispatch_via_llm for each hypothesis
+        def investigate_hypothesis(hyp, ctx):
+            return self._dispatch_via_llm(
+                hypothesis=hyp,
+                understand_result=ctx["understand_result"],
+                hypothesize_context=ctx["hypothesize_context"],
+            )
+
+        executor = DAGExecutor(
+            investigate_fn=investigate_hypothesis,
+            config={
+                "max_workers": self._config.get("max_dispatch_workers", 5),
+                "per_agent_timeout": self._config.get("timeout_seconds", 60),
+                "circuit_breaker_threshold": self._config.get("circuit_breaker_threshold", 3),
+            },
+        )
+
+        # DAGExecutor raises StageError if circuit breaker trips
+        dag_result = executor.execute(hypotheses, dispatch_context, trace=trace)
+
+        # Build FindingSet from DAG results
+        finding_set = {
+            "findings": dag_result["findings"],
+            "context_construction_trace": (
+                f"Parallel dispatch: {len(dag_result['findings'])} findings, "
+                f"{dag_result['failed_count']} failures"
+            ),
+        }
+
+        # Seam validation (SOFT gate)
+        validation = validate_seam(
+            result=finding_set,
+            stage="DISPATCH",
+            trace=trace,
+        )
+
+        if not validation["passed"]:
+            logger = __import__("logging").getLogger(__name__)
+            logger.warning(
+                "DISPATCH seam validation failed (SOFT gate — continuing): %s",
+                "; ".join(validation["violations"]),
+            )
+
+        return finding_set
+
     # --- Helper methods ---
 
     def _extract_daily_values(
@@ -1780,16 +1860,26 @@ class SearchMetricOrchestrator:
             raise
 
         # Stage 3: DISPATCH
-        # For Complex mode, PR C will add DAGExecutor here.
-        # For now, both Medium and Complex use sequential dispatch.
-        try:
-            dispatch_result = self._stage_dispatch(
-                hypothesis_set=hypothesize_result,
-                understand_result=understand_result,
-                trace=trace,
-            )
-        except StageError:
-            raise
+        # Complex mode: parallel dispatch via DAGExecutor
+        # Medium mode: sequential dispatch via existing _stage_dispatch
+        if mode == "complex":
+            try:
+                dispatch_result = self._stage_dispatch_parallel(
+                    hypothesis_set=hypothesize_result,
+                    understand_result=understand_result,
+                    trace=trace,
+                )
+            except StageError:
+                raise
+        else:
+            try:
+                dispatch_result = self._stage_dispatch(
+                    hypothesis_set=hypothesize_result,
+                    understand_result=understand_result,
+                    trace=trace,
+                )
+            except StageError:
+                raise
 
         # Stage 4: SYNTHESIZE
         synthesis_result = self._stage_synthesize(
