@@ -31,6 +31,7 @@ const FILTERS = [
   { label: 'SQL',       value: 'sql' },
   { label: 'Knowledge', value: 'knowledge' },
   { label: 'Reasoning', value: 'reasoning' },
+  { label: 'Output',    value: 'output' },
 ]
 
 export default function TraceTab({ scenarioKey }) {

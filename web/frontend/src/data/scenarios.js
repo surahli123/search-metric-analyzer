@@ -96,6 +96,7 @@ export const SCENARIOS = {
       ],
       trend_data: {
         title: "SQS Daily Trend — This Week vs Last Week",
+        y_axis_label: "SQS (%)",
         current: [{ day: "Mon", value: 69.5 }, { day: "Tue", value: 70.2 }, { day: "Wed", value: 69.8 }, { day: "Thu", value: 71.5 }, { day: "Fri", value: 70.8 }, { day: "Sat", value: 71.2 }, { day: "Sun", value: 71.8 }],
         previous: [{ day: "Mon", value: 70.0 }, { day: "Tue", value: 70.5 }, { day: "Wed", value: 69.2 }, { day: "Thu", value: 70.8 }, { day: "Fri", value: 70.3 }, { day: "Sat", value: 70.5 }, { day: "Sun", value: 71.0 }],
         legend_current: "This week (70.8% avg, n=348)",
@@ -191,6 +192,7 @@ export const SCENARIOS = {
       ],
       trend_data: {
         title: "Click Quality Daily Trend — This Week vs Last Week",
+        y_axis_label: "Click Quality (%)",
         current: [{ day: "Mon", value: 27.0 }, { day: "Tue", value: 26.2 }, { day: "Wed", value: 25.5 }, { day: "Thu", value: 24.8 }, { day: "Fri", value: 24.0 }, { day: "Sat", value: 23.5 }, { day: "Sun", value: 24.0 }],
         previous: [{ day: "Mon", value: 29.8 }, { day: "Tue", value: 30.0 }, { day: "Wed", value: 29.2 }, { day: "Thu", value: 29.5 }, { day: "Fri", value: 30.0 }, { day: "Sat", value: 29.5 }, { day: "Sun", value: 29.2 }],
         legend_current: "This week (25.0% avg, n=1,206)",

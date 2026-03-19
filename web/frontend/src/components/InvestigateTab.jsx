@@ -111,6 +111,7 @@ export default function InvestigateTab({ scenario, scenarioKey, onScenarioChange
 
               <TrendChart
                 title={display.trend_data.title}
+                yAxisLabel={display.trend_data.y_axis_label}
                 current={display.trend_data.current}
                 previous={display.trend_data.previous}
                 legendCurrent={display.trend_data.legend_current}

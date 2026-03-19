@@ -7,7 +7,7 @@
  */
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Label } from 'recharts'
 
-export default function TrendChart({ title, current, previous, legendCurrent, legendPrevious }) {
+export default function TrendChart({ title, yAxisLabel, current, previous, legendCurrent, legendPrevious }) {
   const data = current.map((point, i) => ({ day: point.day, current: point.value, previous: previous[i]?.value ?? null }))
   return (
     <div className="rounded-lg border overflow-hidden" style={{ background: 'var(--bg-card)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-sm)' }}>
@@ -23,7 +23,7 @@ export default function TrendChart({ title, current, previous, legendCurrent, le
             <YAxis domain={['dataMin - 2', 'dataMax + 2']} tick={{ fontSize: 11, fill: 'var(--text-muted)', fontFamily: "'Fira Code', monospace" }} axisLine={false} tickLine={false} width={50}>
               {/* Y-axis label — rotated vertically, shows the metric name */}
               <Label
-                value={title}
+                value={yAxisLabel || title}
                 angle={-90}
                 position="insideLeft"
                 offset={-5}
