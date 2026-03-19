@@ -529,6 +529,10 @@ class SearchMetricOrchestrator:
         self._config = dict(self.DEFAULT_CONFIG)
         if config:
             self._config.update(config)
+        # Per-invocation state for run_v2() — used to pass mode/question_type
+        # to validate_seam() kwargs. None when using old run() path.
+        self._current_mode = None
+        self._current_question_type = None
 
     def run(
         self,
@@ -565,9 +569,47 @@ class SearchMetricOrchestrator:
             StageError: If a stage fails (e.g., seam validation, JSON parse).
             OrchestratorError: For unexpected pipeline failures.
         """
-        # Create a fresh trace for this investigation
+        # Fix #6: delegate to shared _run_pipeline() to avoid code duplication
+        # between run() and run_v2(). run() always uses "medium" mode (sequential).
         trace = InvestigationTrace(question=question)
+        return self._run_pipeline(
+            question=question,
+            rows=rows,
+            metric_field=metric_field,
+            dimensions=dimensions,
+            mode="medium",
+            trace=trace,
+        )
 
+    def _run_pipeline(
+        self,
+        question: str,
+        rows: list,
+        metric_field: str,
+        dimensions: Optional[list],
+        mode: str,
+        trace: InvestigationTrace,
+    ) -> Dict[str, Any]:
+        """Shared 4-stage pipeline: UNDERSTAND → HYPOTHESIZE → DISPATCH → SYNTHESIZE.
+
+        Fix #6: extracted from run() and run_v2() to avoid duplicating pipeline
+        logic. The mode parameter controls whether DISPATCH is parallel (complex)
+        or sequential (medium). Both run() and run_v2() call this.
+
+        Args:
+            question: Investigation question text.
+            rows: Metric data rows.
+            metric_field: Which metric column to analyze.
+            dimensions: Dimension columns for decomposition.
+            mode: "medium" (sequential dispatch) or "complex" (parallel dispatch).
+            trace: InvestigationTrace for this investigation.
+
+        Returns:
+            InvestigationReport dict.
+
+        Raises:
+            StageError: If a pipeline stage fails.
+        """
         # --- Stage 1: UNDERSTAND (deterministic, no LLM) ---
         try:
             understand_result = self._stage_understand(
@@ -578,62 +620,45 @@ class SearchMetricOrchestrator:
                 trace=trace,
             )
         except SeamViolation as e:
-            # UNDERSTAND has a HARD gate — if seam validation fails,
-            # the investigation cannot continue. Build a blocked report
-            # explaining what went wrong and how to fix it.
             blocked_understand = {
-                "question": question,
-                "metric": metric_field,
-                "data_quality_status": "fail",
-                "metric_direction": "unknown",
-                "severity": "blocked",
-                "direction": "unknown",
-                "step_change": None,
-                "co_movement_pattern": {},
-                "mix_shift_result": None,
-                "data_quality_details": None,
+                "question": question, "metric": metric_field,
+                "data_quality_status": "fail", "metric_direction": "unknown",
+                "severity": "blocked", "direction": "unknown",
+                "step_change": None, "co_movement_pattern": {},
+                "mix_shift_result": None, "data_quality_details": None,
             }
             return self._build_blocked_report(
-                understand_result=blocked_understand,
-                trace=trace,
+                understand_result=blocked_understand, trace=trace,
                 reason="; ".join(e.violations),
             )
 
-        # Check if data quality failed — return blocked report
-        # (this handles the case where check_data_quality returns "fail"
-        # but the seam validator processes it as a violation)
         if understand_result.get("data_quality_status") == "fail":
             return self._build_blocked_report(
-                understand_result=understand_result,
-                trace=trace,
+                understand_result=understand_result, trace=trace,
                 reason=understand_result.get("data_quality_details", {}).get(
-                    "reason", "Data quality check failed"
-                ),
+                    "reason", "Data quality check failed"),
             )
 
         # --- Stage 2: HYPOTHESIZE (LLM-based) ---
-        try:
-            hypothesize_result = self._stage_hypothesize(
+        hypothesize_result = self._stage_hypothesize(
+            understand_result=understand_result, trace=trace,
+        )
+
+        # --- Stage 3: DISPATCH ---
+        # Complex mode: parallel dispatch via DAGExecutor
+        # Medium mode (and legacy run()): sequential dispatch
+        if mode == "complex":
+            dispatch_result = self._stage_dispatch_parallel(
+                hypothesis_set=hypothesize_result,
                 understand_result=understand_result,
                 trace=trace,
             )
-        except StageError:
-            # HYPOTHESIZE StageError (e.g., JSON parse failure) — the
-            # investigation can't continue without hypotheses.
-            # Let it propagate to the caller.
-            raise
-
-        # --- Stage 3: DISPATCH (LLM or agent-based) ---
-        try:
+        else:
             dispatch_result = self._stage_dispatch(
                 hypothesis_set=hypothesize_result,
                 understand_result=understand_result,
                 trace=trace,
             )
-        except StageError:
-            # DISPATCH StageError (e.g., all hypotheses failed) — propagate.
-            # The caller can inspect stage="DISPATCH" to know what broke.
-            raise
 
         # --- Stage 4: SYNTHESIZE (LLM-based, RETRY(1) then SOFT gate) ---
         synthesis_result = self._stage_synthesize(
@@ -643,7 +668,6 @@ class SearchMetricOrchestrator:
             trace=trace,
         )
 
-        # --- All 4 stages completed — return full investigation report ---
         return {
             "status": "complete",
             "question": question,
@@ -1199,6 +1223,7 @@ class SearchMetricOrchestrator:
             result=finding_set,
             stage="DISPATCH",
             trace=trace,
+            question_type=self._current_question_type,  # Fix #4: enable rule_srm_check
         )
 
         if not validation["passed"]:
@@ -1393,6 +1418,7 @@ class SearchMetricOrchestrator:
                 result=report,
                 stage="SYNTHESIZE",
                 trace=trace,
+                mode=self._current_mode,  # Fix #4: enable rule_mode_compliance_simple
             )
         except SeamViolation as first_violation:
             # First attempt failed — retry with violation feedback
@@ -1436,6 +1462,7 @@ class SearchMetricOrchestrator:
                     result=report,
                     stage="SYNTHESIZE",
                     trace=trace,
+                    mode=self._current_mode,  # Fix #4: enable rule_mode_compliance_simple
                 )
             except SeamViolation as second_violation:
                 # Both attempts failed — SOFT fallback.
@@ -1590,10 +1617,12 @@ class SearchMetricOrchestrator:
         }
 
         # Seam validation (SOFT gate)
+        # Fix #4: pass question_type so rule_srm_check can activate for experiments
         validation = validate_seam(
             result=finding_set,
             stage="DISPATCH",
             trace=trace,
+            question_type=self._current_question_type,
         )
 
         if not validation["passed"]:
@@ -1789,6 +1818,13 @@ class SearchMetricOrchestrator:
         )
         mode = mode_decision["mode"]
 
+        # Fix #4: Store mode and question_type on self so stage methods can pass
+        # them as kwargs to validate_seam(). These are per-invocation state, not
+        # config — reset on each run_v2() call. The old run() path doesn't set
+        # these, so stage methods default to None (rules skip gracefully).
+        self._current_mode = mode
+        self._current_question_type = question_brief.get("question_type")
+
         # --- Simple mode: direct knowledge lookup, no pipeline ---
         if mode == "simple":
             emit_deterministic_span(
@@ -1811,97 +1847,23 @@ class SearchMetricOrchestrator:
                 # Simple mode has no pipeline output — caller handles lookup
             }
 
-        # --- Medium/Complex mode: run the full 4-stage pipeline ---
-        # Reuse existing run() logic via internal stage methods.
-        # The only difference for Complex mode is in DISPATCH (PR C adds
-        # parallel execution via DAGExecutor).
-
-        # Stage 1: UNDERSTAND
-        try:
-            understand_result = self._stage_understand(
-                question=question,
-                rows=rows,
-                metric_field=metric_field,
-                dimensions=dimensions,
-                trace=trace,
-            )
-        except SeamViolation as e:
-            blocked_understand = {
-                "question": question, "metric": metric_field,
-                "data_quality_status": "fail", "metric_direction": "unknown",
-                "severity": "blocked", "direction": "unknown",
-                "step_change": None, "co_movement_pattern": {},
-                "mix_shift_result": None, "data_quality_details": None,
-            }
-            report = self._build_blocked_report(
-                understand_result=blocked_understand, trace=trace,
-                reason="; ".join(e.violations),
-            )
-            report["question_brief"] = question_brief
-            report["mode_decision"] = mode_decision
-            return report
-
-        if understand_result.get("data_quality_status") == "fail":
-            report = self._build_blocked_report(
-                understand_result=understand_result, trace=trace,
-                reason=understand_result.get("data_quality_details", {}).get(
-                    "reason", "Data quality check failed"),
-            )
-            report["question_brief"] = question_brief
-            report["mode_decision"] = mode_decision
-            return report
-
-        # Stage 2: HYPOTHESIZE
-        try:
-            hypothesize_result = self._stage_hypothesize(
-                understand_result=understand_result, trace=trace,
-            )
-        except StageError:
-            raise
-
-        # Stage 3: DISPATCH
-        # Complex mode: parallel dispatch via DAGExecutor
-        # Medium mode: sequential dispatch via existing _stage_dispatch
-        if mode == "complex":
-            try:
-                dispatch_result = self._stage_dispatch_parallel(
-                    hypothesis_set=hypothesize_result,
-                    understand_result=understand_result,
-                    trace=trace,
-                )
-            except StageError:
-                raise
-        else:
-            try:
-                dispatch_result = self._stage_dispatch(
-                    hypothesis_set=hypothesize_result,
-                    understand_result=understand_result,
-                    trace=trace,
-                )
-            except StageError:
-                raise
-
-        # Stage 4: SYNTHESIZE
-        synthesis_result = self._stage_synthesize(
-            dispatch_result=dispatch_result,
-            understand_result=understand_result,
-            hypothesize_result=hypothesize_result,
+        # --- Medium/Complex mode: run the shared 4-stage pipeline ---
+        # Fix #6: extracted _run_pipeline() to avoid duplicating run() logic.
+        # The only difference for Complex mode is parallel DISPATCH.
+        pipeline_result = self._run_pipeline(
+            question=question,
+            rows=rows,
+            metric_field=metric_field,
+            dimensions=dimensions,
+            mode=mode,
             trace=trace,
         )
 
-        return {
-            "status": "complete",
-            "question": question,
-            "mode": mode,
-            "question_brief": question_brief,
-            "mode_decision": mode_decision,
-            "stages_completed": [
-                "QUESTION_PARSE", "UNDERSTAND", "HYPOTHESIZE",
-                "DISPATCH", "SYNTHESIZE",
-            ],
-            "understand_result": understand_result,
-            "hypothesize_result": hypothesize_result,
-            "dispatch_result": dispatch_result,
-            "synthesis": synthesis_result,
-            "trace": trace.to_dict(),
-        }
+        # Augment with v2-specific fields
+        pipeline_result["question_brief"] = question_brief
+        pipeline_result["mode_decision"] = mode_decision
+        pipeline_result["mode"] = mode
+        if "stages_completed" in pipeline_result and pipeline_result["stages_completed"]:
+            pipeline_result["stages_completed"].insert(0, "QUESTION_PARSE")
+
+        return pipeline_result

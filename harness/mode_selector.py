@@ -64,9 +64,15 @@ MODES = {
 # Rules are evaluated top-to-bottom; first match wins.
 
 def _has_severity_signal(brief: Dict, severities: set) -> bool:
-    """Check if the question brief contains specific severity signals."""
+    """Check if the question brief contains specific severity signals.
+
+    Fix #8: uses startswith instead of substring matching to avoid false
+    positives like "no_p0_detected" matching {"p0"}. Signals are generated
+    by build_complexity_signals with known prefixes (P0_, P1_, critical, etc.)
+    """
     for signal in brief.get("complexity_signals", []):
-        if any(sev in signal.lower() for sev in severities):
+        lower_signal = signal.lower()
+        if any(lower_signal.startswith(sev) for sev in severities):
             return True
     return False
 

@@ -37,9 +37,10 @@ METRIC_ALIASES: Dict[str, str] = {
     "click quality": "click_quality",
     "cq": "click_quality",
     "dlctr": "click_quality",           # Legacy name (v1.4 rename)
-    # Search Quality Success
+    # Search Quality Success — includes partial "search quality" (review fix #3)
     "search_quality_success": "search_quality_success",
     "search quality success": "search_quality_success",
+    "search quality": "search_quality_success",  # Partial match — users often omit "success"
     "sqs": "search_quality_success",
     "qsr": "search_quality_success",    # Legacy name
     # AI Trigger
@@ -53,9 +54,12 @@ METRIC_ALIASES: Dict[str, str] = {
     # Zero Result Rate
     "zero_result_rate": "zero_result_rate",
     "zero result rate": "zero_result_rate",
+    "zero result": "zero_result_rate",  # Partial match
     "zrr": "zero_result_rate",
     # Latency
     "latency": "latency",
+    "p50 latency": "latency",           # More specific to avoid false positives
+    "p99 latency": "latency",           # More specific to avoid false positives
     "p50": "latency",
     "p99": "latency",
 }

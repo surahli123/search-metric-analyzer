@@ -110,6 +110,15 @@ class TestValidateRegistry:
         errors = validate_registry(registry)
         assert any("not a mapping" in e for e in errors)
 
+    def test_duplicate_agent_names(self):
+        """Fix #7: duplicate agent names produce a validation error."""
+        registry = {"agents": [
+            {"name": "a", "file": "a.md", "pipeline_step": 1},
+            {"name": "a", "file": "b.md", "pipeline_step": 2},
+        ]}
+        errors = validate_registry(registry, base_dir="/tmp")
+        assert any("Duplicate agent name" in e for e in errors)
+
 
 # =============================================================================
 # Cycle detection tests
