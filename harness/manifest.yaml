@@ -1,0 +1,32 @@
+# Knowledge routing manifest — maps agents to their knowledge file budgets.
+# The orchestrator reads this at startup to determine what knowledge each
+# agent is allowed to load and how much context budget it gets.
+#
+# This is a BASIC manifest (Wave 5). Wave 6 adds intent matching and
+# dynamic routing.
+
+routes:
+  understand:
+    knowledge_files:
+      - {path: data/knowledge/metric_definitions.yaml, max_tokens: 2000}
+      - {path: data/knowledge/historical_patterns.yaml, max_tokens: 1500}
+  hypothesize:
+    knowledge_files:
+      - {path: data/knowledge/metric_definitions.yaml, sections: [co_movement_diagnostic_table], max_tokens: 1000}
+      - {path: data/knowledge/corrections.yaml, max_tokens: 500}
+  dispatch-ranking:
+    knowledge_files:
+      - {path: data/knowledge/search_pipeline_knowledge.yaml, sections: [ranking, retrieval], max_tokens: 1500}
+  dispatch-connector:
+    knowledge_files:
+      - {path: data/knowledge/search_pipeline_knowledge.yaml, sections: [connector, data_pipeline], max_tokens: 1500}
+  dispatch-ai-quality:
+    knowledge_files:
+      - {path: data/knowledge/architecture_tradeoffs.yaml, max_tokens: 1500}
+  investigation-sub-agent:
+    knowledge_files:
+      - {path: data/knowledge/metric_definitions.yaml, sections: [baselines], max_tokens: 800}
+  synthesize:
+    knowledge_files:
+      - {path: data/knowledge/metric_definitions.yaml, sections: [alert_thresholds], max_tokens: 500}
+      - {path: data/knowledge/historical_patterns.yaml, sections: [diagnostic_shortcuts], max_tokens: 500}
