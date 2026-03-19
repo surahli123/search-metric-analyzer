@@ -1,6 +1,6 @@
 # Backlog — Search Metric Analyzer v2.0 Holistic Redesign
 
-Last updated: 2026-03-15
+Last updated: 2026-03-19
 
 ---
 
@@ -32,10 +32,21 @@ Last updated: 2026-03-15
 - [x] 9 backend tests + 23 frontend tests (32 total)
 - [x] Fix DivergingBarChart overflow, text clipping, insight badges, TrendChart Y-axis
 - [x] Apply 3 DS Lead review fixes (SQS delta, hypothesis honesty, enterprise counts)
-- [ ] Build Execution Trace tab components (PhaseAccordion, StepRow, filter tabs) — deferred to Phase 2
+- [x] Build Execution Trace tab components (TraceTab, TracePhaseCard, TraceStep, filter pills) — done in UI Redesign PR #15
 - [ ] Deploy backend to Render (free tier) — deferred, running locally for demo
 - PR #13 merged
 - Plan: `docs/superpowers/plans/2026-03-15-web-app-react-phase1.md`
+
+### UI Redesign: 3-Tab Architecture (DONE — 2026-03-19)
+- [x] Design critique (Impeccable + gstack Design Review) — 8 issues found
+- [x] 3-tab navigation: Investigate (query at top), Trace, Knowledge Base
+- [x] Progressive disclosure: Answer → Evidence (collapsible) → Technical (collapsed)
+- [x] Plain English labels, section headers, conclusion-first patterns
+- [x] Naming cleanup: removed "Customer Cohort FPS", expanded SQS
+- [x] Chart polish: titles, axis labels, units, SQL collapsed
+- [x] 194 frontend tests (up from 23), code review + TDD audit
+- [x] Deployed to Vercel: https://search-metric-analyzer.vercel.app
+- PR #15 merged
 
 ### Web App Phase 2: SSE Streaming + Live Trace (after Phase 1)
 - [ ] Implement SSE streaming endpoint with in-memory buffer
@@ -55,7 +66,7 @@ Last updated: 2026-03-15
 - [x] Task 12: Error handling integration tests
 - [x] Task 13: make_anthropic_llm() factory with timeout + optional SDK
 - [x] Task 14: Wave 3b verification (all 4 IC9 decisions traced end-to-end)
-- 949 tests GREEN, PR #14 open → main (pending merge)
+- 949 tests GREEN, PR #14 merged
 
 ### Wave 4: Skill File + Eval
 - [ ] Update `skills/search-metric-analyzer.md` — add seam validator subprocess calls after each stage
