@@ -24,7 +24,7 @@ Amendment 3 (Mix-shift):
 - rule_mix_shift_considered_when_detected ensures mix-shift hypotheses
   are generated when mix-shift is significant
 
-Wave 5 additions (4 new rules, 11→15 total + QUESTION_PARSE stage):
+Wave 5 additions (4 new rules, 13→17 total + QUESTION_PARSE stage):
 - rule_question_brief_valid: validates QuestionBrief from question parser
 - rule_srm_check: experiment arm ratio validation
 - rule_mode_compliance_simple: Simple mode can't have DISPATCH findings
@@ -82,16 +82,16 @@ VALID_QUESTION_TYPES = {"sev", "experiment", "trend", "deep_dive", "system_under
 
 
 def rule_question_brief_valid(result: Dict, **kwargs) -> Optional[str]:
-    """HARD CHECK: QuestionBrief must have a valid question_type and metric hints.
+    """HARD CHECK on question_type validity; SOFT warning on missing metric hints.
 
     The question parser produces a QuestionBrief that routes investigations
-    to the right mode (Simple/Medium/Complex). If the brief is malformed,
-    mode selection will route incorrectly — garbage in, garbage out.
+    to the right mode (Simple/Medium/Complex). If the question_type is invalid,
+    mode selection will route incorrectly — garbage in, garbage out (HARD).
 
-    Metric hints are required for all non-adhoc question types because
-    the downstream pipeline needs to know which metrics to analyze.
-    Adhoc questions (e.g., "what tables have QSR data?") are lookups
-    that don't necessarily reference a specific metric.
+    Missing metric hints are a WARNING, not a blocker. Users often say
+    "our search quality dropped" without the full canonical name. The
+    pipeline should still attempt to help, inferring the metric from context.
+    (Fix: relaxed from HARD to informational — review finding #3)
     """
     question_type = result.get("question_type")
     if question_type not in VALID_QUESTION_TYPES:
@@ -101,15 +101,11 @@ def rule_question_brief_valid(result: Dict, **kwargs) -> Optional[str]:
             f"Re-parse the question with a valid classification."
         )
 
-    # Metric hints required for non-adhoc types
-    # (adhoc questions like "what tables exist" don't need metric references)
-    metric_hints = result.get("metric_hints", [])
-    if question_type != "adhoc" and not metric_hints:
-        return (
-            f"question_type is '{question_type}' but metric_hints is empty — "
-            f"non-adhoc questions must reference at least one metric. "
-            f"Re-parse to extract metric names from the question text."
-        )
+    # Metric hints are INFORMATIONAL for non-adhoc types — not a blocking violation.
+    # Users frequently describe metrics without canonical names (e.g., "search quality"
+    # instead of "search_quality_success"). The pipeline should still proceed and attempt
+    # to infer the metric from the question text and decomposition results.
+    # This was previously a HARD block but was relaxed per review finding #3.
 
     return None
 

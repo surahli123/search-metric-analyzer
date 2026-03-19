@@ -85,24 +85,27 @@ class TestRuleQuestionBriefValid:
         result = rule_question_brief_valid(brief)
         assert result is not None
 
-    def test_sev_without_metrics(self):
-        """SEV question without metric hints fails — pipeline needs to know what to analyze."""
+    def test_sev_without_metrics_passes(self):
+        """SEV question without metric hints passes (relaxed per review fix #3).
+
+        Users often say "our search quality dropped" without canonical metric names.
+        The pipeline should still attempt to help rather than blocking outright.
+        """
         brief = {
             "question_type": "sev",
             "metric_hints": [],
         }
         result = rule_question_brief_valid(brief)
-        assert result is not None
-        assert "metric_hints is empty" in result
+        assert result is None  # Relaxed — no longer a violation
 
-    def test_experiment_without_metrics(self):
-        """Experiment question without metrics fails."""
+    def test_experiment_without_metrics_passes(self):
+        """Experiment question without metrics passes (relaxed per review fix #3)."""
         brief = {
             "question_type": "experiment",
             "metric_hints": [],
         }
         result = rule_question_brief_valid(brief)
-        assert result is not None
+        assert result is None
 
     def test_all_valid_types_pass(self):
         """Every valid question type passes with metric hints."""

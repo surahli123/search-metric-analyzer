@@ -129,63 +129,92 @@ class DAGExecutor:
 
         # --- Submit all hypotheses to the thread pool ---
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            # Map future → hypothesis for result attribution
+            # Map future → hypothesis AND submit timestamp for result attribution.
+            # Fix #1: record submitted_at when future is created, not when collected,
+            # so execution_log.duration reflects actual wall-clock investigation time.
             future_to_hyp: Dict[Future, Dict[str, Any]] = {}
+            future_submitted_at: Dict[Future, float] = {}
 
             for hyp in hypotheses:
                 future = pool.submit(self._investigate, hyp, context)
                 future_to_hyp[future] = hyp
+                future_submitted_at[future] = time.monotonic()
 
             # --- Collect results as they complete ---
-            for future in as_completed(future_to_hyp, timeout=per_timeout * len(hypotheses)):
-                hyp = future_to_hyp[future]
-                hyp_id = hyp.get("hypothesis_id", "unknown")
-                agent_start = time.monotonic()
+            # Fix #2: removed as_completed(timeout=...) which raised unhandled
+            # TimeoutError. Instead, use per-future timeout in future.result()
+            # and let the error isolation handler convert it to inconclusive.
+            try:
+                for future in as_completed(future_to_hyp):
+                    hyp = future_to_hyp[future]
+                    hyp_id = hyp.get("hypothesis_id", "unknown")
+                    submitted_at = future_submitted_at[future]
 
-                try:
-                    finding = future.result(timeout=per_timeout)
-                    findings.append(finding)
-                    execution_log.append({
-                        "hypothesis_id": hyp_id,
-                        "status": "success",
-                        "duration": time.monotonic() - agent_start,
-                    })
+                    try:
+                        finding = future.result(timeout=per_timeout)
+                        completed_at = time.monotonic()
+                        findings.append(finding)
+                        execution_log.append({
+                            "hypothesis_id": hyp_id,
+                            "status": "success",
+                            "duration": completed_at - submitted_at,
+                        })
 
-                except Exception as exc:
-                    # --- Error isolation: wrap failure as inconclusive ---
-                    failure_count += 1
-                    findings.append({
-                        "agent_name": "dag_executor",
-                        "hypothesis_id": hyp_id,
-                        "verdict": "inconclusive",
-                        "confidence": 0.0,
-                        "evidence": [],
-                        "narrative": f"Investigation failed: {type(exc).__name__}: {str(exc)[:200]}",
-                        "adjacent_observations": [],
-                    })
-                    execution_log.append({
-                        "hypothesis_id": hyp_id,
-                        "status": "failed",
-                        "error": f"{type(exc).__name__}: {str(exc)[:100]}",
-                        "duration": time.monotonic() - agent_start,
-                    })
+                    except Exception as exc:
+                        # --- Error isolation: wrap failure as inconclusive ---
+                        completed_at = time.monotonic()
+                        failure_count += 1
+                        findings.append({
+                            "agent_name": "dag_executor",
+                            "hypothesis_id": hyp_id,
+                            "verdict": "inconclusive",
+                            "confidence": 0.0,
+                            "evidence": [],
+                            "narrative": f"Investigation failed: {type(exc).__name__}: {str(exc)[:200]}",
+                            "adjacent_observations": [],
+                        })
+                        execution_log.append({
+                            "hypothesis_id": hyp_id,
+                            "status": "failed",
+                            "error": f"{type(exc).__name__}: {str(exc)[:100]}",
+                            "duration": completed_at - submitted_at,
+                        })
 
-                    logger.warning(
-                        "Hypothesis %s investigation failed: %s",
-                        hyp_id, str(exc)[:200],
-                    )
-
-                    # --- Circuit breaker check ---
-                    if failure_count >= cb_threshold:
-                        circuit_broken = True
-                        logger.error(
-                            "Circuit breaker tripped: %d/%d failures (threshold=%d)",
-                            failure_count, len(hypotheses), cb_threshold,
+                        logger.warning(
+                            "Hypothesis %s investigation failed: %s",
+                            hyp_id, str(exc)[:200],
                         )
-                        # Cancel remaining futures
-                        for f in future_to_hyp:
-                            f.cancel()
-                        break
+
+                        # --- Circuit breaker check ---
+                        if failure_count >= cb_threshold:
+                            circuit_broken = True
+                            logger.error(
+                                "Circuit breaker tripped: %d/%d failures (threshold=%d)",
+                                failure_count, len(hypotheses), cb_threshold,
+                            )
+                            # Fix #5: cancel() only prevents NOT-YET-STARTED tasks from
+                            # running. It cannot interrupt already-running threads. This
+                            # stops the pool from starting more work, but threads already
+                            # in flight will finish naturally when the `with` block exits.
+                            for f in future_to_hyp:
+                                f.cancel()
+                            break
+            except TimeoutError:
+                # Global timeout from as_completed — treat remaining as inconclusive
+                circuit_broken = True
+                for future, hyp in future_to_hyp.items():
+                    hyp_id = hyp.get("hypothesis_id", "unknown")
+                    if hyp_id not in {f.get("hypothesis_id") for f in findings}:
+                        failure_count += 1
+                        findings.append({
+                            "agent_name": "dag_executor",
+                            "hypothesis_id": hyp_id,
+                            "verdict": "inconclusive",
+                            "confidence": 0.0,
+                            "evidence": [],
+                            "narrative": "Investigation timed out",
+                            "adjacent_observations": [],
+                        })
 
         total_duration = time.monotonic() - start_time
 

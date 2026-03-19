@@ -138,11 +138,18 @@ def validate_registry(
     errors: List[str] = []
     agents = registry.get("agents", [])
 
-    # Build a name set for dependency reference checking
+    # Build a name set for dependency reference checking.
+    # Fix #7: also detect duplicate agent names — two agents with the same name
+    # would cause ambiguous dependency references and execution plan errors.
     agent_names = set()
     for agent in agents:
         if isinstance(agent, dict) and "name" in agent:
-            agent_names.add(agent["name"])
+            name = agent["name"]
+            if name in agent_names:
+                errors.append(
+                    f"Duplicate agent name '{name}' — each agent must have a unique name"
+                )
+            agent_names.add(name)
 
     for i, agent in enumerate(agents):
         # --- Check 1: Must be a dict ---
@@ -331,8 +338,9 @@ def parse_contract(agent_md_path: str) -> Dict[str, Any]:
         content = f.read()
 
     # Pattern: <!-- CONTRACT_START ... CONTRACT_END -->
-    # Using re.DOTALL so '.' matches newlines within the block
-    pattern = r"<!--\s*CONTRACT_START\s*\n(.*?)\nCONTRACT_END\s*-->"
+    # Using re.DOTALL so '.' matches newlines within the block.
+    # Fix #10: \r?\n handles both Unix and Windows line endings.
+    pattern = r"<!--\s*CONTRACT_START\s*\r?\n(.*?)\r?\nCONTRACT_END\s*-->"
     match = re.search(pattern, content, re.DOTALL)
 
     if not match:
