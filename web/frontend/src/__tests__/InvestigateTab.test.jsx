@@ -148,7 +148,7 @@ describe('InvestigateTab', () => {
   it('renders the input placeholder', () => {
     renderTab()
     expect(
-      screen.getByPlaceholderText('Ask about another metric movement...')
+      screen.getByPlaceholderText('Ask about a metric movement...')
     ).toBeInTheDocument()
   })
 

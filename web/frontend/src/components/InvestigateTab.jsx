@@ -1,8 +1,9 @@
-// InvestigateTab.jsx — ChatGPT-style investigate layout.
+// InvestigateTab.jsx — search-style investigate layout.
 //
-// LAYOUT: Results render above, input bar sticks at bottom.
-// This follows the ChatGPT pattern: the most recent output is visible,
-// and the input is always accessible without scrolling.
+// LAYOUT: Query box at top, results below. This follows the search engine pattern
+// (Google, Databricks): user types a question, hits Go, results appear below.
+// Unlike ChatGPT (input at bottom for multi-turn chat), this tool handles
+// single-query diagnostics — the query IS the starting point, not a continuation.
 //
 // PROGRESSIVE DISCLOSURE: Results are grouped into 3 tiers:
 //   1. Answer Layer (always visible): VerdictStrip + CoMovement + Narrative
@@ -32,9 +33,15 @@ export default function InvestigateTab({ scenario, scenarioKey, onScenarioChange
   const { diagnosis, narrative, data_context, sql_queries, display } = scenario
 
   return (
-    // Full-height flex column: results scroll, input sticks at bottom.
-    // flex-1 inherits height from parent (App.jsx uses min-h-screen flex flex-col).
+    // Full-height flex column: query at top, scrollable results below.
     <div className="flex-1 flex flex-col overflow-hidden">
+
+      {/* Query input at top — the entry point for every investigation */}
+      <QuestionInput
+        placeholder="Ask about a metric movement..."
+        activeScenario={scenarioKey}
+        onScenarioChange={onScenarioChange}
+      />
 
       {/* Scrollable results area */}
       <div className="flex-1 overflow-y-auto">
@@ -138,13 +145,6 @@ export default function InvestigateTab({ scenario, scenarioKey, onScenarioChange
           </div>
         </div>
       </div>
-
-      {/* Sticky input bar at bottom — ChatGPT pattern */}
-      <QuestionInput
-        placeholder="Ask about another metric movement..."
-        activeScenario={scenarioKey}
-        onScenarioChange={onScenarioChange}
-      />
     </div>
   )
 }
