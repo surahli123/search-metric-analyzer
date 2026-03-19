@@ -1,6 +1,6 @@
 # Backlog — Search Metric Analyzer v2.0 Holistic Redesign
 
-Last updated: 2026-03-15
+Last updated: 2026-03-19
 
 ---
 
@@ -32,10 +32,21 @@ Last updated: 2026-03-15
 - [x] 9 backend tests + 23 frontend tests (32 total)
 - [x] Fix DivergingBarChart overflow, text clipping, insight badges, TrendChart Y-axis
 - [x] Apply 3 DS Lead review fixes (SQS delta, hypothesis honesty, enterprise counts)
-- [ ] Build Execution Trace tab components (PhaseAccordion, StepRow, filter tabs) — deferred to Phase 2
+- [x] Build Execution Trace tab components (TraceTab, TracePhaseCard, TraceStep, filter pills) — done in UI Redesign PR #15
 - [ ] Deploy backend to Render (free tier) — deferred, running locally for demo
 - PR #13 merged
 - Plan: `docs/superpowers/plans/2026-03-15-web-app-react-phase1.md`
+
+### UI Redesign: 3-Tab Architecture (DONE — 2026-03-19)
+- [x] Design critique (Impeccable + gstack Design Review) — 8 issues found
+- [x] 3-tab navigation: Investigate (query at top), Trace, Knowledge Base
+- [x] Progressive disclosure: Answer → Evidence (collapsible) → Technical (collapsed)
+- [x] Plain English labels, section headers, conclusion-first patterns
+- [x] Naming cleanup: removed "Customer Cohort FPS", expanded SQS
+- [x] Chart polish: titles, axis labels, units, SQL collapsed
+- [x] 194 frontend tests (up from 23), code review + TDD audit
+- [x] Deployed to Vercel: https://search-metric-analyzer.vercel.app
+- PR #15 merged
 
 ### Web App Phase 2: SSE Streaming + Live Trace (after Phase 1)
 - [ ] Implement SSE streaming endpoint with in-memory buffer
@@ -47,14 +58,15 @@ Last updated: 2026-03-15
 - [ ] Clickable cards → pre-filled Agent investigation
 - [ ] Tenant tier filter tabs
 
-### Wave 3b: Full 4-Stage Orchestrator (PLAN APPROVED — after web app)
-- [ ] Task 8: OrchestratorError hierarchy + SearchMetricOrchestrator skeleton + UNDERSTAND stage
-- [ ] Task 9: HYPOTHESIZE stage (LLM + corrections context + IC9 #2: hypothesis_inclusion trace)
-- [ ] Task 10: DISPATCH stage (reuse orchestrate() + IC9 #3: context_construction trace)
-- [ ] Task 11: SYNTHESIZE stage (LLM + retry gate + IC9 #4: narrative_selection trace)
-- [ ] Task 12: Error handling integration tests
-- [ ] Task 13: make_anthropic_llm() factory with timeout + optional SDK
-- [ ] Task 14: Wave 3b verification (all 4 IC9 decisions traced end-to-end)
+### Wave 3b: Full 4-Stage Orchestrator (DONE — 2026-03-17)
+- [x] Task 8: OrchestratorError hierarchy + SearchMetricOrchestrator skeleton + UNDERSTAND stage
+- [x] Task 9: HYPOTHESIZE stage (LLM + corrections context + IC9 #2: hypothesis_inclusion trace)
+- [x] Task 10: DISPATCH stage (reuse orchestrate() + IC9 #3: context_construction trace)
+- [x] Task 11: SYNTHESIZE stage (LLM + retry gate + IC9 #4: narrative_selection trace)
+- [x] Task 12: Error handling integration tests
+- [x] Task 13: make_anthropic_llm() factory with timeout + optional SDK
+- [x] Task 14: Wave 3b verification (all 4 IC9 decisions traced end-to-end)
+- 949 tests GREEN, PR #14 merged
 
 ### Wave 4: Skill File + Eval
 - [ ] Update `skills/search-metric-analyzer.md` — add seam validator subprocess calls after each stage
@@ -92,6 +104,37 @@ Priority: fix during the wave where they naturally fit.
 - [x] Minor: add one-line note in spec Section 3 (2026-03-15)
 - [x] Minor: add 4th scalability trigger (>500 entries) to rule 04 (2026-03-15)
 - [ ] Add process note to spec: after corrections, update `last_validated` on referenced entry
+
+---
+
+## SMA v2 Improvement Plan (approved 2026-03-18)
+
+4-wave roadmap to mirror in-house architecture, borrowing from ai-analyst.
+Full plan: `docs/plans/2026-03-18-sma-v2-improvement-plan.md`
+
+### Wave 5: Agent Architecture (Foundation)
+- [ ] 5A: Mode Selection (Simple/Medium/Complex) — 3 lead agent variants
+- [ ] 5B: Declarative agents with CONTRACT blocks + registry.yaml
+- [ ] 5C: DAG orchestration with parallel dispatch
+- [ ] 5D: Quality gates expansion (11 → 14)
+- [ ] 5E: Domain-scoped question framing (UNDERSTAND enhancement)
+
+### Wave 6: Knowledge & Learning Loop
+- [ ] Manifest-based knowledge routing (8 routes, token budgets)
+- [ ] 3-tier knowledge architecture (Infrastructure/Investigative/Domain)
+- [ ] Investigation archive + playbook distillation
+- [ ] SEV archive (past incident case files)
+
+### Wave 7: Data Connectivity
+- [ ] SQL executor (DuckDB + CSV/Parquet)
+- [ ] Schema profiler + data quality validation
+- [ ] Query auto-logging to trace
+
+### Wave 8: Richer Output Layer
+- [ ] Trace viewer redesign (narrative timeline, not accordion)
+- [ ] Narrative quality gate (no hedging, evidence-linked findings, 12-point report score)
+- [ ] HTML diagnostic reports (Atlassian-style)
+- [ ] Session lifecycle skills (start/continue/close/generate-report)
 
 ---
 

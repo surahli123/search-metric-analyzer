@@ -5,6 +5,23 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## SMA v2 Improvement Plan — ai-analyst + In-House Architecture (2026-03-18)
+
+Brainstorming session analyzing ai-analyst repo and in-house production agent to define the next evolution of SMA.
+
+### Added
+- `docs/plans/2026-03-18-sma-v2-improvement-plan.md` — Approved 4-wave improvement roadmap
+- `docs/research/inhouse-agent-architecture-analysis.md` — In-house agent architecture analysis from 6 screenshots
+- `docs/handover-2026-03-18-ai-analyst-brainstorm.md` — Session record with all decisions and next steps
+
+### Research
+- Cloned ai-analyst repo (`/Users/surahli/Documents/projects/ai-analyst/`) — 18-agent DAG pipeline reference
+- Identified 8 gaps between SMA and in-house system (mode selection, 14 gates, sub-agents, SQL executor, session management, manifest routing, report generation, trace viewer)
+- Defined 4-wave roadmap: Agent Architecture → Knowledge Loop → Data Connectivity → Output Layer
+- Debated and resolved: domain-scoped question framing (adopt), narrative quality architecture (adopt)
+
+---
+
 ## UI Redesign — 3-Tab Architecture (2026-03-19)
 
 Complete frontend redesign based on founder feedback at GTC party. Combined Impeccable Critique + gstack Design Review found 8 issues (2 blocker, 3 major, 3 minor). All fixed.
