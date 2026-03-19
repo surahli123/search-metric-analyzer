@@ -121,7 +121,7 @@ WITHIN_VARIANCE = {
     },
     "narrative": {
         "text": (
-            "<strong>Search Quality Success for Customer Cohort FPS</strong> measured at "
+            "<strong>Search Quality Success for all tenants</strong> measured at "
             "<strong>70.8%</strong> this week vs 70.5% last week (<strong>+0.3pp</strong>). "
             "The movement is driven by a <strong>+2.4pp increase in AI Trigger Rate</strong> "
             "(35.8% → 38.2%), offset by a small Click Quality dip (-0.7pp) — consistent with "
@@ -195,8 +195,8 @@ WITHIN_VARIANCE = {
         "run_log": [],
     },
     "display": {
-        "question": "What does SQS look like this week vs last week for Customer Cohort FPS?",
-        "results_title": "SQS Week-over-Week — Customer Cohort FPS",
+        "question": "How is Search Quality Success (SQS) performing this week vs. last?",
+        "results_title": "SQS Week-over-Week",
         "results_date_range": "2026-02-10 → 2026-02-24",
         "results_headers": ["Period", "Queries", "SQS", "Click", "AI Trigger", "AI Success", "Δ SQS"],
         "results_rows": [

@@ -17,7 +17,7 @@ describe('MethodologyBlock', () => {
   })
   it('expands on click', () => {
     render(<MethodologyBlock dataContext={CTX} />)
-    fireEvent.click(screen.getByText('Methodology'))
+    fireEvent.click(screen.getByText('Methodology & Data Sources'))
     expect(screen.getByText(/search_query_relevance/)).toBeInTheDocument()
   })
 })

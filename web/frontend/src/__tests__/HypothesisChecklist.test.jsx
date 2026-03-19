@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
 import HypothesisChecklist from '../components/HypothesisChecklist'
 
@@ -9,18 +9,33 @@ const MOCK = [
 ]
 
 describe('HypothesisChecklist', () => {
-  it('renders all categories', () => {
+  it('renders matched category prominently', () => {
     render(<HypothesisChecklist hypotheses={MOCK} />)
-    expect(screen.getByText(/Instrumentation/)).toBeInTheDocument()
+    // Matched hypothesis is always visible without expanding
     expect(screen.getByText(/Algorithm/)).toBeInTheDocument()
+  })
+  it('shows non-matched categories after expanding', () => {
+    render(<HypothesisChecklist hypotheses={MOCK} />)
+    // Non-matched hypotheses are hidden behind expand toggle
+    expect(screen.queryByText(/Instrumentation/)).not.toBeInTheDocument()
+    // Click the expand toggle
+    fireEvent.click(screen.getByText(/other hypothesis/))
+    // Now non-matched categories should be visible
+    expect(screen.getByText(/Instrumentation/)).toBeInTheDocument()
   })
   it('shows matched badge', () => {
     render(<HypothesisChecklist hypotheses={MOCK} />)
     expect(screen.getByText('matched')).toBeInTheDocument()
   })
-  it('shows not evaluated badges', () => {
+  it('shows "not indicated" badges after expanding', () => {
     render(<HypothesisChecklist hypotheses={MOCK} />)
-    expect(screen.getAllByText('not evaluated')).toHaveLength(2)
+    // Expand the remaining hypotheses
+    fireEvent.click(screen.getByText(/other hypothesis/))
+    expect(screen.getAllByText('not indicated')).toHaveLength(2)
+  })
+  it('shows section header as Root Cause Analysis', () => {
+    render(<HypothesisChecklist hypotheses={MOCK} />)
+    expect(screen.getByText('Root Cause Analysis')).toBeInTheDocument()
   })
   it('does NOT show ruled_out', () => {
     render(<HypothesisChecklist hypotheses={MOCK} />)

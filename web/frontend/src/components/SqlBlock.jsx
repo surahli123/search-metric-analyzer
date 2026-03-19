@@ -7,52 +7,59 @@
 //
 // WHY dark background (--code-bg): SQL is code, not prose. Dark backgrounds are
 // the industry convention for code display and signal "this is technical output."
+//
+// WHY collapsed by default: SQL is reference material — most readers don't need
+// it, but engineers want it available. CollapsibleSection keeps the UI clean.
+
+import CollapsibleSection from './CollapsibleSection'
 
 export default function SqlBlock({ queries }) {
   return (
-    <div className="flex flex-col gap-3">
-      {queries.map((q, i) => (
-        <div
-          key={i}
-          className="rounded-lg overflow-hidden"
-          style={{ border: '1px solid var(--border)' }}
-        >
-          {/* Query header row — description on left, performance stats on right */}
+    <CollapsibleSection title="SQL Queries" count={queries.length} defaultOpen={false}>
+      <div className="flex flex-col gap-3">
+        {queries.map((q, i) => (
           <div
-            className="flex items-center justify-between px-4 py-2 text-xs"
-            style={{
-              background: 'var(--bg-elevated)',
-              color: 'var(--text-secondary)',
-              fontFamily: "'Fira Sans', sans-serif",
-            }}
+            key={i}
+            className="rounded-lg overflow-hidden"
+            style={{ border: '1px solid var(--border)' }}
           >
-            <span className="font-medium">{q.description}</span>
-            {/* Monospace for the numbers so they align cleanly */}
-            <span
+            {/* Query header row — description on left, performance stats on right */}
+            <div
+              className="flex items-center justify-between px-4 py-2 text-xs"
               style={{
-                color: 'var(--text-muted)',
-                fontFamily: "'Fira Code', monospace",
+                background: 'var(--bg-elevated)',
+                color: 'var(--text-secondary)',
+                fontFamily: "'Fira Sans', sans-serif",
               }}
             >
-              {q.duration_s}s · {q.rows} rows
-            </span>
-          </div>
+              <span className="font-medium">{q.description}</span>
+              {/* Monospace for the numbers so they align cleanly */}
+              <span
+                style={{
+                  color: 'var(--text-muted)',
+                  fontFamily: "'Fira Code', monospace",
+                }}
+              >
+                {q.duration_s}s · {q.rows} rows
+              </span>
+            </div>
 
-          {/* SQL code block — <pre> preserves whitespace/indentation in the SQL string */}
-          <pre
-            className="px-4 py-3 text-xs overflow-x-auto"
-            style={{
-              background: 'var(--code-bg)',
-              color: 'var(--code-text)',
-              fontFamily: "'Fira Code', monospace",
-              lineHeight: 1.6,
-              margin: 0,
-            }}
-          >
-            {q.sql}
-          </pre>
-        </div>
-      ))}
-    </div>
+            {/* SQL code block — <pre> preserves whitespace/indentation in the SQL string */}
+            <pre
+              className="px-4 py-3 text-xs overflow-x-auto"
+              style={{
+                background: 'var(--code-bg)',
+                color: 'var(--code-text)',
+                fontFamily: "'Fira Code', monospace",
+                lineHeight: 1.6,
+                margin: 0,
+              }}
+            >
+              {q.sql}
+            </pre>
+          </div>
+        ))}
+      </div>
+    </CollapsibleSection>
   )
 }

@@ -1,22 +1,26 @@
-// QuestionInput.jsx — scenario switcher pills + disabled input bar.
+// QuestionInput.jsx — scenario switcher pills + input bar.
 //
 // WHY pills instead of a dropdown: pills show all available scenarios at a glance
 // and are one-click to switch. A dropdown would require two clicks and hides options.
 // This pattern works well when there are 2-4 options (our current count).
 //
+// WHY derived from SCENARIOS: the pill list was previously hardcoded, which meant
+// adding a new scenario required updating two files. Now pills are derived from the
+// SCENARIOS object, so adding a scenario to scenarios.js automatically shows it here.
+//
 // WHY the input is disabled: the input bar is a UX affordance showing WHERE users
 // will type future questions when the live backend is connected. In Phase 1 mock mode,
 // it's read-only with a placeholder so the UI looks complete without being misleading.
-//
-// The Investigate button is also disabled (cursor: not-allowed) — same reason.
-// Users can see the intended interaction pattern without being able to trigger it.
 
-// Scenario pills — hardcoded here since they map 1:1 to the SCENARIOS keys in
-// scenarios.js. When a new scenario is added, add a pill here too.
-const SCENARIO_PILLS = [
-  { key: 'within_variance', label: 'Within Variance' },
-  { key: 'ranking_regression', label: 'Ranking Regression' },
-]
+import { SCENARIOS, SCENARIO_KEYS } from '../data/scenarios'
+
+// Derive pill labels from scenario data.
+// Uses the verdict_label from the diagnosis as the pill display name.
+// Falls back to a formatted version of the scenario key if verdict_label is missing.
+const SCENARIO_PILLS = SCENARIO_KEYS.map(key => ({
+  key,
+  label: SCENARIOS[key]?.diagnosis?.verdict_label || key.replace(/_/g, ' '),
+}))
 
 export default function QuestionInput({ placeholder, activeScenario, onScenarioChange }) {
   return (

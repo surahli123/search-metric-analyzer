@@ -21,21 +21,31 @@
  */
 export default function NarrativeBlock({ text }) {
   return (
-    <div
-      className="p-4 rounded-lg border"
-      style={{
-        background: 'var(--bg-card)',
-        borderColor: 'var(--border)',
-        fontFamily: "'Fira Sans', sans-serif",
-        lineHeight: '1.7'
-      }}
-    >
-      {/* dangerouslySetInnerHTML is intentional — see JSDoc above for safety rationale */}
+    <div>
+      {/* Section header — sits ABOVE the card per design convention */}
       <div
-        className="text-sm"
-        style={{ color: 'var(--text-secondary)' }}
-        dangerouslySetInnerHTML={{ __html: text }}
-      />
+        className="text-xs font-semibold uppercase tracking-wider mb-2"
+        style={{ color: 'var(--text-muted)', fontFamily: "'Fira Sans', sans-serif" }}
+      >
+        Summary
+      </div>
+
+      <div
+        className="p-4 rounded-lg border"
+        style={{
+          background: 'var(--bg-card)',
+          borderColor: 'var(--border)',
+          fontFamily: "'Fira Sans', sans-serif",
+          lineHeight: '1.7'
+        }}
+      >
+        {/* dangerouslySetInnerHTML is intentional — see JSDoc above for safety rationale */}
+        <div
+          className="text-sm"
+          style={{ color: 'var(--text-secondary)' }}
+          dangerouslySetInnerHTML={{ __html: text }}
+        />
+      </div>
     </div>
   )
 }

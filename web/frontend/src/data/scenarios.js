@@ -59,7 +59,7 @@ export const SCENARIOS = {
       ],
     },
     narrative: {
-      text: "<strong>Search Quality Success for Customer Cohort FPS</strong> measured at <strong>70.8%</strong> this week vs 70.5% last week (<strong>+0.3pp</strong>). The movement is driven by a <strong>+2.4pp increase in AI Trigger Rate</strong> (35.8% → 38.2%), offset by a small Click Quality dip (-0.7pp) — consistent with the expected inverse co-movement pattern when AI answers increase. Sample size is modest (n=348); consider monitoring for another week before drawing firm conclusions.",
+      text: "<strong>Search Quality Success for all tenants</strong> measured at <strong>70.8%</strong> this week vs 70.5% last week (<strong>+0.3pp</strong>). The movement is driven by a <strong>+2.4pp increase in AI Trigger Rate</strong> (35.8% → 38.2%), offset by a small Click Quality dip (-0.7pp) — consistent with the expected inverse co-movement pattern when AI answers increase. Sample size is modest (n=348); consider monitoring for another week before drawing firm conclusions.",
       source: "template",
       hedging: "Sample size is modest (n=348)",
     },
@@ -77,8 +77,10 @@ export const SCENARIOS = {
     ],
     orchestration: { orchestrated: false, agents_run: [], fused_verdict: null, fused_reason: null, updated_decision_status: "diagnosed", run_log: [] },
     display: {
-      question: "What does SQS look like this week vs last week for Customer Cohort FPS?",
-      results_title: "SQS Week-over-Week — Customer Cohort FPS",
+      question: "How is Search Quality Success (SQS) performing this week vs. last?",
+      verdict_human: "Normal fluctuation — no action needed",
+      severity_human: "Minor",
+      results_title: "SQS Week-over-Week",
       results_date_range: "2026-02-10 → 2026-02-24",
       results_headers: ["Period", "Queries", "SQS", "Click", "AI Trigger", "AI Success", "Δ SQS"],
       results_rows: [
@@ -94,6 +96,7 @@ export const SCENARIOS = {
       ],
       trend_data: {
         title: "SQS Daily Trend — This Week vs Last Week",
+        y_axis_label: "SQS (%)",
         current: [{ day: "Mon", value: 69.5 }, { day: "Tue", value: 70.2 }, { day: "Wed", value: 69.8 }, { day: "Thu", value: 71.5 }, { day: "Fri", value: 70.8 }, { day: "Sat", value: 71.2 }, { day: "Sun", value: 71.8 }],
         previous: [{ day: "Mon", value: 70.0 }, { day: "Tue", value: 70.5 }, { day: "Wed", value: 69.2 }, { day: "Thu", value: 70.8 }, { day: "Fri", value: 70.3 }, { day: "Sat", value: 70.5 }, { day: "Sun", value: 71.0 }],
         legend_current: "This week (70.8% avg, n=348)",
@@ -170,7 +173,9 @@ export const SCENARIOS = {
     ],
     orchestration: { orchestrated: false, agents_run: [], fused_verdict: null, fused_reason: null, updated_decision_status: "diagnosed", run_log: [] },
     display: {
-      question: "Why did Click Quality drop for enterprise tenants last week?",
+      question: "Why did Click Quality drop for enterprise-tier tenants last week?",
+      verdict_human: "Ranking quality dropped — needs investigation",
+      severity_human: "Urgent",
       results_title: "Click Quality Week-over-Week — Enterprise Tenants",
       results_date_range: "2026-02-24 → 2026-03-07",
       results_headers: ["Period", "Queries", "CQ", "SQS", "AI Trigger", "AI Success", "Δ CQ"],
@@ -187,6 +192,7 @@ export const SCENARIOS = {
       ],
       trend_data: {
         title: "Click Quality Daily Trend — This Week vs Last Week",
+        y_axis_label: "Click Quality (%)",
         current: [{ day: "Mon", value: 27.0 }, { day: "Tue", value: 26.2 }, { day: "Wed", value: 25.5 }, { day: "Thu", value: 24.8 }, { day: "Fri", value: 24.0 }, { day: "Sat", value: 23.5 }, { day: "Sun", value: 24.0 }],
         previous: [{ day: "Mon", value: 29.8 }, { day: "Tue", value: 30.0 }, { day: "Wed", value: 29.2 }, { day: "Thu", value: 29.5 }, { day: "Fri", value: 30.0 }, { day: "Sat", value: 29.5 }, { day: "Sun", value: 29.2 }],
         legend_current: "This week (25.0% avg, n=1,206)",
@@ -198,6 +204,84 @@ export const SCENARIOS = {
       footer: { verdict_text: "Ranking Regression", summary: "Click Quality regression detected — enterprise tier driving 85% of movement", total_queries: "2,450 total", date_range: "2026-02-24 → 2026-03-07" },
       chart_insight_html: '<span class="insight-badge regression">Regression detected</span> <strong>Pattern:</strong> Click Quality ↓ and SQS ↓ with AI metrics stable — consistent with a ranking model regression. AI is not the cause.',
     },
+  },
+}
+
+// Mock trace data shared by both scenarios — shows the 4-stage diagnostic pipeline.
+// Each phase has steps with type-coded badges (sql, knowledge, reasoning, output).
+// Phase 1 (demo): static data. Phase 2: live SSE streaming from backend.
+export const TRACE_DATA = {
+  within_variance: {
+    phases: [
+      {
+        name: 'UNDERSTAND', status: 'done', duration_s: 3.2, steps: [
+          { type: 'sql', label: 'Data quality gate', detail: 'Logging completeness check', duration_s: 3.2, rows: 7 },
+          { type: 'knowledge', label: 'Load metric definitions', detail: 'metric_definitions.yaml → SQS formula', file: 'metric_definitions.yaml' },
+          { type: 'knowledge', label: 'Load baselines', detail: 'Segment baselines for ai_on, enterprise', file: 'metric_definitions.yaml' },
+          { type: 'reasoning', label: 'Classify severity', detail: '+0.3pp → P2 (Minor), within normal fluctuation' },
+          { type: 'reasoning', label: 'Detect co-movement', detail: 'CQ↓ + AI Trigger↑ + SQS↑ → ai_adoption pattern' },
+          { type: 'output', label: 'UnderstandResult', detail: 'metric=SQS, severity=P2, co_movement=ai_adoption' },
+        ]
+      },
+      {
+        name: 'HYPOTHESIZE', status: 'done', duration_s: 1.8, steps: [
+          { type: 'knowledge', label: 'Load co-movement table', detail: '9-row diagnostic table → pattern match', file: 'metric_definitions.yaml' },
+          { type: 'knowledge', label: 'Load corrections', detail: 'Check for past diagnostic mistakes', file: 'corrections.yaml' },
+          { type: 'reasoning', label: 'Generate hypotheses', detail: 'Co-movement matches ai_feature archetype' },
+          { type: 'output', label: 'HypothesisSet', detail: '1 matched (ai_feature), 7 not indicated' },
+        ]
+      },
+      {
+        name: 'DISPATCH', status: 'done', duration_s: 4.1, steps: [
+          { type: 'sql', label: 'WoW comparison by segment', detail: 'Tenant tier decomposition query', duration_s: 5.8, rows: 6 },
+          { type: 'reasoning', label: 'Decompose by tenant_tier', detail: 'Enterprise +2.1pp (68%), Premium +0.4pp (22%), Standard +0.1pp (10%)' },
+          { type: 'reasoning', label: 'Mix-shift analysis', detail: 'mix_shift=8.2% (below 30% threshold), behavioral=91.8%' },
+          { type: 'output', label: 'FindingSet', detail: 'Enterprise drives 68% of movement, no mix-shift' },
+        ]
+      },
+      {
+        name: 'SYNTHESIZE', status: 'done', duration_s: 2.4, steps: [
+          { type: 'reasoning', label: 'Narrative generation', detail: 'Template-based synthesis with hedging for n=348' },
+          { type: 'reasoning', label: 'Validate coherence', detail: 'Verdict consistent with evidence, no contradictions' },
+          { type: 'output', label: 'SynthesisReport', detail: 'Verdict: within_variance, Confidence: Low (n=348)' },
+        ]
+      },
+    ]
+  },
+  ranking_regression: {
+    phases: [
+      {
+        name: 'UNDERSTAND', status: 'done', duration_s: 4.1, steps: [
+          { type: 'sql', label: 'Data quality gate', detail: 'Logging completeness check', duration_s: 4.1, rows: 7 },
+          { type: 'knowledge', label: 'Load metric definitions', detail: 'metric_definitions.yaml → CQ formula', file: 'metric_definitions.yaml' },
+          { type: 'reasoning', label: 'Classify severity', detail: '-15.2% → P1 (Urgent), exceeds 5% threshold' },
+          { type: 'reasoning', label: 'Detect co-movement', detail: 'CQ↓ + SQS↓ + AI stable → ranking_regression pattern' },
+          { type: 'output', label: 'UnderstandResult', detail: 'metric=CQ, severity=P1, co_movement=ranking_regression' },
+        ]
+      },
+      {
+        name: 'HYPOTHESIZE', status: 'done', duration_s: 1.5, steps: [
+          { type: 'knowledge', label: 'Load co-movement table', detail: '9-row diagnostic table → pattern match', file: 'metric_definitions.yaml' },
+          { type: 'reasoning', label: 'Generate hypotheses', detail: 'Co-movement matches algorithm_model archetype' },
+          { type: 'output', label: 'HypothesisSet', detail: '1 matched (algorithm_model), 7 not indicated' },
+        ]
+      },
+      {
+        name: 'DISPATCH', status: 'done', duration_s: 6.3, steps: [
+          { type: 'sql', label: 'WoW comparison by segment', detail: 'Tenant tier decomposition query', duration_s: 6.3, rows: 6 },
+          { type: 'reasoning', label: 'Decompose by tenant_tier', detail: 'Enterprise -4.5pp (85%), Premium -0.3pp (10%), Standard -0.1pp (5%)' },
+          { type: 'reasoning', label: 'Mix-shift analysis', detail: 'mix_shift=5.1% (below 30%), behavioral=94.9%' },
+          { type: 'output', label: 'FindingSet', detail: 'Enterprise drives 85%, isolated regression' },
+        ]
+      },
+      {
+        name: 'SYNTHESIZE', status: 'done', duration_s: 2.1, steps: [
+          { type: 'reasoning', label: 'Narrative generation', detail: 'Template synthesis — P1 ranking regression, enterprise-isolated' },
+          { type: 'reasoning', label: 'Validate coherence', detail: 'Decomposition completeness: 82.3% (WARN — below 90%)' },
+          { type: 'output', label: 'SynthesisReport', detail: 'Verdict: ranking_regression, Confidence: Medium (82.3% explained)' },
+        ]
+      },
+    ]
   },
 }
 
