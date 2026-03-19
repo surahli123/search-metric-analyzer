@@ -1000,55 +1000,11 @@ class SearchMetricOrchestrator:
     def _build_hypothesize_system_prompt(self) -> str:
         """Build the system prompt for HYPOTHESIZE stage.
 
-        Explains the LLM's role and the JSON schema it must produce.
-        Kept as a separate method for testability and readability.
+        Delegates to harness.prompts for the actual prompt content.
+        Kept as a method for backward compatibility with existing tests.
         """
-        return (
-            "You are a senior search relevance data scientist diagnosing metric movements "
-            "in an Enterprise Search platform (similar to Glean). Your task is to generate "
-            "hypotheses that explain a metric movement.\n\n"
-            "CRITICAL DOMAIN RULE — AI Adoption Trap:\n"
-            "AI answers and clicks have INVERSE co-movement by design. More AI answers → "
-            "fewer clicks → Click Quality drops → this is EXPECTED, not a regression. "
-            "If Click Quality is down but AI Trigger is up and AI Success is up, "
-            "this is a POSITIVE signal. Do NOT generate a 'click_quality_degradation' "
-            "hypothesis unless you mark it as contrarian (is_contrarian=True).\n\n"
-            "HYPOTHESIS PRIORITY ORDER (fixed — instrumentation first, behavior last):\n"
-            "1. Instrumentation/logging anomaly\n"
-            "2. Connector/data pipeline change\n"
-            "3. Query understanding regression\n"
-            "4. Algorithm/model change\n"
-            "5. Experiment ramp/de-ramp\n"
-            "6. AI feature effect\n"
-            "7. Seasonal/external\n"
-            "8. User behavior shift (check LAST)\n\n"
-            "Return ONLY a valid JSON object matching this schema:\n"
-            "{\n"
-            '  "hypotheses": [\n'
-            "    {\n"
-            '      "hypothesis_id": "hyp_001",\n'
-            '      "archetype": "ranking_regression",\n'
-            '      "priority": 1,\n'
-            '      "confirms_if": ["ranking logs show model change in date range"],\n'
-            '      "rejects_if": ["no model changes in deployment logs"],\n'
-            '      "expected_magnitude": "2-4% drop",\n'
-            '      "source": "data_driven",\n'
-            '      "is_contrarian": false\n'
-            "    }\n"
-            "  ],\n"
-            '  "exclusions": [\n'
-            '    {"archetype": "seasonal", "reason": "No calendar effects match this timing"}\n'
-            "  ],\n"
-            '  "investigation_context": "summary for downstream stages"\n'
-            "}\n\n"
-            "REQUIREMENTS:\n"
-            "- Generate at least 3 hypotheses\n"
-            "- At least one hypothesis MUST have is_contrarian=true\n"
-            "- Every hypothesis MUST have non-empty confirms_if and rejects_if\n"
-            "- Every hypothesis MUST have expected_magnitude\n"
-            "- source must be one of: data_driven, playbook, novel\n"
-            "- Include exclusions explaining what you considered but rejected\n"
-        )
+        from harness.prompts import build_hypothesize_system_prompt
+        return build_hypothesize_system_prompt()
 
     def _build_hypothesize_user_prompt(
         self,
@@ -1058,142 +1014,23 @@ class SearchMetricOrchestrator:
     ) -> str:
         """Build the user prompt for HYPOTHESIZE stage.
 
-        Provides the LLM with:
-        - Metric name, direction, severity from UNDERSTAND
-        - Co-movement pattern (pattern_name, likely_cause, movements)
-        - Mix-shift result if present
-        - Relevant corrections (past diagnostic mistakes to avoid)
-        - Token-budgeted context from the UNDERSTAND trace
-
-        Args:
-            understand_result: Output from _stage_understand().
-            corrections: Relevant past corrections for this metric.
-            trace: InvestigationTrace for agent_context_for().
-
-        Returns:
-            Formatted user prompt string.
+        Delegates to harness.prompts for the actual prompt content.
         """
-        metric = understand_result.get("metric", "unknown")
-        direction = understand_result.get("direction", "unknown")
-        severity = understand_result.get("severity", "unknown")
-        question = understand_result.get("question", "")
-
-        # Co-movement pattern details
-        co_movement = understand_result.get("co_movement_pattern", {})
-        pattern_name = co_movement.get("pattern_name", "unknown")
-        likely_cause = co_movement.get("likely_cause", "unknown")
-        match_score = co_movement.get("match_score", 0)
-
-        # Build the prompt in sections
-        sections = []
-
-        # Section 1: Investigation question and metric summary
-        sections.append(
-            f"INVESTIGATION: {question}\n\n"
-            f"METRIC SUMMARY:\n"
-            f"  Metric: {metric}\n"
-            f"  Direction: {direction}\n"
-            f"  Severity: {severity}\n"
-        )
-
-        # Section 2: Co-movement pattern
-        sections.append(
-            f"CO-MOVEMENT PATTERN:\n"
-            f"  Pattern: {pattern_name}\n"
-            f"  Likely cause: {likely_cause}\n"
-            f"  Match score: {match_score}\n"
-        )
-
-        # Section 3: Mix-shift result (if present)
-        mix_shift = understand_result.get("mix_shift_result")
-        if mix_shift and isinstance(mix_shift, dict):
-            detected = mix_shift.get("detected", False)
-            contribution = mix_shift.get("contribution_pct", 0)
-            sections.append(
-                f"MIX-SHIFT:\n"
-                f"  Detected: {detected}\n"
-                f"  Contribution: {contribution:.1%}\n"
-                f"  NOTE: If contribution > 25%, you MUST include a mix_shift "
-                f"or segment_mix_shift hypothesis.\n"
-            )
-
-        # Section 4: Relevant corrections (past mistakes to avoid)
-        if corrections:
-            correction_lines = ["PAST CORRECTIONS (avoid these mistakes):"]
-            for c in corrections[:5]:  # Cap at 5 to stay within token budget
-                correction_lines.append(
-                    f"  - Metric: {c.get('metric')}, "
-                    f"Originally called: {c.get('original_archetype')}, "
-                    f"Actually was: {c.get('corrected_to')}\n"
-                    f"    Context: {c.get('context', 'N/A')}\n"
-                    f"    Lesson: {c.get('lesson', 'N/A')}"
-                )
-            sections.append("\n".join(correction_lines))
-        else:
-            sections.append("PAST CORRECTIONS: None found for this metric.")
-
-        # Section 5: UNDERSTAND stage context (token-budgeted summary from trace)
+        from harness.prompts import build_hypothesize_user_prompt
         understand_context = trace.agent_context_for("UNDERSTAND")
-        sections.append(
-            f"UNDERSTAND STAGE CONTEXT:\n{understand_context}"
+        return build_hypothesize_user_prompt(
+            understand_result=understand_result,
+            corrections=corrections,
+            understand_context=understand_context,
         )
-
-        # Section 6: Explicit instruction for contrarian hypothesis
-        sections.append(
-            "IMPORTANT: Include at least one contrarian hypothesis (is_contrarian=true) "
-            "that challenges the most obvious explanation. This prevents confirmation bias."
-        )
-
-        return "\n\n".join(sections)
 
     def _normalize_hypothesis_set(self, parsed: Any) -> Dict[str, Any]:
         """Normalize parsed LLM output into a valid HypothesisSet dict.
 
-        The LLM may return slightly malformed data (missing optional fields,
-        wrong types). This method applies defensive normalization without
-        silently changing semantics.
-
-        Args:
-            parsed: Raw parsed JSON from extract_json() (dict or list).
-
-        Returns:
-            Normalized HypothesisSet dict.
+        Delegates to harness.prompts for the actual normalization.
         """
-        # If the LLM returned a list, assume it's the hypotheses list
-        if isinstance(parsed, list):
-            parsed = {"hypotheses": parsed, "exclusions": [], "investigation_context": ""}
-
-        hypotheses = parsed.get("hypotheses", [])
-        exclusions = parsed.get("exclusions", [])
-        investigation_context = parsed.get("investigation_context", "")
-
-        # Normalize each hypothesis — ensure required fields have defaults
-        normalized_hypotheses = []
-        for i, h in enumerate(hypotheses):
-            normalized_hypotheses.append({
-                "hypothesis_id": h.get("hypothesis_id", f"hyp_{i + 1:03d}"),
-                "archetype": h.get("archetype", "unknown"),
-                "priority": h.get("priority", i + 1),
-                "confirms_if": h.get("confirms_if", []),
-                "rejects_if": h.get("rejects_if", []),
-                "expected_magnitude": h.get("expected_magnitude", ""),
-                "source": h.get("source", "novel"),
-                "is_contrarian": bool(h.get("is_contrarian", False)),
-            })
-
-        # Normalize exclusions
-        normalized_exclusions = []
-        for e in exclusions:
-            normalized_exclusions.append({
-                "archetype": e.get("archetype", "unknown"),
-                "reason": e.get("reason", "no reason provided"),
-            })
-
-        return {
-            "hypotheses": normalized_hypotheses,
-            "exclusions": normalized_exclusions,
-            "investigation_context": str(investigation_context),
-        }
+        from harness.prompts import normalize_hypothesis_set
+        return normalize_hypothesis_set(parsed)
 
     def _stage_dispatch(self, hypothesis_set, understand_result, trace):
         """Stage 3: DISPATCH — investigate hypotheses using specialist agents.
@@ -1469,59 +1306,18 @@ class SearchMetricOrchestrator:
         }
 
     def _build_dispatch_system_prompt(self) -> str:
-        """Build the system prompt for DISPATCH stage.
-
-        Must contain 'investigating a specific hypothesis' to match the
-        test mock LLM routing.
-        """
-        return (
-            "You are a senior search relevance data scientist investigating a specific hypothesis "
-            "about why a metric moved in an Enterprise Search platform.\n\n"
-            "Your task: investigate the given hypothesis by examining the evidence and "
-            "producing a structured finding with your verdict.\n\n"
-            "Return a JSON object with these fields:\n"
-            "- agent_name (str): 'llm_investigator'\n"
-            "- hypothesis_id (str): the hypothesis ID you're investigating\n"
-            "- verdict (str): 'confirmed' | 'rejected' | 'inconclusive'\n"
-            "- confidence (float): 0.0 to 1.0\n"
-            "- evidence (list): raw data citations [{metric, value, delta, direction}]\n"
-            "- narrative (str): human-readable explanation of your investigation\n"
-            "- adjacent_observations (list of str): unexpected findings\n\n"
-            "CRITICAL: Every finding MUST include at least one evidence item with real "
-            "data values. A finding without evidence is an opinion, not a diagnosis."
-        )
+        """Delegates to harness.prompts."""
+        from harness.prompts import build_dispatch_system_prompt
+        return build_dispatch_system_prompt()
 
     def _build_dispatch_user_prompt(self, hypothesis, understand_result, hypothesize_context):
-        """Build the per-hypothesis user prompt for DISPATCH.
-
-        Includes hypothesis details and UNDERSTAND context so the
-        investigator has the full picture.
-        """
-        hyp_id = hypothesis.get("hypothesis_id", "unknown")
-        archetype = hypothesis.get("archetype", "unknown")
-        confirms_if = hypothesis.get("confirms_if", [])
-        rejects_if = hypothesis.get("rejects_if", [])
-
-        # Direction and severity from UNDERSTAND
-        direction = understand_result.get("direction", "unknown")
-        severity = understand_result.get("severity", "unknown")
-        metric = understand_result.get("metric", "unknown")
-
-        sections = [
-            f"HYPOTHESIS TO INVESTIGATE:",
-            f"ID: {hyp_id}",
-            f"Archetype: {archetype}",
-            f"Confirms if: {', '.join(confirms_if) if confirms_if else 'N/A'}",
-            f"Rejects if: {', '.join(rejects_if) if rejects_if else 'N/A'}",
-            "",
-            f"UNDERSTAND CONTEXT:",
-            f"Metric: {metric}, Direction: {direction}, Severity: {severity}",
-        ]
-
-        if hypothesize_context:
-            sections.append(f"\nHYPOTHESIZE CONTEXT:\n{hypothesize_context}")
-
-        return "\n".join(sections)
+        """Delegates to harness.prompts."""
+        from harness.prompts import build_dispatch_user_prompt
+        return build_dispatch_user_prompt(
+            hypothesis=hypothesis,
+            understand_result=understand_result,
+            hypothesize_context=hypothesize_context,
+        )
 
     def _stage_synthesize(self, dispatch_result, understand_result,
                           hypothesize_result, trace):
@@ -1664,23 +1460,9 @@ class SearchMetricOrchestrator:
         return report
 
     def _normalize_synthesis_report(self, parsed, trace):
-        """Normalize a parsed LLM response into SynthesisReport shape.
-
-        Ensures all required fields exist with safe defaults.
-        """
-        return {
-            "tldr": str(parsed.get("tldr", "")),
-            "confidence_grade": str(parsed.get("confidence_grade", "")),
-            "severity": str(parsed.get("severity", "")),
-            "root_cause": str(parsed.get("root_cause", "")),
-            "dimensional_breakdown": str(parsed.get("dimensional_breakdown", "")),
-            "hypothesis_and_evidence": str(parsed.get("hypothesis_and_evidence", "")),
-            "validation_summary": str(parsed.get("validation_summary", "")),
-            "recommended_actions": parsed.get("recommended_actions", []),
-            "upgrade_condition": str(parsed.get("upgrade_condition", "")),
-            "investigation_id": trace.trace_id,
-            "completeness_warnings": parsed.get("completeness_warnings", []),
-        }
+        """Delegates to harness.prompts."""
+        from harness.prompts import normalize_synthesis_report
+        return normalize_synthesis_report(parsed, trace.trace_id)
 
     def _emit_synthesize_trace(self, report, trace):
         """Emit IC9 Invisible Decision #4: narrative_selection.
@@ -1722,96 +1504,106 @@ class SearchMetricOrchestrator:
         ))
 
     def _build_synthesize_system_prompt(self) -> str:
-        """Build the system prompt for SYNTHESIZE stage.
-
-        Must contain 'final' and 'investigation report' to match the
-        test mock LLM routing.
-        """
-        return (
-            "You are a senior search relevance data scientist writing the final "
-            "investigation report for a metric movement in an Enterprise Search platform.\n\n"
-            "Produce a complete, structured JSON report with these mandatory sections:\n"
-            "1. tldr (str): 3 sentences max summarizing the finding\n"
-            "2. confidence_grade (str): 'High' | 'Medium' | 'Low'\n"
-            "3. severity (str): 'P0' | 'P1' | 'P2' | 'normal'\n"
-            "4. root_cause (str): primary explanation for the metric movement\n"
-            "5. dimensional_breakdown (str): which dimensions drove the movement\n"
-            "6. hypothesis_and_evidence (str): what was investigated and found\n"
-            "7. validation_summary (str): cross-checks and coherence\n\n"
-            "Additional required fields:\n"
-            "- recommended_actions (list): [{action, owner, priority, rationale}]\n"
-            "- upgrade_condition (str): 'Would upgrade to X if Y'\n"
-            "- completeness_warnings (list of str): known gaps (empty if none)\n\n"
-            "STATISTICAL HONESTY RULES:\n"
-            "- Use raw n only, no fake confidence intervals\n"
-            "- Hedge when n < 500\n"
-            "- Never fabricate statistical outputs\n\n"
-            "EFFECT-SIZE PROPORTIONALITY:\n"
-            "- If severity is P0, do NOT use minimizing words (minor, slight, small)\n"
-            "- Language must match severity — P0 is a critical incident"
-        )
+        """Delegates to harness.prompts."""
+        from harness.prompts import build_synthesize_system_prompt
+        return build_synthesize_system_prompt()
 
     def _build_synthesize_user_prompt(self, understand_result, hypothesize_result,
                                        dispatch_result, trace):
-        """Build the user prompt for SYNTHESIZE stage.
-
-        Combines all prior stage outputs into a structured prompt
-        for the LLM to synthesize into a final report.
-        """
-        # Get token-budgeted context from DISPATCH stage
+        """Delegates to harness.prompts."""
+        from harness.prompts import build_synthesize_user_prompt
         dispatch_context = trace.agent_context_for("DISPATCH", max_tokens=1500)
-
-        # Key fields from UNDERSTAND
-        direction = understand_result.get("direction", "unknown")
-        severity = understand_result.get("severity", "unknown")
-        metric = understand_result.get("metric", "unknown")
-
-        # Hypotheses summary
-        hypotheses = hypothesize_result.get("hypotheses", [])
-        hyp_summary = "\n".join([
-            f"  - {h.get('archetype', '?')} (priority {h.get('priority', '?')}): "
-            f"{h.get('hypothesis_id', '?')}"
-            for h in hypotheses
-        ])
-
-        # Findings summary
-        findings = dispatch_result.get("findings", [])
-        findings_summary = "\n".join([
-            f"  - {f.get('hypothesis_id', '?')}: verdict={f.get('verdict', '?')}, "
-            f"confidence={f.get('confidence', '?')}"
-            for f in findings
-        ])
-
-        sections = [
-            f"INVESTIGATION SUMMARY:",
-            f"Metric: {metric}, Direction: {direction}, Severity: {severity}",
-            "",
-            f"HYPOTHESES INVESTIGATED:",
-            hyp_summary,
-            "",
-            f"DISPATCH FINDINGS:",
-            findings_summary,
-            "",
-            f"DISPATCH CONTEXT:",
-            dispatch_context if dispatch_context else "No context available.",
-        ]
-
-        return "\n".join(sections)
+        return build_synthesize_user_prompt(
+            understand_result=understand_result,
+            hypothesize_result=hypothesize_result,
+            dispatch_result=dispatch_result,
+            dispatch_context=dispatch_context,
+        )
 
     def _build_synthesize_retry_prompt(self, original_prompt, violations):
-        """Build the retry prompt for SYNTHESIZE with violation feedback.
+        """Delegates to harness.prompts."""
+        from harness.prompts import build_synthesize_retry_prompt
+        return build_synthesize_retry_prompt(original_prompt, violations)
 
-        Appends the specific violations from the first attempt so the LLM
-        knows exactly what to fix. This is how the LLM "learns" from its
-        mistake within a single investigation.
+    # --- Parallel dispatch (Complex mode) ---
+
+    def _stage_dispatch_parallel(
+        self,
+        hypothesis_set: Dict[str, Any],
+        understand_result: Dict[str, Any],
+        trace,
+    ) -> Dict[str, Any]:
+        """Stage 3 (Complex mode): Parallel hypothesis investigation via DAGExecutor.
+
+        Uses ThreadPoolExecutor to investigate hypotheses concurrently.
+        Each hypothesis gets its own thread with error isolation —
+        one failure produces an inconclusive finding, not a pipeline halt.
+
+        Circuit breaker: if 3+ hypotheses fail, raises StageError with
+        partial findings available in the error details.
         """
-        violation_text = "\n".join([f"  - {v}" for v in violations])
-        return (
-            f"{original_prompt}\n\n"
-            f"IMPORTANT: Your previous response had issues that MUST be fixed:\n"
-            f"{violation_text}\n\n"
-            f"Please regenerate the complete report addressing ALL of the above issues."
+        from harness.dag_executor import DAGExecutor
+
+        hypotheses = hypothesis_set.get("hypotheses", [])
+        if not hypotheses:
+            raise StageError(
+                message="DISPATCH failed: no hypotheses to investigate.",
+                stage="DISPATCH",
+                violations=["Empty hypothesis set — nothing to dispatch"],
+            )
+
+        hypothesize_context = trace.agent_context_for("HYPOTHESIZE", max_tokens=1500)
+
+        # Build context dict for the investigate function
+        dispatch_context = {
+            "understand_result": understand_result,
+            "hypothesize_context": hypothesize_context,
+        }
+
+        # The investigate function wraps _dispatch_via_llm for each hypothesis
+        def investigate_hypothesis(hyp, ctx):
+            return self._dispatch_via_llm(
+                hypothesis=hyp,
+                understand_result=ctx["understand_result"],
+                hypothesize_context=ctx["hypothesize_context"],
+            )
+
+        executor = DAGExecutor(
+            investigate_fn=investigate_hypothesis,
+            config={
+                "max_workers": self._config.get("max_dispatch_workers", 5),
+                "per_agent_timeout": self._config.get("timeout_seconds", 60),
+                "circuit_breaker_threshold": self._config.get("circuit_breaker_threshold", 3),
+            },
         )
+
+        # DAGExecutor raises StageError if circuit breaker trips
+        dag_result = executor.execute(hypotheses, dispatch_context, trace=trace)
+
+        # Build FindingSet from DAG results
+        finding_set = {
+            "findings": dag_result["findings"],
+            "context_construction_trace": (
+                f"Parallel dispatch: {len(dag_result['findings'])} findings, "
+                f"{dag_result['failed_count']} failures"
+            ),
+        }
+
+        # Seam validation (SOFT gate)
+        validation = validate_seam(
+            result=finding_set,
+            stage="DISPATCH",
+            trace=trace,
+        )
+
+        if not validation["passed"]:
+            logger = __import__("logging").getLogger(__name__)
+            logger.warning(
+                "DISPATCH seam validation failed (SOFT gate — continuing): %s",
+                "; ".join(validation["violations"]),
+            )
+
+        return finding_set
 
     # --- Helper methods ---
 
@@ -1925,3 +1717,191 @@ class SearchMetricOrchestrator:
                 directions[key] = "stable"
 
         return directions
+
+    # -------------------------------------------------------------------
+    # run_v2() — Wave 5 agent-aware pipeline
+    # -------------------------------------------------------------------
+
+    def run_v2(
+        self,
+        question: str,
+        rows: list,
+        metric_field: str = "click_quality_value",
+        dimensions: Optional[list] = None,
+        override_mode: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Run the agent-aware investigation pipeline (Wave 5).
+
+        This extends run() with:
+        1. Question parsing — classifies question into structured brief
+        2. Mode selection — routes to Simple/Medium/Complex based on brief
+        3. Registry-aware execution — agents loaded from agents/ directory
+        4. Mode-appropriate dispatch — parallel for Complex (via DAGExecutor, PR C)
+
+        Backward compatibility: run() is unchanged. run_v2() adds the new
+        QUESTION_PARSE stage and mode-aware routing on top. If mode selection
+        picks Medium, the pipeline behaves identically to run().
+
+        Args:
+            question: The investigation question text.
+            rows: List of metric row dicts with 'period' field.
+            metric_field: Which metric column to analyze.
+            dimensions: Dimension columns for decomposition.
+            override_mode: Optional mode override ("simple", "medium", "complex").
+
+        Returns:
+            InvestigationReport dict with additional keys:
+            - question_brief: Parsed question brief
+            - mode_decision: Mode selection decision with confidence
+            All existing run() fields are preserved for Medium/Complex modes.
+        """
+        from harness.question_parser import parse_question
+        from harness.mode_selector import select_mode
+        from contracts.seam_validator import validate_seam, SeamViolation
+
+        # Create trace for this investigation
+        trace = InvestigationTrace(question=question)
+
+        # --- Stage 0: QUESTION_PARSE (deterministic, no LLM) ---
+        question_brief = parse_question(question, trace=trace)
+
+        # Validate the question brief (HARD gate)
+        try:
+            validate_seam(
+                result=question_brief,
+                stage="QUESTION_PARSE",
+                trace=trace,
+            )
+        except SeamViolation as e:
+            return {
+                "status": "blocked",
+                "question": question,
+                "blocked_reason": f"Question parse failed: {'; '.join(e.violations)}",
+                "question_brief": question_brief,
+                "trace": trace.to_dict(),
+            }
+
+        # --- Mode selection ---
+        mode_decision = select_mode(
+            question_brief=question_brief,
+            override_mode=override_mode,
+            trace=trace,
+        )
+        mode = mode_decision["mode"]
+
+        # --- Simple mode: direct knowledge lookup, no pipeline ---
+        if mode == "simple":
+            emit_deterministic_span(
+                trace,
+                tool="harness.orchestrator.SearchMetricOrchestrator.run_v2",
+                decision="mode_execution",
+                value="simple_direct",
+                stage="QUESTION_PARSE",
+                human_summary="Simple mode: direct knowledge lookup, skipping pipeline",
+                agent_context=f"mode=simple, question_type={question_brief.get('question_type')}",
+            )
+            return {
+                "status": "complete",
+                "question": question,
+                "mode": "simple",
+                "question_brief": question_brief,
+                "mode_decision": mode_decision,
+                "stages_completed": ["QUESTION_PARSE"],
+                "trace": trace.to_dict(),
+                # Simple mode has no pipeline output — caller handles lookup
+            }
+
+        # --- Medium/Complex mode: run the full 4-stage pipeline ---
+        # Reuse existing run() logic via internal stage methods.
+        # The only difference for Complex mode is in DISPATCH (PR C adds
+        # parallel execution via DAGExecutor).
+
+        # Stage 1: UNDERSTAND
+        try:
+            understand_result = self._stage_understand(
+                question=question,
+                rows=rows,
+                metric_field=metric_field,
+                dimensions=dimensions,
+                trace=trace,
+            )
+        except SeamViolation as e:
+            blocked_understand = {
+                "question": question, "metric": metric_field,
+                "data_quality_status": "fail", "metric_direction": "unknown",
+                "severity": "blocked", "direction": "unknown",
+                "step_change": None, "co_movement_pattern": {},
+                "mix_shift_result": None, "data_quality_details": None,
+            }
+            report = self._build_blocked_report(
+                understand_result=blocked_understand, trace=trace,
+                reason="; ".join(e.violations),
+            )
+            report["question_brief"] = question_brief
+            report["mode_decision"] = mode_decision
+            return report
+
+        if understand_result.get("data_quality_status") == "fail":
+            report = self._build_blocked_report(
+                understand_result=understand_result, trace=trace,
+                reason=understand_result.get("data_quality_details", {}).get(
+                    "reason", "Data quality check failed"),
+            )
+            report["question_brief"] = question_brief
+            report["mode_decision"] = mode_decision
+            return report
+
+        # Stage 2: HYPOTHESIZE
+        try:
+            hypothesize_result = self._stage_hypothesize(
+                understand_result=understand_result, trace=trace,
+            )
+        except StageError:
+            raise
+
+        # Stage 3: DISPATCH
+        # Complex mode: parallel dispatch via DAGExecutor
+        # Medium mode: sequential dispatch via existing _stage_dispatch
+        if mode == "complex":
+            try:
+                dispatch_result = self._stage_dispatch_parallel(
+                    hypothesis_set=hypothesize_result,
+                    understand_result=understand_result,
+                    trace=trace,
+                )
+            except StageError:
+                raise
+        else:
+            try:
+                dispatch_result = self._stage_dispatch(
+                    hypothesis_set=hypothesize_result,
+                    understand_result=understand_result,
+                    trace=trace,
+                )
+            except StageError:
+                raise
+
+        # Stage 4: SYNTHESIZE
+        synthesis_result = self._stage_synthesize(
+            dispatch_result=dispatch_result,
+            understand_result=understand_result,
+            hypothesize_result=hypothesize_result,
+            trace=trace,
+        )
+
+        return {
+            "status": "complete",
+            "question": question,
+            "mode": mode,
+            "question_brief": question_brief,
+            "mode_decision": mode_decision,
+            "stages_completed": [
+                "QUESTION_PARSE", "UNDERSTAND", "HYPOTHESIZE",
+                "DISPATCH", "SYNTHESIZE",
+            ],
+            "understand_result": understand_result,
+            "hypothesize_result": hypothesize_result,
+            "dispatch_result": dispatch_result,
+            "synthesis": synthesis_result,
+            "trace": trace.to_dict(),
+        }
