@@ -16,7 +16,7 @@ export default function SegmentTable({ title, metricLabel, segments, insightText
             <th className="px-4 py-2 text-left text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Queries</th>
             <th className="px-4 py-2 text-left text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>{metricLabel}</th>
             <th className="px-4 py-2 text-left text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Δ {metricLabel}</th>
-            <th className="px-4 py-2 text-left text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Contribution</th>
+            <th className="px-4 py-2 text-left text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Share of Movement</th>
           </tr>
         </thead>
         <tbody>

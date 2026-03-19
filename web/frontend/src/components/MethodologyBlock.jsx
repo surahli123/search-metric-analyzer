@@ -29,7 +29,7 @@ export default function MethodologyBlock({ dataContext }) {
         style={{ fontFamily: "'Fira Sans', sans-serif" }}
       >
         <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-          Methodology
+          Methodology & Data Sources
         </span>
         {/* Chevron rotates 180° when open — CSS transform is cheaper than swapping icons */}
         <span

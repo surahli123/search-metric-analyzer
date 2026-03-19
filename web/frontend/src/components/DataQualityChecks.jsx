@@ -6,7 +6,11 @@
  * appropriate skepticism) about the input data before they read the results.
  *
  * Think of it like a data pipeline health indicator — each badge is one check
- * (e.g. "Sample Size", "Day-of-Week Match") that either passed or needs attention.
+ * (e.g. "Data integrity", "Coverage") that either passed or needs attention.
+ *
+ * Human-readable label mapping: technical labels from the backend are mapped
+ * to friendlier names for non-technical readers. The technical label is shown
+ * in parentheses for WARN status only (when engineers need to debug).
  *
  * Props:
  *   checks {Array<{label: string, status: 'pass' | 'warn'}>}
@@ -16,10 +20,19 @@
  *
  * Example:
  *   <DataQualityChecks checks={[
- *     { label: 'Sample Size', status: 'pass' },
- *     { label: 'Day-of-Week Match', status: 'warn' }
+ *     { label: 'Logging artifact', status: 'pass' },
+ *     { label: 'Trust gate', status: 'warn' }
  *   ]} />
  */
+
+// Maps technical backend labels to human-readable names.
+// Technical labels are still useful for engineers debugging WARN states.
+const HUMAN_LABELS = {
+  'Logging artifact': 'Data integrity',
+  'Decomposition completeness': 'Coverage',
+  'Trust gate': 'Data quality',
+}
+
 export default function DataQualityChecks({ checks }) {
   return (
     <div className="flex gap-2 flex-wrap">
@@ -27,6 +40,16 @@ export default function DataQualityChecks({ checks }) {
         // Treat any non-'pass' status as a warning — makes the component defensive
         // against unexpected status strings from the backend
         const isPass = check.status === 'pass'
+
+        // Use human-friendly label, fall back to original if no mapping exists
+        const humanLabel = HUMAN_LABELS[check.label] || check.label
+
+        // For WARN status, show the technical label in parentheses so engineers
+        // can quickly identify what system produced the warning
+        const displayLabel = !isPass && HUMAN_LABELS[check.label]
+          ? `${humanLabel} (${check.label})`
+          : humanLabel
+
         return (
           <span
             key={check.label}
@@ -37,8 +60,8 @@ export default function DataQualityChecks({ checks }) {
               border: `1px solid ${isPass ? 'var(--green-border)' : 'var(--amber-border)'}`
             }}
           >
-            {/* Status prefix followed by the check label */}
-            {isPass ? 'PASS' : 'WARN'} {check.label}
+            {/* Status prefix followed by the display label */}
+            {isPass ? 'PASS' : 'WARN'} {displayLabel}
           </span>
         )
       })}
