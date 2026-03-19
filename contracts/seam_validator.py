@@ -10,6 +10,7 @@ The business rules below encode domain-specific invariants that catch bad
 investigations — not just structurally invalid data.
 
 Amendment 1 (Tiered Gates):
+- QUESTION_PARSE: HARD — bad brief = wrong mode = wasted work (Wave 5)
 - UNDERSTAND: HARD — garbage in = stop
 - HYPOTHESIZE: SOFT — 2 hypotheses with a warning beats nothing
 - DISPATCH: SOFT — one bad finding shouldn't kill the investigation
@@ -22,9 +23,16 @@ Amendment 2 (Co-movement consistency):
 Amendment 3 (Mix-shift):
 - rule_mix_shift_considered_when_detected ensures mix-shift hypotheses
   are generated when mix-shift is significant
+
+Wave 5 additions (4 new rules, 11→15 total + QUESTION_PARSE stage):
+- rule_question_brief_valid: validates QuestionBrief from question parser
+- rule_srm_check: experiment arm ratio validation
+- rule_mode_compliance_simple: Simple mode can't have DISPATCH findings
+- rule_report_quality_score: 12-point report quality rubric
 """
 
 import json
+import re
 import sys
 from typing import Any, Callable, Dict, List, Optional, Type
 
@@ -58,11 +66,52 @@ class SeamViolation(Exception):
 
 # Maps stage → gate behavior on failure
 GATE_TIERS = {
+    "QUESTION_PARSE": "hard",   # Bad question brief = wrong mode = wasted work
     "UNDERSTAND": "hard",       # Garbage in = stop
     "HYPOTHESIZE": "soft",      # Something is better than nothing
     "DISPATCH": "soft",         # One bad finding shouldn't kill everything
     "SYNTHESIZE": "retry",      # Missing section = retry once, then soft
 }
+
+
+# =============================================================================
+# QUESTION_PARSE business rules (Wave 5)
+# =============================================================================
+
+VALID_QUESTION_TYPES = {"sev", "experiment", "trend", "deep_dive", "system_understanding", "adhoc"}
+
+
+def rule_question_brief_valid(result: Dict, **kwargs) -> Optional[str]:
+    """HARD CHECK: QuestionBrief must have a valid question_type and metric hints.
+
+    The question parser produces a QuestionBrief that routes investigations
+    to the right mode (Simple/Medium/Complex). If the brief is malformed,
+    mode selection will route incorrectly — garbage in, garbage out.
+
+    Metric hints are required for all non-adhoc question types because
+    the downstream pipeline needs to know which metrics to analyze.
+    Adhoc questions (e.g., "what tables have QSR data?") are lookups
+    that don't necessarily reference a specific metric.
+    """
+    question_type = result.get("question_type")
+    if question_type not in VALID_QUESTION_TYPES:
+        return (
+            f"question_type '{question_type}' is invalid — "
+            f"must be one of {sorted(VALID_QUESTION_TYPES)}. "
+            f"Re-parse the question with a valid classification."
+        )
+
+    # Metric hints required for non-adhoc types
+    # (adhoc questions like "what tables exist" don't need metric references)
+    metric_hints = result.get("metric_hints", [])
+    if question_type != "adhoc" and not metric_hints:
+        return (
+            f"question_type is '{question_type}' but metric_hints is empty — "
+            f"non-adhoc questions must reference at least one metric. "
+            f"Re-parse to extract metric names from the question text."
+        )
+
+    return None
 
 
 # =============================================================================
@@ -277,6 +326,41 @@ def rule_narrative_data_coherence(result: Dict, **kwargs) -> Optional[str]:
     return None
 
 
+def rule_srm_check(result: Dict, **kwargs) -> Optional[str]:
+    """Wave 5 SOFT CHECK: Experiment investigations must validate arm ratio balance.
+
+    SRM (Sample Ratio Mismatch) is when experiment arm sizes deviate from
+    the expected ratio. A 50/50 experiment with 55/45 actual split means
+    the randomization failed — any conclusions are unreliable.
+
+    This only fires for experiment-type investigations (passed via kwargs).
+    The 1% tolerance matches industry standard (Google, LinkedIn, Airbnb
+    all use similar thresholds for SRM detection).
+    """
+    question_type = kwargs.get("question_type")
+    if question_type != "experiment":
+        return None  # Only applies to experiment investigations
+
+    # Look for SRM data in the findings
+    for finding in result.get("findings", []):
+        srm_data = finding.get("srm_check")
+        if srm_data:
+            expected_ratio = srm_data.get("expected_ratio", 0.5)
+            actual_ratio = srm_data.get("actual_ratio")
+            if actual_ratio is not None:
+                deviation = abs(actual_ratio - expected_ratio)
+                # 1% tolerance — standard threshold for SRM detection
+                # Use > 0.01 + epsilon to handle floating point imprecision
+                if deviation > 0.0100001:
+                    return (
+                        f"SRM detected: expected arm ratio {expected_ratio:.2%}, "
+                        f"actual {actual_ratio:.2%} (deviation {deviation:.2%} > 1% threshold). "
+                        f"Experiment randomization may have failed — results are unreliable. "
+                        f"Investigate randomization logic before drawing conclusions."
+                    )
+    return None
+
+
 # =============================================================================
 # SYNTHESIZE business rules
 # =============================================================================
@@ -308,8 +392,6 @@ def rule_effect_size_proportionality(result: Dict, **kwargs) -> Optional[str]:
     Uses word-boundary matching (\\b) to avoid false positives on words
     like "smaller", "minority", "smallest" — which are not minimizing.
     """
-    import re
-
     if result.get("severity") == "P0":
         minimizing_words = {"minor", "slight", "small", "marginal", "negligible", "trivial"}
         # Check tldr and root_cause — the most visible sections
@@ -339,9 +421,142 @@ def rule_upgrade_condition_stated(result: Dict, **kwargs) -> Optional[str]:
     return None
 
 
+def rule_mode_compliance_simple(result: Dict, **kwargs) -> Optional[str]:
+    """Wave 5 SOFT CHECK: Simple-mode reports must not contain DISPATCH findings.
+
+    Simple mode is for direct knowledge lookups ("what's the CQ formula?").
+    If a simple-mode report contains investigation findings, it means the
+    question was misclassified — it should have been Medium or Complex.
+
+    This catches mode selection errors early, before the user sees a
+    report that's either over-engineered (Simple question got full pipeline)
+    or under-investigated (Complex question got Simple treatment).
+    """
+    mode = kwargs.get("mode")
+    if mode != "simple":
+        return None  # Only applies to simple mode
+
+    # Simple mode should NOT have findings from DISPATCH
+    findings = result.get("dispatch_findings", [])
+    if findings:
+        return (
+            f"Simple-mode report contains {len(findings)} DISPATCH findings — "
+            f"simple questions should be answered from knowledge alone, "
+            f"not through hypothesis investigation. Either the question was "
+            f"misclassified (should be Medium/Complex) or the pipeline "
+            f"over-investigated. Review mode selection logic."
+        )
+    return None
+
+
+# Quality score rubric weights — each criterion is worth 0-3 points
+# Total possible: 12 (4 criteria × 3 points each)
+REPORT_QUALITY_CRITERIA = {
+    "tldr_length": 3,          # TL;DR between 1-5 sentences
+    "evidence_cited": 3,       # At least one evidence reference
+    "no_hedge_words": 3,       # No weasel words in conclusions
+    "actionable_next_steps": 3, # At least one recommended action
+}
+REPORT_QUALITY_THRESHOLD = 6  # Minimum passing score (50%)
+
+# Hedge words that weaken conclusions — these indicate the LLM is hedging
+# instead of stating findings directly. Common LLM failure mode.
+HEDGE_WORDS = {
+    "it appears", "might suggest", "potentially", "it seems",
+    "could possibly", "may indicate", "it is possible",
+}
+
+
+def rule_report_quality_score(result: Dict, **kwargs) -> Optional[str]:
+    """Wave 5 SOFT CHECK: Reports must meet a minimum quality score (0-12 scale).
+
+    Scoring rubric (each criterion 0-3 points):
+    1. tldr_length: TL;DR exists and is 1-5 sentences (not empty, not a wall of text)
+    2. evidence_cited: Report references specific data values or evidence
+    3. no_hedge_words: Conclusions don't use weasel words (appears, might, possibly)
+    4. actionable_next_steps: At least one recommended action exists
+
+    Threshold: 6/12 (50%). This is deliberately lenient because:
+    - We're adding this gate to catch obviously bad reports, not perfect ones
+    - The SYNTHESIZE retry mechanism already handles most quality issues
+    - A too-strict threshold would cause excessive retries
+
+    Why these 4 criteria? They're the cheapest to check mechanically and
+    catch the most common LLM failure modes: empty reports, evidence-free
+    conclusions, hedge-word soup, and missing action items.
+    """
+    score = 0
+    issues = []
+
+    # --- Criterion 1: TL;DR length (0-3) ---
+    tldr = result.get("tldr", "")
+    if tldr:
+        # Count sentences (rough heuristic: split on period + space)
+        sentences = [s.strip() for s in tldr.split(". ") if s.strip()]
+        if 1 <= len(sentences) <= 5:
+            score += 3  # Perfect: concise summary
+        elif len(sentences) > 5:
+            score += 1  # Too verbose — penalize but don't zero out
+            issues.append("tldr too long (>5 sentences)")
+        else:
+            score += 2  # Edge case: one long sentence
+    else:
+        issues.append("tldr is empty")
+
+    # --- Criterion 2: Evidence cited (0-3) ---
+    # Check if the report references specific data (numbers, percentages)
+    evidence_fields = ["root_cause", "hypothesis_and_evidence", "dimensional_breakdown"]
+    has_evidence = False
+    for field in evidence_fields:
+        text = result.get(field, "")
+        # Look for numeric patterns that indicate real data (e.g., "3.2%", "-2.1pp")
+        if re.search(r'\d+\.?\d*[%p]', text):
+            has_evidence = True
+            break
+    if has_evidence:
+        score += 3
+    else:
+        issues.append("no numeric evidence cited in report body")
+
+    # --- Criterion 3: No hedge words in conclusions (0-3) ---
+    # Check tldr and root_cause — the most authoritative sections
+    conclusion_text = f"{result.get('tldr', '')} {result.get('root_cause', '')}".lower()
+    found_hedges = [hw for hw in HEDGE_WORDS if hw in conclusion_text]
+    if not found_hedges:
+        score += 3
+    elif len(found_hedges) <= 1:
+        score += 1  # One hedge word — minor deduction
+        issues.append(f"hedge word found: '{found_hedges[0]}'")
+    else:
+        issues.append(f"multiple hedge words: {', '.join(found_hedges[:3])}")
+
+    # --- Criterion 4: Actionable next steps (0-3) ---
+    actions = result.get("recommended_actions", [])
+    if actions and len(actions) >= 1:
+        score += 3
+    else:
+        issues.append("no recommended_actions provided")
+
+    # --- Apply threshold ---
+    if score < REPORT_QUALITY_THRESHOLD:
+        issue_str = "; ".join(issues) if issues else "general quality concerns"
+        return (
+            f"Report quality score {score}/12 is below threshold {REPORT_QUALITY_THRESHOLD}/12. "
+            f"Issues: {issue_str}. "
+            f"Improve the report: ensure tldr is 1-5 sentences, cite specific data values, "
+            f"remove hedge words from conclusions, and add at least one recommended action."
+        )
+    return None
+
+
 # =============================================================================
 # Rule registry — maps stages to their business rules
 # =============================================================================
+
+# Wave 5: QUESTION_PARSE stage (new — runs before UNDERSTAND)
+QUESTION_PARSE_RULES: List[Callable] = [
+    rule_question_brief_valid,
+]
 
 UNDERSTAND_RULES: List[Callable] = [
     rule_data_quality_not_failed,
@@ -360,16 +575,20 @@ HYPOTHESIZE_RULES: List[Callable] = [
 DISPATCH_RULES: List[Callable] = [
     rule_each_finding_has_evidence,
     rule_narrative_data_coherence,
+    rule_srm_check,  # Wave 5: experiment arm ratio validation
 ]
 
 SYNTHESIZE_RULES: List[Callable] = [
     rule_all_mandatory_sections_present,
     rule_effect_size_proportionality,
     rule_upgrade_condition_stated,
+    rule_mode_compliance_simple,   # Wave 5: simple mode can't have DISPATCH findings
+    rule_report_quality_score,     # Wave 5: 12-point report quality rubric
 ]
 
 # Convenient lookup
 STAGE_RULES: Dict[str, List[Callable]] = {
+    "QUESTION_PARSE": QUESTION_PARSE_RULES,
     "UNDERSTAND": UNDERSTAND_RULES,
     "HYPOTHESIZE": HYPOTHESIZE_RULES,
     "DISPATCH": DISPATCH_RULES,
@@ -401,7 +620,7 @@ def validate_seam(
 
     Args:
         result: The stage output dict to validate
-        stage: "UNDERSTAND" | "HYPOTHESIZE" | "DISPATCH" | "SYNTHESIZE"
+        stage: "QUESTION_PARSE" | "UNDERSTAND" | "HYPOTHESIZE" | "DISPATCH" | "SYNTHESIZE"
         trace: Optional InvestigationTrace to emit seam spans to
         business_rules: Override rules (default: STAGE_RULES[stage])
         **kwargs: Additional context passed to rules (e.g., understand_result)
@@ -434,6 +653,7 @@ def validate_seam(
     if trace is not None:
         # Determine schema name from stage
         schema_map = {
+            "QUESTION_PARSE": "QuestionBrief",
             "UNDERSTAND": "UnderstandResult",
             "HYPOTHESIZE": "HypothesisSet",
             "DISPATCH": "FindingSet",
@@ -483,7 +703,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="Validate a stage seam contract")
     parser.add_argument("--stage", required=True,
-                       choices=["understand", "hypothesize", "dispatch", "synthesize"])
+                       choices=["question_parse", "understand", "hypothesize", "dispatch", "synthesize"])
     parser.add_argument("--input", required=True, help="Path to stage output JSON")
     parser.add_argument("--understand-input", default=None,
                        help="Path to UNDERSTAND output (needed for HYPOTHESIZE cross-checks)")
@@ -532,6 +752,7 @@ def _remediation_hint(stage: str, violations: List[str]) -> str:
     rather than just seeing a generic error.
     """
     hints = {
+        "QUESTION_PARSE": "Question parsing failed. Check that the question type is valid and metric hints are provided for non-adhoc questions.",
         "UNDERSTAND": "Data quality issues detected. Check the input data for missing values, outliers, or insufficient history.",
         "HYPOTHESIZE": "Hypothesis generation did not meet requirements. Ensure at least 3 hypotheses with confirms_if criteria, including one contrarian.",
         "DISPATCH": "Sub-agent findings have issues. Ensure each finding has evidence data (not just narrative) and that narrative matches evidence direction.",
