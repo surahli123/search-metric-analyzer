@@ -1,5 +1,9 @@
 // Footer.jsx — persistent footer strip with verdict badge + summary + metadata.
 //
+// STATUS: Currently unused in the 3-tab redesign (2026-03-18). Kept for Phase 2
+// when the Investigate tab may need a verdict echo after streaming results.
+// If still unused after Phase 2, delete this file.
+//
 // WHY a footer: the verdict from VerdictStrip is at the top; the footer echoes it
 // at the bottom so users who scrolled through the full report can see the conclusion
 // without scrolling back up. This is a common pattern in long-form reports.

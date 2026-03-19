@@ -32,8 +32,9 @@ export default function InvestigateTab({ scenario, scenarioKey, onScenarioChange
   const { diagnosis, narrative, data_context, sql_queries, display } = scenario
 
   return (
-    // Full-height flex column: results scroll, input sticks at bottom
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 100px)' }}>
+    // Full-height flex column: results scroll, input sticks at bottom.
+    // flex-1 inherits height from parent (App.jsx uses min-h-screen flex flex-col).
+    <div className="flex-1 flex flex-col overflow-hidden">
 
       {/* Scrollable results area */}
       <div className="flex-1 overflow-y-auto">

@@ -49,6 +49,8 @@ export default function SegmentTable({ title, metricLabel, segments, insightText
         </tbody>
       </table>
       <div className="px-4 py-3 text-xs border-t" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', fontFamily: "'Fira Sans', sans-serif" }}>
+        {/* dangerouslySetInnerHTML is intentional — insightText comes from fixture data
+            (controlled static JSON), not user input. Phase 2: add sanitization. */}
         <div dangerouslySetInnerHTML={{ __html: insightText }} />
         {mixShift?.mix_shift_contribution_pct >= 30 && (
           <div className="mt-2 px-2 py-1 rounded text-xs" style={{ background: 'var(--amber-bg)', color: 'var(--amber)' }}>

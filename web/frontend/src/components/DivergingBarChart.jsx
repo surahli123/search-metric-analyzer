@@ -79,6 +79,10 @@ export default function DivergingBarChart({ bars, insightHtml, isPositive }) {
             )
           })}
         </div>
+        {/* dangerouslySetInnerHTML is intentional — insightHtml comes from fixture data
+            (controlled static JSON), not user input. When the live backend is wired up,
+            the FastAPI layer must sanitize LLM output before it reaches this component.
+            TODO Phase 2: add HTML sanitization middleware. */}
         {insightHtml && (
           <div className="px-4 py-3 text-xs border-t" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', fontFamily: "'Fira Sans', sans-serif" }} dangerouslySetInnerHTML={{ __html: insightHtml }} />
         )}
