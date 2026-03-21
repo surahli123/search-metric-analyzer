@@ -1,0 +1,78 @@
+# eval/scoring_specs/case7_synthesize_compliance.yaml
+# Case 7: S8b — SYNTHESIZE stage contract compliance
+# Archetype: synthesize_compliance
+# Reuses S4 data (ranking regression) with inverted weights focused on report quality.
+# WHY: S4's case1 tests root cause accuracy. S8b tests whether the report itself
+# meets all SYNTHESIZE contract requirements (mandatory sections, active voice,
+# action owners, severity-language proportionality, upgrade conditions).
+# Pass criteria: 2/3 GREEN
+
+case:
+  name: "SYNTHESIZE compliance check"
+  scenario: "S4"
+  archetype: "synthesize_compliance"
+  purpose: "Does the report meet all SYNTHESIZE contract requirements?"
+  pass_threshold: "2/3 GREEN"
+
+rubric:
+  root_cause_accuracy:
+    weight: 15
+    criteria:
+      - description: "Identifies a plausible root cause (any valid hypothesis)"
+        points: 10
+      - description: "Notes dimensional localization (which segment is affected)"
+        points: 5
+
+  confidence_calibration:
+    weight: 15
+    criteria:
+      - description: "Confidence level is stated explicitly"
+        points: 8
+      - description: "Provides what-would-downgrade condition"
+        points: 7
+
+  investigation_completeness:
+    weight: 20
+    criteria:
+      - description: "Decomposes by tenant_tier dimension"
+        points: 8
+      - description: "Mix-shift analysis performed"
+        points: 6
+      - description: "Runs all 4 validation checks"
+        points: 6
+
+  actionability:
+    weight: 50
+    criteria:
+      - description: "TL;DR is present and 1-5 sentences with no hedge words"
+        points: 15
+      - description: "Root cause description uses active voice, not passive"
+        points: 10
+      - description: "Each action item has an owner (team or role)"
+        points: 10
+      - description: "States upgrade condition with specific criteria"
+        points: 8
+      - description: "Severity language matches classification (P0 = no minimizing words)"
+        points: 7
+
+must_find:
+  root_cause: "Ranking model change degraded Standard tier queries"
+  semantic_match: true
+
+must_check_dimensions:
+  - tenant_tier
+
+must_not_do:
+  - hedge_excessively: "Report should be definitive, not hedging"
+  - missing_tldr: "TL;DR is mandatory in every report"
+
+output_quality:
+  has_tldr: true
+  confidence_stated: true
+  confidence_level: "High"
+  actionable_recommendation: true
+  no_anti_patterns: true
+
+scoring:
+  pass: 60
+  green: 80

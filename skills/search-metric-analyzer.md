@@ -1,7 +1,8 @@
 ---
 name: search-metric-analyzer
 description: >
-  Diagnose Enterprise Search metric movements using a 4-step workflow.
+  Diagnose Enterprise Search metric movements using a 4-step workflow with
+  contract enforcement at each stage boundary (17 business rules).
   Use when an Eng Lead or DS reports a metric drop/spike (Click Quality, Search Quality Success, AI Answer, etc.).
   Orchestrates Python analysis tools and domain knowledge to produce
   actionable Slack messages and short reports with confidence levels.
@@ -26,6 +27,8 @@ Before starting, confirm these resources are available:
   - `core/anomaly.py` -- data quality gate, step-change detection, co-movement matching, baseline comparison
   - `core/diagnose.py` -- 4 validation checks + confidence scoring
   - `core/formatter.py` -- Slack message + short report generation
+- **Contract enforcement** (seam validator CLI):
+  - `python3 -m contracts.seam_validator --stage {stage} --input {json_file}` -- validates stage output against 17 business rules
 - **Knowledge files** (domain-encoded YAML):
   - `data/knowledge/metric_definitions.yaml` -- metric formulas, relationships, baselines, co-movement diagnostic table
   - `data/knowledge/historical_patterns.yaml` -- seasonal patterns, past incidents, diagnostic shortcuts
@@ -36,18 +39,42 @@ Before starting, confirm these resources are available:
   - `templates/slack_message.md` -- Slack message structure
   - `templates/short_report.md` -- 1-page report structure
 
+## Contract Enforcement
+
+Each step has a **seam validation gate** that checks the step's output against
+business rules. This ensures Mode A (skill file) gets the same enforcement
+that Mode B (Python orchestrator) already has.
+
+**How it works:**
+1. After each step, save the output as a JSON file to `/tmp/`
+2. Run: `python3 -m contracts.seam_validator --stage {stage} --input /tmp/{stage}_out.json`
+3. Read the JSON result: `{"passed": bool, "stage": str, "tier": str, "violations": [...], "checks": {...}}`
+
+**Gate tiers** (how to handle failures):
+
+| Stage | Gate | On Failure |
+|-------|------|-----------|
+| UNDERSTAND (Step 1) | HARD | **STOP.** Report the validation error. Do not proceed. |
+| HYPOTHESIZE (Step 2) | SOFT | Note the warnings in output. Continue to Step 3. |
+| DISPATCH (Step 3) | SOFT | Note the warnings in output. Continue to Step 4. |
+| SYNTHESIZE (Step 4) | RETRY(1) | Fix the violations, re-save, re-validate. If still failing, note as warning. |
+
 ## Operating Modes
 
-Ask the user which mode they want. Default to **Standard** if not specified.
+Determine the mode from the user's question. Default to **Medium** if not specified.
 
-| Aspect | Quick Mode | Standard Mode |
-|--------|-----------|---------------|
-| Steps | Steps 1 + simplified 2 + 4 | All 4 steps |
-| Decomposition | Top-level dimensions only | Full dimensional + mix-shift |
-| Hypothesis depth | Top 2 hypotheses, linear | Full 7-priority ordering |
-| Validation checks | Data quality gate only | All 4 checks |
-| Output | TL;DR + Slack only | TL;DR + Slack + report + checklist |
-| Use case | "Is this worth investigating?" | "What happened and what should we do?" |
+| Aspect | Simple | Medium | Complex |
+|--------|--------|--------|---------|
+| Pipeline | Knowledge lookup only | Sequential 4-stage | Parallel hypothesis investigation |
+| Seam checks | None (no pipeline) | All 4 gates | All 4 gates |
+| Hypothesis depth | N/A | Full 7-priority ordering | Full ordering + parallel investigation |
+| Output | Direct answer | TL;DR + Slack + report + checklist | Same as Medium |
+| Use case | "What's the CQ formula?" | "Why did Click Quality drop?" | Multi-metric, ambiguous co-movement |
+
+**Mode routing:**
+- **Simple:** Definitional questions, formula lookups, threshold queries, "what is X?" → look up in knowledge files and respond directly. Skip the 4-step pipeline.
+- **Medium:** Single-metric investigations, clear signals, standard "why did X drop?" → run all 4 steps sequentially.
+- **Complex:** Multi-metric movements, ambiguous co-movement, >3 hypotheses worth investigating in parallel → run all 4 steps, investigate hypotheses in parallel at Step 3.
 
 ---
 
@@ -61,7 +88,7 @@ Extract from the user's description:
 - **Metric name** (e.g., Click Quality, Search Quality Success, AI trigger rate)
 - **Time period** (e.g., WoW, MoM, specific date range)
 - **Data file** path (CSV provided by the user)
-- **Operating mode** (Quick or Standard; default Standard)
+- **Operating mode** (Simple, Medium, or Complex; default Medium)
 
 If any input is missing, ask the user explicitly. Do not guess.
 
@@ -142,6 +169,29 @@ Report to the user:
 - **Data quality status:** pass / warn / fail
 - **Initial hypotheses** from domain context
 
+### 1g. UNDERSTAND Seam Validation
+
+Save the Step 1 output as JSON to `/tmp/understand_out.json`:
+
+```json
+{
+  "data_quality_status": "<pass|warn|fail>",
+  "metric_direction": "<up|down|stable>",
+  "relative_delta_pct": 0.0,
+  "severity": "<P0|P1|P2|normal>",
+  "co_movement_pattern": {"likely_cause": "...", "is_positive": false},
+  "mix_shift_result": {"mix_shift_contribution_pct": 0.0}
+}
+```
+
+Run the seam validator:
+
+```bash
+python3 -m contracts.seam_validator --stage understand --input /tmp/understand_out.json
+```
+
+**HARD gate:** If `passed=false`, STOP the investigation. Report the validation error to the user. The most common failure is `data_quality_status=fail` or missing `metric_direction`.
+
 ---
 
 ## Step 2: DECOMPOSE & INVESTIGATE
@@ -186,15 +236,18 @@ it reflects decades of Enterprise Search debugging experience:
 6. **Seasonal/External pattern** -- calendar effects, industry cycles
 7. **User behavior shift** -- null hypothesis, check LAST, accept only after ruling out engineering causes
 
-For each hypothesis, check its expected data signature against the decomposition results.
-Reference `data/knowledge/metric_definitions.yaml` for expected patterns.
-Consult `data/knowledge/search_pipeline_knowledge.yaml` failure modes and causal chains to
-identify which pipeline component could explain the observed pattern.
-For cost-related hypotheses, check `data/knowledge/architecture_tradeoffs.yaml` to distinguish
-intentional cost optimization tradeoffs from unintended regressions.
+For each hypothesis, specify:
+- `confirms_if` -- what evidence would confirm this hypothesis
+- `expected_magnitude` -- expected size of effect
+- `is_contrarian` -- at least one hypothesis must be contrarian (challenges the obvious interpretation)
 
-**Quick mode:** Stop after investigating the top 2 hypotheses. Skip to Step 4.
-**Standard mode:** Investigate all hypotheses. Use the evidence to rank them.
+Reference `data/knowledge/metric_definitions.yaml` for expected patterns.
+Consult `data/knowledge/search_pipeline_knowledge.yaml` failure modes and causal chains.
+For cost-related hypotheses, check `data/knowledge/architecture_tradeoffs.yaml`.
+
+**Simple mode:** Skip this step entirely.
+**Medium mode:** Investigate all hypotheses sequentially. Use the evidence to rank them.
+**Complex mode:** Investigate hypotheses in parallel (multiple sub-investigations).
 
 ### 2d. Evidence Ranking
 
@@ -206,15 +259,64 @@ Rank hypotheses by evidence strength:
 Check for multi-cause overlap: can the movement be explained by multiple
 simultaneous causes? (Common in Enterprise Search -- e.g., AI rollout + tenant churn.)
 
+### 2e. HYPOTHESIZE Seam Validation
+
+Save the hypothesis list as JSON to `/tmp/hypothesize_out.json`:
+
+```json
+{
+  "hypotheses": [
+    {
+      "hypothesis_id": "hyp_001",
+      "archetype": "<category>",
+      "description": "<text>",
+      "confirms_if": "<criteria>",
+      "expected_magnitude": "<range>",
+      "is_contrarian": false
+    }
+  ]
+}
+```
+
+Run the seam validator with cross-stage reference to UNDERSTAND:
+
+```bash
+python3 -m contracts.seam_validator --stage hypothesize --input /tmp/hypothesize_out.json --understand-input /tmp/understand_out.json
+```
+
+**SOFT gate:** If `passed=false`, note the violations as warnings. Common violations:
+- Fewer than 3 hypotheses (add more)
+- No contrarian hypothesis (add one)
+- Missing `confirms_if` or `expected_magnitude`
+- Hypotheses inconsistent with co-movement pattern (e.g., flagging AI adoption as regression)
+- Mix-shift > 25% but no mix-shift hypothesis
+
+Continue to Step 3 regardless.
+
 ---
 
 ## Step 3: VALIDATE
 
 **Goal:** Run 4 mandatory validation checks on the diagnosis. Assign confidence.
 
-**Quick mode:** Skip this step (only data quality gate from Step 1 applies).
+**Simple mode:** Skip this step entirely.
 
-### 3a. Run Validation Checks
+### 3a. Investigation Context
+
+Before running validation, compile the **investigation context** from Steps 1-2.
+This context grounds the validation in prior findings:
+
+- **Metric:** {metric_name} moved {direction} by {magnitude}%
+- **Severity:** {P0/P1/P2/normal}
+- **Co-movement pattern:** {pattern_name} — {likely_cause}
+- **Mix-shift:** {pct}% compositional change
+- **Data quality:** {status}
+- **Top hypotheses:** {ranked list with confirms_if criteria}
+- **Seam warnings:** {any violations from Steps 1-2}
+
+Pass this context when investigating each hypothesis in the validation checks.
+
+### 3b. Run Validation Checks
 
 Use the decomposition output (save as JSON first) as input to diagnose.py:
 
@@ -231,7 +333,7 @@ This runs all 4 checks automatically:
 | 3 | **Temporal Consistency** | Proposed cause precedes metric change | HALT if violated -- revise hypothesis |
 | 4 | **Mix-Shift Detection** | >= 30% from composition change | INVESTIGATE -- flag but do not halt |
 
-### 3b. Step-Change Detection
+### 3c. Step-Change Detection
 
 If you suspect a logging artifact, run step-change detection separately:
 
@@ -257,7 +359,7 @@ Contract reminders:
 - In overlap scenarios like `S7`, expect `insufficient_evidence` unless overlap is resolved.
 - In trust-gate-fail scenarios like `S8`, expect `blocked_by_data_quality` and stop definitive attribution.
 
-### 3c. Confidence Assignment
+### 3e. Confidence Assignment
 
 The diagnose tool computes confidence from the `confidence` section of its output:
 
@@ -267,13 +369,55 @@ The diagnose tool computes confidence from the `confidence` section of its outpu
 
 Always state: "Would upgrade to {level} if {specific condition}."
 
+### 3f. DISPATCH Seam Validation
+
+Save the investigation findings as JSON to `/tmp/dispatch_out.json`:
+
+```json
+{
+  "findings": [
+    {
+      "agent_name": "<investigator_name>",
+      "hypothesis_id": "hyp_001",
+      "evidence": [{"metric": "<name>", "value": 0.0, "direction": "<up|down|stable>"}],
+      "narrative": "<finding description>"
+    }
+  ]
+}
+```
+
+Run the seam validator:
+
+```bash
+python3 -m contracts.seam_validator --stage dispatch --input /tmp/dispatch_out.json
+```
+
+**SOFT gate:** If `passed=false`, note warnings. Common violations:
+- Finding without evidence data (narrative only, no numbers)
+- Narrative direction contradicts evidence direction
+
+Continue to Step 4 regardless.
+
 ---
 
 ## Step 4: SYNTHESIZE & FORMAT
 
 **Goal:** Generate actionable output in the correct format.
 
-### 4a. Generate Formatted Output
+### 4a. Compile Investigation Trace
+
+Before generating the final report, compile the **full investigation trace** from Steps 1-3:
+
+- **UNDERSTAND decisions:** metric direction, severity classification, co-movement pattern, mix-shift contribution
+- **HYPOTHESIZE decisions:** which hypotheses generated, which excluded and why, contrarian hypothesis included?
+- **DISPATCH findings:** evidence summary per hypothesis, confidence per finding, decision status
+- **Seam validation results:** any warnings or violations from Steps 1-3
+
+Include this trace summary in your SYNTHESIZE reasoning. The final report must be
+grounded in the investigation data — do not generate conclusions independently of
+the evidence collected in prior steps.
+
+### 4b. Generate Formatted Output
 
 ```bash
 python3 core/formatter.py --input {diagnosis_result_json}
@@ -281,7 +425,7 @@ python3 core/formatter.py --input {diagnosis_result_json}
 
 This produces both `slack_message` and `short_report` in a single JSON output.
 
-### 4b. Review and Enhance Output
+### 4c. Review and Enhance Output
 
 Before presenting to the user, verify the output follows these rules:
 
@@ -300,19 +444,54 @@ Before presenting to the user, verify the output follows these rules:
 - **Orphaned recommendation:** "Further investigation needed" with no owner, no specific next step. Every action needs a who and a what.
 - **Passive voice root cause:** "The metric was impacted by changes" -- use active voice: "Ranking model regression in Standard tier caused the Click Quality drop."
 
-### 4c. Quick Mode Output
+### 4d. SYNTHESIZE Seam Validation
 
-For Quick mode, produce ONLY:
-- TL;DR (3 sentences)
-- Slack message (5-8 lines)
+Save the formatted report as JSON to `/tmp/synthesize_out.json`:
 
-### 4d. Standard Mode Output
+```json
+{
+  "tldr": "<1-5 sentences>",
+  "confidence_grade": "<High|Medium|Low>",
+  "severity": "<P0|P1|P2|normal>",
+  "root_cause": "<active voice description>",
+  "dimensional_breakdown": "<segment analysis>",
+  "hypothesis_and_evidence": "<ranked hypotheses with evidence>",
+  "validation_summary": "<4-check results>",
+  "upgrade_condition": "<what would change confidence>",
+  "recommended_actions": ["<action with owner>"]
+}
+```
 
-For Standard mode, produce ALL of:
+Run the seam validator:
+
+```bash
+python3 -m contracts.seam_validator --stage synthesize --input /tmp/synthesize_out.json
+```
+
+**RETRY gate:** If `passed=false`:
+1. Read the violations from the JSON output
+2. Fix each violation (add missing sections, adjust language for severity, add upgrade condition)
+3. Re-save `/tmp/synthesize_out.json` and re-run validation
+4. If still failing after one retry: note as warning and proceed (soft fallback)
+
+Common violations:
+- Missing mandatory section (all 7 must be non-empty)
+- P0 severity with minimizing language ("minor", "slight", "small")
+- Missing upgrade condition
+
+### 4e. Mode-Specific Output
+
+**Simple mode:** Direct answer from knowledge files. No formatted output.
+
+**Medium mode:** Produce ALL of:
 - TL;DR (3 sentences)
 - Slack message (5-8 lines)
 - Short report (1 page with all 7 sections)
 - Investigation checklist (manual follow-ups for smart handoff)
+
+**Complex mode:** Same as Medium, plus:
+- Parallel investigation summary (which hypotheses were investigated simultaneously)
+- Cross-hypothesis comparison table
 
 ---
 

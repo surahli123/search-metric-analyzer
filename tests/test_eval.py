@@ -32,6 +32,7 @@ ALL_CASE_FILES = [
     "case4_mix_shift.yaml",
     "case5_false_alarm.yaml",
     "case6_data_quality_gate.yaml",
+    "case7_synthesize_compliance.yaml",
 ]
 
 
@@ -98,8 +99,17 @@ class TestScoringSpecStructure:
         assert total_weight == 100, f"Rubric weights sum to {total_weight}, expected 100"
 
     def test_rubric_weights_match_design(self, spec):
-        """Verify the co-designed rubric weights: 40/25/20/15."""
+        """Verify the co-designed rubric weights: 40/25/20/15.
+
+        S8b (synthesize_compliance) intentionally inverts weights to focus on
+        report quality — it uses 15/15/20/50 instead of 40/25/20/15.
+        """
         rubric = spec["rubric"]
+        archetype = spec.get("case", {}).get("archetype", "")
+        if archetype == "synthesize_compliance":
+            # S8b has inverted weights: actionability=50, root_cause=15
+            assert rubric["actionability"]["weight"] >= 40
+            return
         assert rubric["root_cause_accuracy"]["weight"] == 40
         assert rubric["confidence_calibration"]["weight"] == 25
         assert rubric["investigation_completeness"]["weight"] == 20
@@ -876,3 +886,34 @@ class TestStressSpikeFlag:
         )
         args = run_stress_test.parse_args()
         assert args.enable_connector_spike is True
+
+
+# ──────────────────────────────────────────────────
+# Test Group: S8b (SYNTHESIZE Compliance) Scoring Spec
+# ──────────────────────────────────────────────────
+
+class TestCase7SynthesizeCompliance:
+    """Verify the S8b scoring spec focuses on SYNTHESIZE quality."""
+
+    @pytest.fixture
+    def spec(self):
+        spec_path = SPECS_DIR / "case7_synthesize_compliance.yaml"
+        with open(spec_path) as f:
+            return yaml.safe_load(f)
+
+    def test_archetype_is_synthesize_compliance(self, spec):
+        """S8b must have the synthesize_compliance archetype."""
+        assert spec["case"]["archetype"] == "synthesize_compliance"
+
+    def test_actionability_is_heaviest_weight(self, spec):
+        """S8b inverts weights: actionability (report quality) >= 40 points."""
+        assert spec["rubric"]["actionability"]["weight"] >= 40
+
+    def test_reuses_s4_data(self, spec):
+        """S8b shares data with S4 — same pipeline, different scoring lens."""
+        assert spec["case"]["scenario"] == "S4"
+
+    def test_rubric_weights_sum_to_100(self, spec):
+        """All rubric dimension weights must sum to exactly 100."""
+        total = sum(dim["weight"] for dim in spec["rubric"].values())
+        assert total == 100, f"Rubric weights sum to {total}, expected 100"
