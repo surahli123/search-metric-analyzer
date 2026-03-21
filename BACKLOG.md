@@ -1,6 +1,6 @@
 # Backlog — Search Metric Analyzer v2.0 Holistic Redesign
 
-Last updated: 2026-03-20
+Last updated: 2026-03-21
 
 ---
 
@@ -131,11 +131,39 @@ Full plan: `docs/plans/2026-03-18-sma-v2-improvement-plan.md`
 - [ ] Core tool crash guard in _stage_understand — DONE (PR #24)
 - [ ] LLM refusal detection in extract_json — DONE (PR #24)
 
-### Wave 6: Knowledge & Learning Loop
-- [ ] Manifest-based knowledge routing (8 routes, token budgets)
-- [ ] 3-tier knowledge architecture (Infrastructure/Investigative/Domain)
-- [ ] Investigation archive + playbook distillation
-- [ ] SEV archive (past incident case files)
+### Wave 6: Knowledge Retrieval Layer (REDESIGNED — 2026-03-21)
+
+Redesigned from manifest pre-load to hybrid on-demand retrieval. See spec + plan:
+- Spec: `docs/plans/2026-03-20-knowledge-retrieval-layer-design.md`
+- Plan: `docs/plans/2026-03-20-knowledge-retrieval-layer-plan.md`
+
+- [ ] Task 1: KnowledgeChunk schema + retriever interface
+- [ ] Task 2: Query expansion in question_parser.py
+- [ ] Task 3: Deterministic chunker (56 chunks from 5 YAMLs)
+- [ ] Task 4: TF-IDF retriever with direct scoring
+- [ ] Task 5: Retrieval evaluation test set (25 ground truth cases)
+- [ ] Task 6: Manifest + CONTRACT block updates (permission boundaries)
+- [ ] Task 7: Orchestrator integration (per-stage retrieval + trace + prompts)
+- [ ] Task 8: API embeddings hybrid (P5, optional — after TF-IDF eval)
+
+### Phoenix Integration: LLM Observability (DESIGNED — 2026-03-21)
+
+Design + implementation plan complete. Ready for TDD implementation.
+- Design: `docs/plans/2026-03-20-arize-phoenix-integration-design.md`
+- Plan: `docs/plans/2026-03-20-phoenix-integration-implementation-plan.md`
+- Branch: `feature/phoenix-integration`
+- Eng review: 2 rounds CLEARED (7 arch decisions + 5 impl fixes)
+
+- [ ] Step 1: Scaffold phoenix_tracer.py + requirements-dev.txt (6 tests)
+- [ ] Step 2: stage_span() context manager (4 tests)
+- [ ] Step 3: dual_emit() with swimlane param (6 tests)
+- [ ] Step 4: emit_guardrail() + flush() (4 tests)
+- [ ] Step 5a: Wrap orchestrator stages in CHAIN spans (4 tests)
+- [ ] Step 5b: Replace emit calls with dual_emit() (3 tests)
+- [ ] Step 6: Wire emit_guardrail into seam_validator (2 tests)
+- [ ] Step 7: OTel context propagation in DAGExecutor (3 tests)
+- [ ] Step 8: Full integration test + graceful degradation (2 tests)
+- [ ] TODO: Wire Phoenix into eval stress test pipeline (deferred, see TODOS.md)
 
 ### Wave 7: Data Connectivity
 - [ ] SQL executor (DuckDB + CSV/Parquet)
