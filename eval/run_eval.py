@@ -733,6 +733,76 @@ def _check_decision_status_contract(
 
 
 # ──────────────────────────────────────────────────
+# Trace & Seam Coverage Checks (Wave 4)
+# ──────────────────────────────────────────────────
+
+def _check_trace_coverage(
+    diagnosis: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """Check that IC9 Invisible Decisions are traced (informational only).
+
+    WHY: The 4 IC9 Invisible Decisions (metric_direction, hypothesis_inclusion,
+    context_construction, narrative_selection) are the highest-risk decision
+    points in the pipeline. Tracing them is how we audit investigation quality.
+
+    This check is INFORMATIONAL (deduction=0) because the stress test runs
+    core tools directly — only metric_direction is traced there. The other 3
+    require LLM stages (in the orchestrator) which the stress test doesn't use.
+    When the stress test migrates to run through the orchestrator, these checks
+    will automatically start surfacing real coverage gaps.
+
+    Reuses trace.schema.validate_trace_completeness() which already exists.
+    """
+    trace_data = diagnosis.get("_trace")
+    if trace_data is None:
+        return []  # No trace data — skip (backward compatible)
+
+    # Import here to avoid circular dependency at module level
+    from trace.schema import validate_trace_completeness
+
+    _passed, issues = validate_trace_completeness(trace_data)
+
+    # Convert issues to violation format with zero deduction
+    return [
+        {
+            "rule": f"trace_coverage_{issue.split(':')[0].strip().lower().replace(' ', '_')}",
+            "reason": issue,
+            "deduction": 0,  # Informational only — does not affect score
+        }
+        for issue in issues
+    ]
+
+
+def _check_seam_coverage(
+    diagnosis: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """Check that all 4 stage seam validations ran (informational only).
+
+    WHY: Seam validation at stage boundaries is the core enforcement mechanism.
+    If a stage boundary was skipped (no validation ran), the investigation has
+    an unaudited gap — potential contract violations went unchecked.
+
+    Like trace coverage, this is INFORMATIONAL (deduction=0) for now.
+    """
+    seam_data = diagnosis.get("_seam_validations")
+    if seam_data is None:
+        return []  # No seam data — skip (backward compatible)
+
+    from trace.schema import REQUIRED_SEAMS
+
+    issues = []
+    for stage in REQUIRED_SEAMS:
+        if stage not in seam_data:
+            issues.append({
+                "rule": f"seam_missing_{stage.lower()}",
+                "reason": f"Seam validation not found for stage: {stage}",
+                "deduction": 0,  # Informational only
+            })
+
+    return issues
+
+
+# ──────────────────────────────────────────────────
 # Single Run Scorer
 # ──────────────────────────────────────────────────
 
@@ -775,6 +845,11 @@ def score_single_run(
     # Check for must_not_do violations (each deducts 10 points)
     violations = _check_must_not_do_violations(spec, diagnosis, formatted)
     violations.extend(_check_decision_status_contract(spec, diagnosis))
+
+    # Wave 4: informational trace + seam coverage checks (deduction=0)
+    violations.extend(_check_trace_coverage(diagnosis))
+    violations.extend(_check_seam_coverage(diagnosis))
+
     total_deduction = sum(v["deduction"] for v in violations)
 
     # Final score: raw minus deductions, floored at 0

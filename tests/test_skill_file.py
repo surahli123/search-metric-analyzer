@@ -398,19 +398,23 @@ class TestSkillFileAIAdoptionSpecialCase:
 
 
 class TestSkillFileOperatingModes:
-    """Verify both Quick and Standard operating modes are documented."""
+    """Verify Simple/Medium/Complex operating modes are documented (Wave 5)."""
 
     @pytest.fixture
     def content(self):
         return SKILL_FILE.read_text()
 
-    def test_quick_mode_documented(self, content):
+    def test_simple_mode_documented(self, content):
         content_lower = content.lower()
-        assert "quick" in content_lower, "Must document Quick operating mode"
+        assert "simple" in content_lower, "Must document Simple operating mode"
 
-    def test_standard_mode_documented(self, content):
+    def test_medium_mode_documented(self, content):
         content_lower = content.lower()
-        assert "standard" in content_lower, "Must document Standard operating mode"
+        assert "medium" in content_lower, "Must document Medium operating mode"
+
+    def test_complex_mode_documented(self, content):
+        content_lower = content.lower()
+        assert "complex" in content_lower, "Must document Complex operating mode"
 
 
 class TestSkillFileCoMovement:
