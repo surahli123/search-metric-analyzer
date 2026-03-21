@@ -68,14 +68,14 @@ Last updated: 2026-03-20
 - [x] Task 14: Wave 3b verification (all 4 IC9 decisions traced end-to-end)
 - 949 tests GREEN, PR #14 merged
 
-### Wave 4: Skill File + Eval
-- [ ] Update `skills/search-metric-analyzer.md` — add seam validator subprocess calls after each stage
-- [ ] Add trace context reads at SYNTHESIZE stage in skill file
-- [ ] Add `investigation_context` to sub-agent context at DISPATCH stage
-- [ ] Extend `eval/run_eval.py` — add trace coverage checks (4 IC9 Invisible Decisions)
-- [ ] Extend eval — add seam check coverage (4 seam validations ran and passed)
-- [ ] Add eval scenario S8b (SYNTHESIZE compliance — catches missing mandatory sections)
-- [ ] Run eval stress test — all 5 scenarios must stay GREEN (avg >= 91/100)
+### Wave 4: Skill File + Eval (DONE — 2026-03-20, PR #23)
+- [x] Update `skills/search-metric-analyzer.md` — add seam validator subprocess calls after each stage
+- [x] Add trace context reads at SYNTHESIZE stage in skill file
+- [x] Add `investigation_context` to sub-agent context at DISPATCH stage
+- [x] Extend `eval/run_eval.py` — add trace coverage checks (4 IC9 Invisible Decisions)
+- [x] Extend eval — add seam check coverage (4 seam validations ran and passed)
+- [x] Add eval scenario S8b (SYNTHESIZE compliance — catches missing mandatory sections)
+- [x] Run eval stress test — all 7 scenarios GREEN (avg 91.7/100)
 
 ---
 

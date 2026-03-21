@@ -17,6 +17,29 @@ Formalized subagent dispatch and post-completion protocols based on workflow ana
 
 ---
 
+## Wave 4: Skill File + Eval (2026-03-20)
+
+Bridges the enforcement gap between Mode A (skill file) and Mode B (orchestrator).
+PR #23 merged.
+
+### Added
+- Seam validator CLI calls after each pipeline stage in skill file (UNDERSTAND=hard, HYPOTHESIZE/DISPATCH=soft, SYNTHESIZE=retry)
+- Investigation context compilation for DISPATCH stage in skill file
+- Trace context summary at SYNTHESIZE stage in skill file
+- `_check_trace_coverage()` and `_check_seam_coverage()` in `eval/run_eval.py` (informational, deduction=0)
+- `InvestigationTrace` + `validate_seam()` wired into `eval/run_stress_test.py` pipeline
+- S8b scenario: `eval/scoring_specs/case7_synthesize_compliance.yaml` (SYNTHESIZE-focused, actionability=50pts)
+- `tests/test_eval_trace_seam.py` — 8 tests for trace/seam coverage checks
+- 4 new tests in `tests/test_eval.py` (TestCase7SynthesizeCompliance)
+
+### Changed
+- Skill file operating modes: Quick/Standard → Simple/Medium/Complex (Wave 5 alignment)
+- `tests/test_skill_file.py` — mode tests updated for Simple/Medium/Complex
+- `tests/test_eval.py` — `test_rubric_weights_match_design` now tolerates S8b's inverted weights
+- Eval stress test now runs 7 scenarios (was 6): ALL 7 GREEN, avg 91.7/100
+
+---
+
 ## CEO + Eng System Review + Wave 5 Review Round 2 (2026-03-20)
 
 Full system review (11 sections) + Wave 5 code review with TDD and reflexion.
