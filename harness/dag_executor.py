@@ -141,87 +141,92 @@ class DAGExecutor:
                 future_submitted_at[future] = time.monotonic()
 
             # --- Collect results as they complete ---
-            # Fix #2: removed as_completed(timeout=...) which raised unhandled
-            # TimeoutError. Instead, use per-future timeout in future.result()
-            # and let the error isolation handler convert it to inconclusive.
-            try:
-                for future in as_completed(future_to_hyp):
-                    hyp = future_to_hyp[future]
-                    hyp_id = hyp.get("hypothesis_id", "unknown")
-                    submitted_at = future_submitted_at[future]
+            # Fix #2: as_completed() called without timeout — per-future
+            # timeout is handled by future.result(timeout=per_timeout) below.
+            # Error isolation wraps each failure as an inconclusive finding.
+            for future in as_completed(future_to_hyp):
+                hyp = future_to_hyp[future]
+                hyp_id = hyp.get("hypothesis_id", "unknown")
+                submitted_at = future_submitted_at[future]
 
-                    try:
-                        finding = future.result(timeout=per_timeout)
-                        completed_at = time.monotonic()
-                        findings.append(finding)
-                        execution_log.append({
-                            "hypothesis_id": hyp_id,
-                            "status": "success",
-                            "duration": completed_at - submitted_at,
-                        })
+                try:
+                    finding = future.result(timeout=per_timeout)
+                    completed_at = time.monotonic()
+                    findings.append(finding)
+                    execution_log.append({
+                        "hypothesis_id": hyp_id,
+                        "status": "success",
+                        "duration": completed_at - submitted_at,
+                    })
 
-                    except Exception as exc:
-                        # --- Error isolation: wrap failure as inconclusive ---
-                        completed_at = time.monotonic()
-                        failure_count += 1
-                        findings.append({
-                            "agent_name": "dag_executor",
-                            "hypothesis_id": hyp_id,
-                            "verdict": "inconclusive",
-                            "confidence": 0.0,
-                            "evidence": [],
-                            "narrative": f"Investigation failed: {type(exc).__name__}: {str(exc)[:200]}",
-                            "adjacent_observations": [],
-                        })
-                        execution_log.append({
-                            "hypothesis_id": hyp_id,
-                            "status": "failed",
-                            "error": f"{type(exc).__name__}: {str(exc)[:100]}",
-                            "duration": completed_at - submitted_at,
-                        })
+                except Exception as exc:
+                    # --- Error isolation: wrap failure as inconclusive ---
+                    completed_at = time.monotonic()
+                    failure_count += 1
+                    findings.append({
+                        "agent_name": "dag_executor",
+                        "hypothesis_id": hyp_id,
+                        "verdict": "inconclusive",
+                        "confidence": 0.0,
+                        "evidence": [],
+                        "narrative": f"Investigation failed: {type(exc).__name__}: {str(exc)[:200]}",
+                        "adjacent_observations": [],
+                    })
+                    execution_log.append({
+                        "hypothesis_id": hyp_id,
+                        "status": "failed",
+                        "error": f"{type(exc).__name__}: {str(exc)[:100]}",
+                        "duration": completed_at - submitted_at,
+                    })
 
-                        logger.warning(
-                            "Hypothesis %s investigation failed: %s",
-                            hyp_id, str(exc)[:200],
+                    logger.warning(
+                        "Hypothesis %s investigation failed: %s",
+                        hyp_id, str(exc)[:200],
+                    )
+
+                    # --- Circuit breaker check ---
+                    if failure_count >= cb_threshold:
+                        circuit_broken = True
+                        logger.error(
+                            "Circuit breaker tripped: %d/%d failures (threshold=%d)",
+                            failure_count, len(hypotheses), cb_threshold,
                         )
-
-                        # --- Circuit breaker check ---
-                        if failure_count >= cb_threshold:
-                            circuit_broken = True
-                            logger.error(
-                                "Circuit breaker tripped: %d/%d failures (threshold=%d)",
-                                failure_count, len(hypotheses), cb_threshold,
-                            )
-                            # Fix #5: cancel() only prevents NOT-YET-STARTED tasks from
-                            # running. It cannot interrupt already-running threads. This
-                            # stops the pool from starting more work, but threads already
-                            # in flight will finish naturally when the `with` block exits.
-                            for f in future_to_hyp:
-                                f.cancel()
-                            break
-            except TimeoutError:
-                # Global timeout from as_completed — treat remaining as inconclusive
-                circuit_broken = True
-                for future, hyp in future_to_hyp.items():
-                    hyp_id = hyp.get("hypothesis_id", "unknown")
-                    if hyp_id not in {f.get("hypothesis_id") for f in findings}:
-                        failure_count += 1
-                        findings.append({
-                            "agent_name": "dag_executor",
-                            "hypothesis_id": hyp_id,
-                            "verdict": "inconclusive",
-                            "confidence": 0.0,
-                            "evidence": [],
-                            "narrative": "Investigation timed out",
-                            "adjacent_observations": [],
-                        })
+                        # Fix #5: cancel() only prevents NOT-YET-STARTED tasks from
+                        # running. It cannot interrupt already-running threads. This
+                        # stops the pool from starting more work, but threads already
+                        # in flight will finish naturally when the `with` block exits.
+                        for f in future_to_hyp:
+                            f.cancel()
+                        break
 
         total_duration = time.monotonic() - start_time
 
-        # --- Coverage check: warn if any hypotheses have no findings ---
+        # --- Coverage backfill: create inconclusive findings for unprocessed hypotheses ---
+        # When the circuit breaker fires or the loop exits early, some hypotheses
+        # may never have had .result() called. Downstream stages (SYNTHESIZE)
+        # expect every hypothesis to have a finding — a silent gap would cause
+        # missing coverage in the final report.
         hyp_ids_with_findings = {f.get("hypothesis_id") for f in findings}
         all_hyp_ids = {h.get("hypothesis_id") for h in hypotheses}
         missing_coverage = all_hyp_ids - hyp_ids_with_findings
+
+        # Don't increment failure_count for backfills — these hypotheses
+        # never ran, so they didn't "fail." failure_count should only reflect
+        # investigations that were attempted and crashed. Conflating the two
+        # would mislead SYNTHESIZE into thinking more agents crashed than
+        # actually did (e.g., "5/5 failed" when only 1 crashed and 4 were skipped).
+        for hyp in hypotheses:
+            hyp_id = hyp.get("hypothesis_id", "unknown")
+            if hyp_id in missing_coverage:
+                findings.append({
+                    "agent_name": "dag_executor",
+                    "hypothesis_id": hyp_id,
+                    "verdict": "inconclusive",
+                    "confidence": 0.0,
+                    "evidence": [],
+                    "narrative": "Investigation not started — circuit breaker tripped before this hypothesis was processed",
+                    "adjacent_observations": [],
+                })
 
         # --- Emit trace span ---
         if trace is not None:

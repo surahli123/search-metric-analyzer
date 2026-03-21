@@ -1,6 +1,6 @@
 # Backlog — Search Metric Analyzer v2.0 Holistic Redesign
 
-Last updated: 2026-03-19
+Last updated: 2026-03-20
 
 ---
 
@@ -112,12 +112,13 @@ Priority: fix during the wave where they naturally fit.
 4-wave roadmap to mirror in-house architecture, borrowing from ai-analyst.
 Full plan: `docs/plans/2026-03-18-sma-v2-improvement-plan.md`
 
-### Wave 5: Agent Architecture (Foundation)
-- [ ] 5A: Mode Selection (Simple/Medium/Complex) — 3 lead agent variants
-- [ ] 5B: Declarative agents with CONTRACT blocks + registry.yaml
-- [ ] 5C: DAG orchestration with parallel dispatch
-- [ ] 5D: Quality gates expansion (11 → 14)
-- [ ] 5E: Domain-scoped question framing (UNDERSTAND enhancement)
+### Wave 5: Agent Architecture (DONE — 2026-03-20, PRs #16-#20)
+- [x] 5A: Mode Selection (Simple/Medium/Complex) — 3 lead agent variants + mode_selector.py
+- [x] 5B: Declarative agents with CONTRACT blocks + registry.yaml (7 agents + registry parser)
+- [x] 5C: DAG orchestration with parallel dispatch (DAGExecutor + ThreadPoolExecutor)
+- [x] 5D: Quality gates expansion (13 → 17, exceeds in-house 14)
+- [x] 5E: Domain-scoped question framing (question_parser.py + QuestionBrief contract)
+- [x] Code review: all 10 findings addressed (PR #20)
 
 ### Wave 6: Knowledge & Learning Loop
 - [ ] Manifest-based knowledge routing (8 routes, token budgets)

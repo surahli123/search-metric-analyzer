@@ -226,6 +226,60 @@ class TestCircuitBreaker:
         assert exc_info.value.details is not None
         assert "findings" in exc_info.value.details
 
+    def test_circuit_breaker_backfills_unprocessed_hypotheses(self, context):
+        """When circuit breaker trips early, unprocessed hypotheses get
+        inconclusive findings so downstream stages have full coverage.
+
+        Scenario: 5 hypotheses, threshold=1. First failure trips breaker.
+        The remaining hypotheses should get inconclusive placeholder findings,
+        not silently disappear from the findings list.
+        """
+        import time
+
+        def slow_then_fail(hypothesis, ctx):
+            """First call fails immediately; subsequent calls are slow
+            (simulating in-flight work that gets cancelled)."""
+            hyp_id = hypothesis.get("hypothesis_id", "")
+            if "fail" in hyp_id:
+                raise RuntimeError("Immediate failure")
+            # Slow — simulates work that would be cancelled
+            time.sleep(0.5)
+            return _mock_investigate_success(hypothesis, ctx)
+
+        hypotheses = [
+            {"hypothesis_id": "hyp_fail_001"},  # Fails immediately
+            {"hypothesis_id": "hyp_002"},
+            {"hypothesis_id": "hyp_003"},
+            {"hypothesis_id": "hyp_004"},
+            {"hypothesis_id": "hyp_005"},
+        ]
+        executor = DAGExecutor(
+            investigate_fn=slow_then_fail,
+            config={"circuit_breaker_threshold": 1},
+        )
+
+        with pytest.raises(StageError) as exc_info:
+            executor.execute(hypotheses, context)
+
+        details = exc_info.value.details
+        finding_ids = {f["hypothesis_id"] for f in details["findings"]}
+        all_ids = {h["hypothesis_id"] for h in hypotheses}
+
+        # Every hypothesis must have a finding (no gaps)
+        assert finding_ids == all_ids, (
+            f"Missing findings for: {all_ids - finding_ids}. "
+            f"Circuit breaker should backfill unprocessed hypotheses."
+        )
+
+        # failure_count should only reflect actual failures (investigations
+        # that ran and crashed), NOT backfilled hypotheses that were never
+        # attempted. This prevents misleading SYNTHESIZE into thinking more
+        # agents crashed than actually did.
+        assert details["failed_count"] == 1, (
+            f"failed_count should be 1 (only the actual failure), "
+            f"not {details['failed_count']} (which would include backfills)"
+        )
+
 
 # =============================================================================
 # Execution log tests
