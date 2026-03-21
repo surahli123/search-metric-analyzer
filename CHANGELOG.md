@@ -5,6 +5,40 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Wave 5: Agent Architecture — Foundation Complete (2026-03-20)
+
+Full implementation of Wave 5 (Agent Architecture) across PRs #16-#20. Adds mode selection, declarative agents, parallel dispatch, and expanded quality gates.
+
+### Added
+- `contracts/question_brief.py` — QuestionBrief TypedDict contract for QUESTION_PARSE stage
+- `harness/question_parser.py` — Rule-based question classifier (6 types: sev/experiment/trend/deep_dive/system_understanding/adhoc), metric extraction with alias support, time range extraction
+- `harness/mode_selector.py` — Simple/Medium/Complex mode routing with 9 rules, confidence scores, user override
+- `harness/dag_executor.py` — Parallel hypothesis dispatch via ThreadPoolExecutor with per-hypothesis error isolation and circuit breaker (3 failures → StageError)
+- `harness/prompts.py` — Prompt-building functions extracted from orchestrator (~300 lines)
+- `harness/registry.py` — Agent registry parser with Kahn's algorithm cycle detection, CONTRACT block extraction, execution plan builder
+- `harness/manifest.yaml` — Knowledge routing manifest with token budgets per agent
+- `agents/` directory — 7 agent definitions with CONTRACT blocks (understand, hypothesize, 3 dispatch specialists, investigation-sub-agent, synthesize) + registry.yaml + 3 lead agent files (simple/medium/complex)
+- 4 new quality gate rules (13→17 total): question_brief_valid (HARD), srm_check (SOFT), mode_compliance_simple (SOFT), report_quality_score (SOFT, 12-point rubric)
+- `run_v2()` on SearchMetricOrchestrator — question parsing → mode selection → mode-appropriate pipeline
+- 169 new tests across 5 test files (1,119 total)
+
+### Changed
+- `contracts/seam_validator.py` — Added QUESTION_PARSE stage (HARD gate), 4 new rules, CLI accepts `question_parse` stage
+- `harness/orchestrator.py` — Prompt methods delegate to `harness/prompts.py`, extracted `_run_pipeline()` shared by `run()` and `run_v2()`, added `_stage_dispatch_parallel()` for Complex mode
+- Metric alias list expanded: "search quality" → search_quality_success, "zero result" → zero_result_rate
+
+### Fixed (code review findings, PR #20)
+- DAG executor timestamps measured at submit time (were near-zero)
+- Removed double timeout in DAGExecutor (as_completed + future.result)
+- Relaxed HARD gate for metric-less SEV questions (users saying "search quality dropped" no longer blocked)
+- Wired question_type/mode kwargs through validate_seam() — rule_srm_check and rule_mode_compliance_simple now activate
+- Extracted shared _run_pipeline() eliminating ~80 lines of duplicated pipeline logic
+- Registry validates duplicate agent names
+- Severity signal matching uses startswith (prevents false positives)
+- CONTRACT regex handles Windows line endings
+
+---
+
 ## SMA v2 Improvement Plan — ai-analyst + In-House Architecture (2026-03-18)
 
 Brainstorming session analyzing ai-analyst repo and in-house production agent to define the next evolution of SMA.
