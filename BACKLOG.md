@@ -120,6 +120,17 @@ Full plan: `docs/plans/2026-03-18-sma-v2-improvement-plan.md`
 - [x] 5E: Domain-scoped question framing (question_parser.py + QuestionBrief contract)
 - [x] Code review: all 10 findings addressed (PR #20)
 
+### Pre-Wave 6: System Review TODOs (from CEO + Eng review, PR #24)
+- [ ] Decompose orchestrator.py (1,869 LOC) → harness/stages/*.py — P1, do before Wave 6
+- [ ] Delete v1 orchestrate() dead code (~400 LOC, zero callers) — P2, bundle with decomposition
+- [ ] Rename run_v2() → run(), deprecate old run() — P2, bundle with decomposition
+- [ ] Agent .md files as source of truth for prompts (replace hardcoded prompts.py) — P2, do during Wave 6
+- [ ] Run 3-5 real investigations through pipeline with Anthropic API key — P1, highest ROI before new Wave work
+- [ ] Fix thread-unsafe self._current_mode instance state — DONE (PR #24)
+- [ ] Add run_v2() integration tests — DONE (PR #24, 8 tests)
+- [ ] Core tool crash guard in _stage_understand — DONE (PR #24)
+- [ ] LLM refusal detection in extract_json — DONE (PR #24)
+
 ### Wave 6: Knowledge & Learning Loop
 - [ ] Manifest-based knowledge routing (8 routes, token budgets)
 - [ ] 3-tier knowledge architecture (Infrastructure/Investigative/Domain)

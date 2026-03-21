@@ -5,6 +5,33 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## CEO + Eng System Review — Critical Gaps Fixed (2026-03-20)
+
+Combined CEO (Hold Scope) + Eng system review of full pipeline. Identified 4 critical gaps, 10 TODOs. Fixed all 4 critical gaps in PR #24.
+
+### Added
+- `LLMRefusalError` in `harness/errors.py` — distinct error for model refusals vs parse failures
+- `detect_refusal()` in `harness/llm.py` — checks for common refusal phrases before JSON extraction
+- 8 `TestRunV2Integration` tests — first-ever integration tests for run_v2() pipeline (Simple/Medium/Complex modes, bad data, crash guard, thread safety)
+- `fastapi>=0.100.0` and `uvicorn>=0.23.0` in requirements.txt
+
+### Changed
+- `harness/orchestrator.py` — removed thread-unsafe `self._current_mode`/`self._current_question_type` instance state; mode and question_type now passed as parameters through `_run_pipeline()` → `_stage_dispatch()` → `_stage_synthesize()`
+- `harness/orchestrator.py` — wrapped core/ tool calls in `_stage_understand()` with try/except; unexpected errors from decompose/anomaly now raise `StageError` instead of crashing
+- `harness/llm.py` — `extract_json()` checks for refusal before attempting JSON extraction (Strategy 0)
+
+### Fixed
+- Closed 3 stale code review items in BACKLOG.md (contribution_pct naming, constrained_by validation, single violation return — all confirmed resolved)
+
+### Review Findings (deferred TODOs)
+- Decompose orchestrator.py (1,869 LOC) into harness/stages/*.py (P1)
+- Delete v1 orchestrate() dead code (~400 LOC) (P2)
+- Rename run_v2() → run() (P2)
+- Agent .md files as source of truth for prompts (P2)
+- Run 3-5 real investigations through pipeline (P1, highest ROI)
+
+---
+
 ## Subagent Discipline Rule (2026-03-20)
 
 Formalized subagent dispatch and post-completion protocols based on workflow analysis.
