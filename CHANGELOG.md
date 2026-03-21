@@ -5,6 +5,18 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Subagent Discipline Rule (2026-03-20)
+
+Formalized subagent dispatch and post-completion protocols based on workflow analysis.
+
+### Added
+- `.claude/rules/05-subagent-discipline.md` — 5-field dispatch scoping + 4-step post-dispatch verification protocol
+- Layer ownership shortcuts mapped to architecture boundaries (rule 02)
+- Feedback memory: `feedback_subagent_discipline.md`
+- PR #22 opened on `chore/subagent-discipline-rule`
+
+---
+
 ## CEO + Eng System Review + Wave 5 Review Round 2 (2026-03-20)
 
 Full system review (11 sections) + Wave 5 code review with TDD and reflexion.
