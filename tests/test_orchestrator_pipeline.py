@@ -2548,3 +2548,202 @@ class TestPipelineConfiguration:
                 metric_field="click_quality_value",
                 dimensions=["tenant_tier"],
             )
+
+
+# ===========================================================================
+# run_v2() Integration Tests
+# ===========================================================================
+
+class TestRunV2Integration:
+    """Integration tests for the Wave 5 pipeline entry point: run_v2().
+
+    These tests validate the end-to-end flow:
+    question → QUESTION_PARSE → mode selection → pipeline → result.
+
+    This class was added to close the critical gap identified in the
+    CEO + Eng system review (2026-03-20): run_v2() had ZERO callers
+    in the entire codebase before these tests.
+    """
+
+    def _make_mock_llm(self):
+        """Create a mock LLM callable that returns valid JSON for all stages."""
+        call_count = [0]
+
+        def mock_llm(prompt, system="", max_tokens=4096):
+            call_count[0] += 1
+            # HYPOTHESIZE calls come first
+            if "hypothes" in system.lower() or "hypothes" in prompt.lower():
+                return _make_valid_hypothesis_json()
+            # DISPATCH calls — return a finding for each hypothesis
+            if "investigat" in system.lower() or "evidence" in prompt.lower():
+                hyp_id = "hyp_001"
+                # Try to extract hypothesis_id from the prompt
+                if "hyp_002" in prompt:
+                    hyp_id = "hyp_002"
+                elif "hyp_003" in prompt:
+                    hyp_id = "hyp_003"
+                return _make_valid_finding_json(hyp_id)
+            # SYNTHESIZE calls
+            return _make_valid_synthesis_json()
+
+        return mock_llm
+
+    def test_run_v2_simple_mode_returns_directly(self):
+        """Simple mode should skip the pipeline and return immediately.
+
+        When the question is a simple lookup (e.g., "what is click quality?"),
+        run_v2 should parse it, select 'simple' mode, and return without
+        running any LLM calls.
+        """
+        orch = SearchMetricOrchestrator(llm_callable=None)  # No LLM needed
+        result = orch.run_v2(
+            question="What is the click quality formula?",
+            rows=_make_good_rows(),
+            metric_field="click_quality_value",
+        )
+
+        assert result["status"] == "complete"
+        assert result["mode"] == "simple"
+        assert "question_brief" in result
+        assert result["question_brief"]["question_type"] == "adhoc"
+        assert result["stages_completed"] == ["QUESTION_PARSE"]
+        assert "trace" in result
+
+    def test_run_v2_medium_mode_runs_full_pipeline(self):
+        """Medium mode should run the full 4-stage pipeline sequentially.
+
+        A question like "Click Quality dropped 6% WoW" should be classified
+        as 'sev' type, selected as 'medium' mode, and run through all 4 stages.
+        """
+        mock_llm = self._make_mock_llm()
+        orch = SearchMetricOrchestrator(llm_callable=mock_llm)
+        result = orch.run_v2(
+            question="Click Quality dropped 6% WoW",
+            rows=_make_good_rows(),
+            metric_field="click_quality_value",
+            dimensions=["tenant_tier"],
+        )
+
+        assert result["status"] == "complete"
+        assert result["mode"] in ("medium", "complex")
+        assert "question_brief" in result
+        assert "mode_decision" in result
+        # All 5 stages should be completed (QUESTION_PARSE + 4 pipeline stages)
+        assert "QUESTION_PARSE" in result["stages_completed"]
+        assert "UNDERSTAND" in result["stages_completed"]
+        assert "SYNTHESIZE" in result["stages_completed"]
+        # Pipeline results should be present
+        assert "understand_result" in result
+        assert "hypothesize_result" in result
+        assert "dispatch_result" in result
+        assert "synthesis" in result
+        assert "trace" in result
+
+    def test_run_v2_complex_mode_override(self):
+        """Overriding mode to 'complex' should use parallel dispatch."""
+        mock_llm = self._make_mock_llm()
+        orch = SearchMetricOrchestrator(llm_callable=mock_llm)
+        result = orch.run_v2(
+            question="Click Quality dropped 6% WoW",
+            rows=_make_good_rows(),
+            metric_field="click_quality_value",
+            dimensions=["tenant_tier"],
+            override_mode="complex",
+        )
+
+        assert result["status"] == "complete"
+        assert result["mode"] == "complex"
+        assert "QUESTION_PARSE" in result["stages_completed"]
+        assert "DISPATCH" in result["stages_completed"]
+
+    def test_run_v2_bad_data_returns_blocked(self):
+        """Bad data quality should block the pipeline at UNDERSTAND."""
+        mock_llm = self._make_mock_llm()
+        orch = SearchMetricOrchestrator(llm_callable=mock_llm)
+        result = orch.run_v2(
+            question="Click Quality dropped 6% WoW",
+            rows=_make_bad_quality_rows(),
+            metric_field="click_quality_value",
+            dimensions=["tenant_tier"],
+        )
+
+        assert result["status"] == "blocked"
+        assert "trace" in result
+
+    def test_run_v2_question_brief_has_correct_fields(self):
+        """The question_brief should have the expected fields from parsing."""
+        orch = SearchMetricOrchestrator(llm_callable=None)
+        result = orch.run_v2(
+            question="What is the click quality formula?",
+            rows=_make_good_rows(),
+            metric_field="click_quality_value",
+        )
+
+        brief = result["question_brief"]
+        assert "question_type" in brief
+        assert "raw_question" in brief
+        assert "metric_hints" in brief
+
+    def test_run_v2_mode_decision_has_confidence(self):
+        """The mode_decision should include confidence and reasoning."""
+        mock_llm = self._make_mock_llm()
+        orch = SearchMetricOrchestrator(llm_callable=mock_llm)
+        result = orch.run_v2(
+            question="Click Quality dropped 6% WoW",
+            rows=_make_good_rows(),
+            metric_field="click_quality_value",
+        )
+
+        decision = result["mode_decision"]
+        assert "mode" in decision
+        assert "confidence" in decision
+
+    def test_run_v2_core_tool_crash_returns_stage_error(self):
+        """If core/ tools crash on bad input, _stage_understand wraps in StageError.
+
+        This tests gap 4a: unexpected errors from core/ tools should be caught
+        and wrapped in StageError rather than propagating as raw exceptions.
+
+        We test _stage_understand directly with rows=None to force a crash
+        that the try/except should catch. (run_v2 is too defensive at the
+        data quality layer to reach the crash path with normal bad data.)
+        """
+        mock_llm = self._make_mock_llm()
+        orch = SearchMetricOrchestrator(llm_callable=mock_llm)
+
+        from trace.collector import InvestigationTrace
+        trace = InvestigationTrace(question="test")
+
+        # None rows will crash check_data_quality (TypeError).
+        # The try/except in _stage_understand should catch this.
+        with pytest.raises(StageError) as exc_info:
+            orch._stage_understand(
+                question="Click Quality dropped 6% WoW",
+                rows=None,
+                metric_field="click_quality_value",
+                dimensions=["tenant_tier"],
+                trace=trace,
+            )
+
+        assert exc_info.value.stage == "UNDERSTAND"
+        assert "Core tool error" in exc_info.value.violations[0]
+
+    def test_run_v2_thread_safety_no_instance_state(self):
+        """run_v2() should not store per-invocation state on self.
+
+        This verifies gap 8: mode and question_type should be passed through
+        the method chain as parameters, not stored as self._current_mode.
+        """
+        mock_llm = self._make_mock_llm()
+        orch = SearchMetricOrchestrator(llm_callable=mock_llm)
+
+        # Run a medium-mode investigation
+        orch.run_v2(
+            question="Click Quality dropped 6% WoW",
+            rows=_make_good_rows(),
+            metric_field="click_quality_value",
+        )
+
+        # Verify no per-invocation state was stored on the instance
+        assert not hasattr(orch, "_current_mode")
+        assert not hasattr(orch, "_current_question_type")

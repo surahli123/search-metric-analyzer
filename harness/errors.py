@@ -115,6 +115,27 @@ class LLMParseError(LLMError):
         super().__init__(message, stage, is_transient=False, details=details)
 
 
+
+
+class LLMRefusalError(LLMError):
+    """LLM refused to perform the requested task.
+
+    This is a PERSISTENT error — the model declined rather than failing to
+    parse. Distinguished from LLMParseError because the root cause is different:
+    - LLMParseError: model tried but output wasn't valid JSON
+    - LLMRefusalError: model explicitly declined to do the task
+    """
+
+    def __init__(
+        self,
+        message: str,
+        stage: str = "LLM",
+        raw_response=None,
+        details=None,
+    ):
+        self.raw_response = raw_response
+        super().__init__(message, stage, is_transient=False, details=details)
+
 class LLMAPIError(LLMError):
     """LLM API call failed (timeout, rate limit, server error).
 
