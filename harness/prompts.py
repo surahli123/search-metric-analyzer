@@ -221,7 +221,10 @@ def build_dispatch_system_prompt() -> str:
         "- confidence (float): 0.0 to 1.0\n"
         "- evidence (list): raw data citations [{metric, value, delta, direction}]\n"
         "- narrative (str): human-readable explanation of your investigation\n"
-        "- adjacent_observations (list of str): unexpected findings\n\n"
+        "- adjacent_observations (list of str): unexpected findings\n"
+        "- srm_check (dict, optional): for experiment hypotheses only — include if\n"
+        "  investigating an A/B test. Fields: expected_ratio (float, typically 0.5),\n"
+        "  actual_ratio (float). Omit this field for non-experiment investigations.\n\n"
         "CRITICAL: Every finding MUST include at least one evidence item with real "
         "data values. A finding without evidence is an opinion, not a diagnosis."
     )
