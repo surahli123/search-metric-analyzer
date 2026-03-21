@@ -1,4 +1,4 @@
-"""Tests for SearchMetricOrchestrator -- the v2 4-stage pipeline.
+"""Tests for SearchMetricOrchestrator -- the 5-stage pipeline.
 
 Tests cover:
 1. UNDERSTAND stage happy path (good data -> UnderstandResult)
@@ -10,22 +10,21 @@ Tests cover:
 7. DISPATCH stage (LLM-based investigation, context_construction trace)
 8. SYNTHESIZE stage (LLM report generation, RETRY(1) then SOFT gate)
 9. Full pipeline end-to-end (all 4 stages, all 4 IC9 decisions traced)
-10. Regression: existing orchestrate() function still works
+10. run() integration tests (QUESTION_PARSE + mode selection + pipeline)
 
 These tests use the same fixture pattern as test_decompose.py --
 synthetic rows with 'period' field splitting baseline vs current.
+
+NOTE: Most pipeline tests use run_pipeline_only() which skips
+QUESTION_PARSE and mode selection (direct 4-stage pipeline).
+The run() integration tests cover the full 5-stage flow.
 """
 
 import json
 import pytest
 from typing import Any, Dict, List
 
-from harness.orchestrator import (
-    SearchMetricOrchestrator,
-    orchestrate,
-    _should_orchestrate,
-    _fuse_verdicts,
-)
+from harness.orchestrator import SearchMetricOrchestrator
 from harness.errors import (
     OrchestratorError,
     StageError,
@@ -333,7 +332,7 @@ class TestUnderstandHappyPath:
     def test_returns_complete_report(self):
         """With all 4 stages implemented, run() returns a complete report."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="Click Quality dropped 6% WoW",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -348,7 +347,7 @@ class TestUnderstandHappyPath:
     def test_understand_result_has_required_fields(self):
         """UnderstandResult must contain all contract-required fields."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -369,7 +368,7 @@ class TestUnderstandHappyPath:
     def test_detects_downward_direction(self):
         """With standard tier dropping, direction should be 'down'."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -382,7 +381,7 @@ class TestUnderstandHappyPath:
     def test_data_quality_passes(self):
         """Good data should pass the data quality check."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -394,7 +393,7 @@ class TestUnderstandHappyPath:
         """The original question should be preserved in the result."""
         question = "Why did Click Quality drop 6.2% this week?"
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question=question,
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -405,7 +404,7 @@ class TestUnderstandHappyPath:
     def test_includes_decomposition(self):
         """UnderstandResult should include the decomposition for downstream use."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -418,7 +417,7 @@ class TestUnderstandHappyPath:
     def test_includes_diagnosis(self):
         """UnderstandResult should include the diagnosis for downstream use."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -440,7 +439,7 @@ class TestUnderstandBadDataQuality:
     def test_returns_blocked_status(self):
         """Bad data quality should produce a blocked report, not an error."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_bad_quality_rows(),
             metric_field="click_quality_value",
@@ -451,7 +450,7 @@ class TestUnderstandBadDataQuality:
     def test_blocked_report_has_reason(self):
         """Blocked report should explain WHY the pipeline halted."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_bad_quality_rows(),
             metric_field="click_quality_value",
@@ -462,7 +461,7 @@ class TestUnderstandBadDataQuality:
     def test_blocked_report_has_remediation(self):
         """Blocked report should provide remediation guidance."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_bad_quality_rows(),
             metric_field="click_quality_value",
@@ -473,7 +472,7 @@ class TestUnderstandBadDataQuality:
     def test_blocked_report_has_trace(self):
         """Even blocked reports should include a trace for debugging."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_bad_quality_rows(),
             metric_field="click_quality_value",
@@ -484,7 +483,7 @@ class TestUnderstandBadDataQuality:
     def test_no_stages_completed_when_blocked(self):
         """When blocked at UNDERSTAND, no stages should be listed as completed."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_bad_quality_rows(),
             metric_field="click_quality_value",
@@ -494,7 +493,7 @@ class TestUnderstandBadDataQuality:
     def test_empty_rows_produces_blocked(self):
         """Empty rows should produce a blocked report (no data to analyze)."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=[],
             metric_field="click_quality_value",
@@ -513,7 +512,7 @@ class TestSeamValidatorCalled:
     def test_seam_validation_recorded_in_trace(self):
         """Trace should contain a seam validation span for UNDERSTAND."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -530,7 +529,7 @@ class TestSeamValidatorCalled:
     def test_seam_uses_hard_gate_tier(self):
         """UNDERSTAND seam validation should use the 'hard' gate tier."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -555,7 +554,7 @@ class TestTraceEmission:
     def test_trace_has_understand_spans(self):
         """UNDERSTAND stage should emit decision spans."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -574,7 +573,7 @@ class TestTraceEmission:
     def test_trace_includes_metric_direction_decision(self):
         """IC9 Invisible Decision #1: metric_direction must be traced."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -591,7 +590,7 @@ class TestTraceEmission:
     def test_trace_includes_data_quality_decision(self):
         """Data quality status should be traced."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -607,7 +606,7 @@ class TestTraceEmission:
     def test_trace_includes_understand_complete_span(self):
         """The orchestrator should emit its own summary span after UNDERSTAND."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -624,7 +623,7 @@ class TestTraceEmission:
     def test_trace_has_valid_trace_id(self):
         """Trace should have a valid trace_id."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -643,102 +642,24 @@ class TestAllStagesImplemented:
     """Verify DISPATCH and SYNTHESIZE are now implemented (no more NotImplementedError)."""
 
     def test_dispatch_is_implemented(self):
-        """_stage_dispatch should no longer raise NotImplementedError."""
-        orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
+        """stage_dispatch should raise StageError for empty hypotheses, not NotImplementedError."""
+        from harness.stages import stage_dispatch
         # It should raise StageError (no hypotheses), not NotImplementedError
         with pytest.raises(StageError, match="DISPATCH"):
             trace = InvestigationTrace(question="test")
-            orch._stage_dispatch(
+            stage_dispatch(
                 hypothesis_set={"hypotheses": []},
                 understand_result={},
                 trace=trace,
+                llm_callable=_dummy_llm,
+                config={},
             )
 
 
 # ---------------------------------------------------------------------------
-# Regression Tests -- Existing orchestrate() function still works
+# v1 orchestrate() function was DELETED in the stage extraction refactor.
+# Tests were in test_agent_orchestrator.py (also deleted).
 # ---------------------------------------------------------------------------
-
-
-class TestExistingOrchestrateRegression:
-    """Verify that the existing orchestrate() function is not broken.
-
-    These tests are duplicates of key tests from the existing orchestrator
-    test suite, ensuring the v2 class addition didn't break v1 functionality.
-    """
-
-    def _fake_agent(self, verdict: str, reason: str = "test"):
-        """Create a simple agent callable for testing."""
-        def agent(diagnosis_result, hypothesis):
-            return {
-                "agent": f"test_agent_{verdict}",
-                "ran": True,
-                "verdict": verdict,
-                "reason": reason,
-                "queries": [],
-                "evidence": [],
-                "cost": {"queries": 0, "seconds": 0.0},
-            }
-        return agent
-
-    def test_orchestrate_skips_when_no_agents(self):
-        """orchestrate() should skip when no agents are provided."""
-        diagnosis = {
-            "decision_status": "diagnosed",
-            "confidence": {"level": "Medium"},
-            "primary_hypothesis": {"category": "ranking_regression"},
-        }
-        result = orchestrate(diagnosis, agents=[])
-        assert result["orchestrated"] is False
-        assert result["fused_verdict"] == "insufficient_evidence"
-
-    def test_orchestrate_skips_high_confidence(self):
-        """orchestrate() should skip for high-confidence diagnoses."""
-        diagnosis = {
-            "decision_status": "diagnosed",
-            "confidence": {"level": "High"},
-            "primary_hypothesis": {"category": "ranking_regression"},
-        }
-        agents = [self._fake_agent("confirmed")]
-        result = orchestrate(diagnosis, agents)
-        assert result["orchestrated"] is False
-        assert result["fused_verdict"] == "confirmed"
-
-    def test_orchestrate_runs_agents_and_fuses(self):
-        """orchestrate() should run agents and fuse their verdicts."""
-        diagnosis = {
-            "decision_status": "diagnosed",
-            "confidence": {"level": "Medium"},
-            "primary_hypothesis": {"category": "ranking_regression"},
-        }
-        agents = [self._fake_agent("confirmed")]
-        result = orchestrate(diagnosis, agents)
-        assert result["orchestrated"] is True
-        assert result["fused_verdict"] == "confirmed"
-        assert len(result["agents_run"]) == 1
-
-    def test_fuse_verdicts_blocked_wins(self):
-        """_fuse_verdicts: blocked should override all other verdicts."""
-        agents_run = [
-            {"agent": "a", "verdict": "confirmed"},
-            {"agent": "b", "verdict": "blocked"},
-        ]
-        verdict, reason = _fuse_verdicts(agents_run)
-        assert verdict == "blocked"
-
-    def test_should_orchestrate_gate_logic(self):
-        """_should_orchestrate gate logic should work correctly."""
-        # Diagnosed + Medium confidence + agents -> True
-        assert _should_orchestrate(
-            {"decision_status": "diagnosed", "confidence": {"level": "Medium"}},
-            [lambda x, y: {}],
-        ) is True
-
-        # No agents -> False
-        assert _should_orchestrate(
-            {"decision_status": "diagnosed", "confidence": {"level": "Medium"}},
-            [],
-        ) is False
 
 
 # ---------------------------------------------------------------------------
@@ -791,7 +712,7 @@ class TestHypothesizeStage:
     def test_hypothesize_produces_hypothesis_set(self):
         """Mock LLM returning valid JSON -> produces HypothesisSet dict."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="Click Quality dropped 6% WoW",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -810,7 +731,7 @@ class TestHypothesizeStage:
     def test_hypothesize_has_at_least_three_hypotheses(self):
         """HypothesisSet must contain >= 3 hypotheses (seam rule)."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -822,7 +743,7 @@ class TestHypothesizeStage:
     def test_hypothesize_hypotheses_have_required_fields(self):
         """Each HypothesisBrief must have all required fields."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -841,7 +762,7 @@ class TestHypothesizeStage:
     def test_hypothesize_has_contrarian(self):
         """At least one hypothesis must be contrarian."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -854,7 +775,7 @@ class TestHypothesizeStage:
     def test_hypothesize_has_exclusions(self):
         """HypothesisSet should include exclusions with reasons."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -869,7 +790,7 @@ class TestHypothesizeStage:
     def test_hypothesize_has_investigation_context(self):
         """HypothesisSet should include investigation_context string."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -897,7 +818,7 @@ class TestHypothesizeCorrections:
             return _dummy_llm(prompt, system, max_tokens)
 
         orch = SearchMetricOrchestrator(llm_callable=capturing_llm)
-        orch.run(
+        orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -919,7 +840,7 @@ class TestHypothesizeCorrections:
             return _dummy_llm(prompt, system, max_tokens)
 
         orch = SearchMetricOrchestrator(llm_callable=capturing_llm)
-        orch.run(
+        orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -944,7 +865,7 @@ class TestHypothesizeCorrections:
             return _dummy_llm(prompt, system, max_tokens)
 
         orch = SearchMetricOrchestrator(llm_callable=capturing_llm)
-        orch.run(
+        orch.run_pipeline_only(
             question="CQ drop investigation",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -965,7 +886,7 @@ class TestHypothesizeCorrections:
             return _dummy_llm(prompt, system, max_tokens)
 
         orch = SearchMetricOrchestrator(llm_callable=capturing_llm)
-        orch.run(
+        orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -984,7 +905,7 @@ class TestHypothesizeTraceEmission:
     def test_hypothesis_inclusion_span_emitted(self):
         """Trace should contain a hypothesis_inclusion decision span."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1001,7 +922,7 @@ class TestHypothesizeTraceEmission:
     def test_hypothesis_inclusion_span_has_included_and_excluded(self):
         """hypothesis_inclusion span should track what was included and excluded."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1022,7 +943,7 @@ class TestHypothesizeTraceEmission:
     def test_hypothesis_inclusion_span_is_llm_generated(self):
         """hypothesis_inclusion span should be in the llm_generated swimlane."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1040,7 +961,7 @@ class TestHypothesizeTraceEmission:
     def test_hypothesis_inclusion_in_invisible_decisions_summary(self):
         """hypothesis_inclusion should appear in the trace summary's invisible_decisions."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1057,7 +978,7 @@ class TestHypothesizeSeamValidation:
     def test_seam_validation_recorded_in_trace(self):
         """Trace should contain a seam validation span for HYPOTHESIZE."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1073,7 +994,7 @@ class TestHypothesizeSeamValidation:
     def test_seam_uses_soft_gate_tier(self):
         """HYPOTHESIZE seam validation should use the 'soft' gate tier."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1129,7 +1050,7 @@ class TestHypothesizeSeamValidation:
 
         orch = SearchMetricOrchestrator(llm_callable=two_hypothesis_llm)
         # Should NOT raise -- SOFT gate continues
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1159,7 +1080,7 @@ class TestHypothesizeErrorHandling:
 
         orch = SearchMetricOrchestrator(llm_callable=bad_json_llm)
         with pytest.raises(StageError) as exc_info:
-            orch.run(
+            orch.run_pipeline_only(
                 question="CQ drop",
                 rows=_make_good_rows(),
                 metric_field="click_quality_value",
@@ -1177,7 +1098,7 @@ class TestHypothesizeErrorHandling:
 
         orch = SearchMetricOrchestrator(llm_callable=failing_llm)
         with pytest.raises(LLMAPIError):
-            orch.run(
+            orch.run_pipeline_only(
                 question="CQ drop",
                 rows=_make_good_rows(),
                 metric_field="click_quality_value",
@@ -1191,7 +1112,7 @@ class TestHypothesizeErrorHandling:
 
         orch = SearchMetricOrchestrator(llm_callable=bad_json_llm)
         with pytest.raises(OrchestratorError):
-            orch.run(
+            orch.run_pipeline_only(
                 question="CQ drop",
                 rows=_make_good_rows(),
                 metric_field="click_quality_value",
@@ -1243,7 +1164,7 @@ class TestHypothesizeErrorHandling:
             return _dummy_llm(prompt, system, max_tokens)
 
         orch = SearchMetricOrchestrator(llm_callable=list_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1266,7 +1187,7 @@ class TestDispatchStage:
     def test_dispatch_produces_finding_set(self):
         """DISPATCH should produce a FindingSet with findings."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1283,7 +1204,7 @@ class TestDispatchStage:
     def test_dispatch_findings_have_evidence(self):
         """Each finding should have at least one evidence item."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1296,7 +1217,7 @@ class TestDispatchStage:
     def test_dispatch_findings_have_required_fields(self):
         """Each finding must have all required SubAgentFinding fields."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1313,7 +1234,7 @@ class TestDispatchStage:
     def test_dispatch_has_context_construction_trace(self):
         """FindingSet should include the context construction trace."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1329,7 +1250,7 @@ class TestDispatchTraceEmission:
     def test_context_construction_span_emitted(self):
         """Trace should contain a context_construction decision span."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1347,7 +1268,7 @@ class TestDispatchTraceEmission:
     def test_context_construction_in_invisible_decisions_summary(self):
         """context_construction should appear in the trace summary."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1364,7 +1285,7 @@ class TestDispatchSeamValidation:
     def test_dispatch_seam_recorded_in_trace(self):
         """Trace should contain a seam validation span for DISPATCH."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1384,13 +1305,15 @@ class TestDispatchErrorHandling:
 
     def test_empty_hypothesis_set_raises_stage_error(self):
         """DISPATCH with no hypotheses should raise StageError."""
-        orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
+        from harness.stages import stage_dispatch
         trace = InvestigationTrace(question="test")
         with pytest.raises(StageError, match="DISPATCH"):
-            orch._stage_dispatch(
+            stage_dispatch(
                 hypothesis_set={"hypotheses": []},
                 understand_result={},
                 trace=trace,
+                llm_callable=_dummy_llm,
+                config={},
             )
 
 
@@ -1405,7 +1328,7 @@ class TestSynthesizeStage:
     def test_synthesize_produces_report(self):
         """SYNTHESIZE should produce a SynthesisReport dict."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="Click Quality dropped 6% WoW",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1418,7 +1341,7 @@ class TestSynthesizeStage:
     def test_synthesize_has_all_mandatory_sections(self):
         """SynthesisReport must contain all 7 mandatory sections."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1437,7 +1360,7 @@ class TestSynthesizeStage:
     def test_synthesize_has_upgrade_condition(self):
         """SynthesisReport must include upgrade_condition."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1450,7 +1373,7 @@ class TestSynthesizeStage:
     def test_synthesize_has_recommended_actions(self):
         """SynthesisReport should include recommended actions with owners."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1466,7 +1389,7 @@ class TestSynthesizeStage:
     def test_synthesize_has_investigation_id(self):
         """SynthesisReport should include the trace's investigation_id."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1480,7 +1403,7 @@ class TestSynthesizeStage:
     def test_synthesize_has_completeness_warnings(self):
         """SynthesisReport should include completeness_warnings (even if empty)."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1525,7 +1448,7 @@ class TestSynthesizeRetryGate:
             return _dummy_llm(prompt, system, max_tokens)
 
         orch = SearchMetricOrchestrator(llm_callable=retry_testing_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1567,7 +1490,7 @@ class TestSynthesizeRetryGate:
             return _dummy_llm(prompt, system, max_tokens)
 
         orch = SearchMetricOrchestrator(llm_callable=capturing_retry_llm)
-        orch.run(
+        orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1600,7 +1523,7 @@ class TestSynthesizeRetryGate:
             return _dummy_llm(prompt, system, max_tokens)
 
         orch = SearchMetricOrchestrator(llm_callable=always_incomplete_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1624,7 +1547,7 @@ class TestSynthesizeTraceEmission:
     def test_narrative_selection_span_emitted(self):
         """Trace should contain a narrative_selection decision span."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1640,7 +1563,7 @@ class TestSynthesizeTraceEmission:
     def test_narrative_selection_span_is_llm_generated(self):
         """narrative_selection span should be in the llm_generated swimlane."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1659,7 +1582,7 @@ class TestSynthesizeTraceEmission:
     def test_narrative_selection_has_report_summary(self):
         """narrative_selection span value should summarize the report choices."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1679,7 +1602,7 @@ class TestSynthesizeTraceEmission:
     def test_narrative_selection_in_invisible_decisions_summary(self):
         """narrative_selection should appear in the trace summary's invisible_decisions."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1696,7 +1619,7 @@ class TestSynthesizeSeamValidation:
     def test_synthesize_seam_recorded_in_trace(self):
         """Trace should contain a seam validation span for SYNTHESIZE."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1723,7 +1646,7 @@ class TestFullPipelineEndToEnd:
         """Full pipeline (UNDERSTAND -> HYPOTHESIZE -> DISPATCH -> SYNTHESIZE) produces
         a complete report with all expected sections."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="Click Quality dropped 6.2% WoW for standard tier",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1769,7 +1692,7 @@ class TestFullPipelineEndToEnd:
     def test_full_pipeline_trace_has_all_four_invisible_decisions(self):
         """The trace should record all 4 IC9 Invisible Decisions."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1787,7 +1710,7 @@ class TestFullPipelineEndToEnd:
     def test_full_pipeline_trace_has_seams_for_all_stages(self):
         """The trace should contain seam validation spans for all 4 stages."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1805,7 +1728,7 @@ class TestFullPipelineEndToEnd:
     def test_full_pipeline_investigation_id_consistent(self):
         """The investigation_id should be consistent across trace and synthesis."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ drop",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -1847,7 +1770,7 @@ class TestErrorHandlingIntegration:
 
         orch = SearchMetricOrchestrator(llm_callable=bad_json_at_hypothesize)
         with pytest.raises(StageError) as exc_info:
-            orch.run(
+            orch.run_pipeline_only(
                 question="CQ dropped 6% WoW",
                 rows=_make_good_rows(),
                 metric_field="click_quality_value",
@@ -1880,7 +1803,7 @@ class TestErrorHandlingIntegration:
         orch = SearchMetricOrchestrator(llm_callable=timeout_at_dispatch)
         # All hypothesis investigations will fail -> StageError from DISPATCH
         with pytest.raises(StageError) as exc_info:
-            orch.run(
+            orch.run_pipeline_only(
                 question="CQ dropped 6%",
                 rows=_make_good_rows(),
                 metric_field="click_quality_value",
@@ -1899,7 +1822,7 @@ class TestErrorHandlingIntegration:
 
         orch = SearchMetricOrchestrator(llm_callable=empty_response_llm)
         with pytest.raises(StageError) as exc_info:
-            orch.run(
+            orch.run_pipeline_only(
                 question="CQ dropped",
                 rows=_make_good_rows(),
                 metric_field="click_quality_value",
@@ -1920,7 +1843,7 @@ class TestErrorHandlingIntegration:
 
         orch = SearchMetricOrchestrator(llm_callable=bad_json_llm)
         with pytest.raises(OrchestratorError):
-            orch.run(
+            orch.run_pipeline_only(
                 question="CQ dropped",
                 rows=_make_good_rows(),
                 metric_field="click_quality_value",
@@ -1998,7 +1921,7 @@ class TestRetryIntegration:
             return _dummy_llm(prompt, system, max_tokens)
 
         orch = SearchMetricOrchestrator(llm_callable=retry_success_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped 6%",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2038,7 +1961,7 @@ class TestRetryIntegration:
             return _dummy_llm(prompt, system, max_tokens)
 
         orch = SearchMetricOrchestrator(llm_callable=always_bad_synthesis_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2080,7 +2003,7 @@ class TestRetryIntegration:
             return _dummy_llm(prompt, system, max_tokens)
 
         orch = SearchMetricOrchestrator(llm_callable=capturing_synth_llm)
-        orch.run(
+        orch.run_pipeline_only(
             question="CQ dropped",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2239,7 +2162,7 @@ class TestIC9InvisibleDecisionsEndToEnd:
     def test_all_four_decisions_present_in_trace(self):
         """Run full pipeline and verify all 4 IC9 decisions appear in trace spans."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped 6% WoW",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2256,7 +2179,7 @@ class TestIC9InvisibleDecisionsEndToEnd:
     def test_metric_direction_span_correct_stage_and_swimlane(self):
         """IC9 #1: metric_direction should be in UNDERSTAND stage, deterministic swimlane."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2275,7 +2198,7 @@ class TestIC9InvisibleDecisionsEndToEnd:
     def test_hypothesis_inclusion_span_correct_stage_and_swimlane(self):
         """IC9 #2: hypothesis_inclusion should be in HYPOTHESIZE, llm_generated swimlane."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2295,7 +2218,7 @@ class TestIC9InvisibleDecisionsEndToEnd:
     def test_context_construction_span_correct_stage_and_swimlane(self):
         """IC9 #3: context_construction should be in DISPATCH, llm_generated swimlane."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2314,7 +2237,7 @@ class TestIC9InvisibleDecisionsEndToEnd:
     def test_narrative_selection_span_correct_stage_and_swimlane(self):
         """IC9 #4: narrative_selection should be in SYNTHESIZE, llm_generated swimlane."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2334,7 +2257,7 @@ class TestIC9InvisibleDecisionsEndToEnd:
     def test_trace_has_seam_validation_for_all_four_stages(self):
         """Seam validation records should exist for all 4 stages."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2351,7 +2274,7 @@ class TestIC9InvisibleDecisionsEndToEnd:
     def test_invisible_decisions_in_trace_summary(self):
         """All 4 IC9 decisions should appear in the trace summary's invisible_decisions list."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2390,7 +2313,7 @@ class TestBlockedReportGeneration:
     def test_bad_data_quality_produces_blocked_report(self):
         """Data completeness < 96% -> blocked report."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped",
             rows=_make_bad_quality_rows(),
             metric_field="click_quality_value",
@@ -2401,7 +2324,7 @@ class TestBlockedReportGeneration:
     def test_blocked_report_has_required_fields(self):
         """Blocked report should contain status, reason, and remediation."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped",
             rows=_make_bad_quality_rows(),
             metric_field="click_quality_value",
@@ -2415,7 +2338,7 @@ class TestBlockedReportGeneration:
     def test_blocked_report_has_remediation_guidance(self):
         """Remediation should mention actionable fixes (e.g., completeness threshold)."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped",
             rows=_make_bad_quality_rows(),
             metric_field="click_quality_value",
@@ -2437,7 +2360,7 @@ class TestBlockedReportGeneration:
             return _dummy_llm(prompt, system, max_tokens)
 
         orch = SearchMetricOrchestrator(llm_callable=counting_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped",
             rows=_make_bad_quality_rows(),
             metric_field="click_quality_value",
@@ -2451,7 +2374,7 @@ class TestBlockedReportGeneration:
     def test_blocked_report_stages_completed_is_empty(self):
         """When blocked at UNDERSTAND, stages_completed should be empty."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped",
             rows=_make_bad_quality_rows(),
             metric_field="click_quality_value",
@@ -2461,7 +2384,7 @@ class TestBlockedReportGeneration:
     def test_blocked_report_includes_trace(self):
         """Even blocked reports should include a trace for debugging."""
         orch = SearchMetricOrchestrator(llm_callable=_dummy_llm)
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped",
             rows=_make_bad_quality_rows(),
             metric_field="click_quality_value",
@@ -2524,7 +2447,7 @@ class TestPipelineConfiguration:
             llm_callable=_dummy_llm,
             config={"agents": [mock_agent]},
         )
-        result = orch.run(
+        result = orch.run_pipeline_only(
             question="CQ dropped 6%",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2542,7 +2465,7 @@ class TestPipelineConfiguration:
         """
         orch = SearchMetricOrchestrator(llm_callable=None)
         with pytest.raises(TypeError):
-            orch.run(
+            orch.run_pipeline_only(
                 question="CQ dropped",
                 rows=_make_good_rows(),
                 metric_field="click_quality_value",
@@ -2551,18 +2474,16 @@ class TestPipelineConfiguration:
 
 
 # ===========================================================================
-# run_v2() Integration Tests
+# run() Integration Tests (full 5-stage pipeline with QUESTION_PARSE)
 # ===========================================================================
 
-class TestRunV2Integration:
-    """Integration tests for the Wave 5 pipeline entry point: run_v2().
+class TestRunIntegration:
+    """Integration tests for the main pipeline entry point: run().
 
     These tests validate the end-to-end flow:
-    question → QUESTION_PARSE → mode selection → pipeline → result.
+    question -> QUESTION_PARSE -> mode selection -> pipeline -> result.
 
-    This class was added to close the critical gap identified in the
-    CEO + Eng system review (2026-03-20): run_v2() had ZERO callers
-    in the entire codebase before these tests.
+    run() was renamed from run_v2() in the stage extraction refactor.
     """
 
     def _make_mock_llm(self):
@@ -2588,15 +2509,15 @@ class TestRunV2Integration:
 
         return mock_llm
 
-    def test_run_v2_simple_mode_returns_directly(self):
+    def test_run_simple_mode_returns_directly(self):
         """Simple mode should skip the pipeline and return immediately.
 
         When the question is a simple lookup (e.g., "what is click quality?"),
-        run_v2 should parse it, select 'simple' mode, and return without
+        run should parse it, select 'simple' mode, and return without
         running any LLM calls.
         """
         orch = SearchMetricOrchestrator(llm_callable=None)  # No LLM needed
-        result = orch.run_v2(
+        result = orch.run(
             question="What is the click quality formula?",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2609,7 +2530,7 @@ class TestRunV2Integration:
         assert result["stages_completed"] == ["QUESTION_PARSE"]
         assert "trace" in result
 
-    def test_run_v2_medium_mode_runs_full_pipeline(self):
+    def test_run_medium_mode_runs_full_pipeline(self):
         """Medium mode should run the full 4-stage pipeline sequentially.
 
         A question like "Click Quality dropped 6% WoW" should be classified
@@ -2617,7 +2538,7 @@ class TestRunV2Integration:
         """
         mock_llm = self._make_mock_llm()
         orch = SearchMetricOrchestrator(llm_callable=mock_llm)
-        result = orch.run_v2(
+        result = orch.run(
             question="Click Quality dropped 6% WoW",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2639,11 +2560,11 @@ class TestRunV2Integration:
         assert "synthesis" in result
         assert "trace" in result
 
-    def test_run_v2_complex_mode_override(self):
+    def test_run_complex_mode_override(self):
         """Overriding mode to 'complex' should use parallel dispatch."""
         mock_llm = self._make_mock_llm()
         orch = SearchMetricOrchestrator(llm_callable=mock_llm)
-        result = orch.run_v2(
+        result = orch.run(
             question="Click Quality dropped 6% WoW",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2656,11 +2577,11 @@ class TestRunV2Integration:
         assert "QUESTION_PARSE" in result["stages_completed"]
         assert "DISPATCH" in result["stages_completed"]
 
-    def test_run_v2_bad_data_returns_blocked(self):
+    def test_run_bad_data_returns_blocked(self):
         """Bad data quality should block the pipeline at UNDERSTAND."""
         mock_llm = self._make_mock_llm()
         orch = SearchMetricOrchestrator(llm_callable=mock_llm)
-        result = orch.run_v2(
+        result = orch.run(
             question="Click Quality dropped 6% WoW",
             rows=_make_bad_quality_rows(),
             metric_field="click_quality_value",
@@ -2670,10 +2591,10 @@ class TestRunV2Integration:
         assert result["status"] == "blocked"
         assert "trace" in result
 
-    def test_run_v2_question_brief_has_correct_fields(self):
+    def test_run_question_brief_has_correct_fields(self):
         """The question_brief should have the expected fields from parsing."""
         orch = SearchMetricOrchestrator(llm_callable=None)
-        result = orch.run_v2(
+        result = orch.run(
             question="What is the click quality formula?",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2684,11 +2605,11 @@ class TestRunV2Integration:
         assert "raw_question" in brief
         assert "metric_hints" in brief
 
-    def test_run_v2_mode_decision_has_confidence(self):
+    def test_run_mode_decision_has_confidence(self):
         """The mode_decision should include confidence and reasoning."""
         mock_llm = self._make_mock_llm()
         orch = SearchMetricOrchestrator(llm_callable=mock_llm)
-        result = orch.run_v2(
+        result = orch.run(
             question="Click Quality dropped 6% WoW",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
@@ -2698,26 +2619,24 @@ class TestRunV2Integration:
         assert "mode" in decision
         assert "confidence" in decision
 
-    def test_run_v2_core_tool_crash_returns_stage_error(self):
-        """If core/ tools crash on bad input, _stage_understand wraps in StageError.
+    def test_run_core_tool_crash_returns_stage_error(self):
+        """If core/ tools crash on bad input, stage_understand wraps in StageError.
 
         This tests gap 4a: unexpected errors from core/ tools should be caught
         and wrapped in StageError rather than propagating as raw exceptions.
 
-        We test _stage_understand directly with rows=None to force a crash
-        that the try/except should catch. (run_v2 is too defensive at the
+        We test stage_understand directly with rows=None to force a crash
+        that the try/except should catch. (run is too defensive at the
         data quality layer to reach the crash path with normal bad data.)
         """
-        mock_llm = self._make_mock_llm()
-        orch = SearchMetricOrchestrator(llm_callable=mock_llm)
-
+        from harness.stages import stage_understand
         from trace.collector import InvestigationTrace
         trace = InvestigationTrace(question="test")
 
         # None rows will crash check_data_quality (TypeError).
-        # The try/except in _stage_understand should catch this.
+        # The try/except in stage_understand should catch this.
         with pytest.raises(StageError) as exc_info:
-            orch._stage_understand(
+            stage_understand(
                 question="Click Quality dropped 6% WoW",
                 rows=None,
                 metric_field="click_quality_value",
@@ -2728,8 +2647,8 @@ class TestRunV2Integration:
         assert exc_info.value.stage == "UNDERSTAND"
         assert "Core tool error" in exc_info.value.violations[0]
 
-    def test_run_v2_thread_safety_no_instance_state(self):
-        """run_v2() should not store per-invocation state on self.
+    def test_run_thread_safety_no_instance_state(self):
+        """run() should not store per-invocation state on self.
 
         This verifies gap 8: mode and question_type should be passed through
         the method chain as parameters, not stored as self._current_mode.
@@ -2738,7 +2657,7 @@ class TestRunV2Integration:
         orch = SearchMetricOrchestrator(llm_callable=mock_llm)
 
         # Run a medium-mode investigation
-        orch.run_v2(
+        orch.run(
             question="Click Quality dropped 6% WoW",
             rows=_make_good_rows(),
             metric_field="click_quality_value",
