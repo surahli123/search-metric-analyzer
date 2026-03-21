@@ -83,9 +83,9 @@ Last updated: 2026-03-20
 
 Priority: fix during the wave where they naturally fit.
 
-- [ ] `contribution_pct` naming — ratio (0.0-1.0) vs percentage (0-100). Deferred to Wave 3 (confirmed no actual ambiguity — consistently 0-100). (Suggestion)
-- [ ] `constrained_by` field validation — add warning in `InvestigationTrace.emit()` when `swimlane == "llm_generated"` and `constrained_by` missing. Fix during Wave 3 when adding LLM spans. (Important)
-- [ ] Business rules return single violation — document as known limitation or change return type to `List[str]`. (Suggestion)
+- [x] `contribution_pct` naming — CLOSED: confirmed no ambiguity, consistently 0-100. (2026-03-20 eng review)
+- [x] `constrained_by` field validation — CLOSED: Wave 3b already adds constrained_by to all LLM spans. (2026-03-20 eng review)
+- [x] Business rules return single violation — CLOSED: validate_seam() collects ALL violations across rules. Design is correct. (2026-03-20 eng review)
 - [ ] `narrative_data_coherence` false-negative bias — add docstring noting that mixed-direction text passes. (Suggestion)
 - [ ] `CoMovementResult.runner_up` double-optional — `Optional[str]` + `total=False` is redundant. (Suggestion)
 - [ ] `InvestigationTrace.emit()` mutates span dict in-place — add docstring note. (Suggestion)

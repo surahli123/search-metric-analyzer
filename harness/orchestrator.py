@@ -529,10 +529,6 @@ class SearchMetricOrchestrator:
         self._config = dict(self.DEFAULT_CONFIG)
         if config:
             self._config.update(config)
-        # Per-invocation state for run_v2() — used to pass mode/question_type
-        # to validate_seam() kwargs. None when using old run() path.
-        self._current_mode = None
-        self._current_question_type = None
 
     def run(
         self,
@@ -589,6 +585,7 @@ class SearchMetricOrchestrator:
         dimensions: Optional[list],
         mode: str,
         trace: InvestigationTrace,
+        question_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Shared 4-stage pipeline: UNDERSTAND → HYPOTHESIZE → DISPATCH → SYNTHESIZE.
 
@@ -652,12 +649,14 @@ class SearchMetricOrchestrator:
                 hypothesis_set=hypothesize_result,
                 understand_result=understand_result,
                 trace=trace,
+                question_type=question_type,
             )
         else:
             dispatch_result = self._stage_dispatch(
                 hypothesis_set=hypothesize_result,
                 understand_result=understand_result,
                 trace=trace,
+                question_type=question_type,
             )
 
         # --- Stage 4: SYNTHESIZE (LLM-based, RETRY(1) then SOFT gate) ---
@@ -666,6 +665,7 @@ class SearchMetricOrchestrator:
             understand_result=understand_result,
             hypothesize_result=hypothesize_result,
             trace=trace,
+            mode=mode,
         )
 
         return {
@@ -717,38 +717,44 @@ class SearchMetricOrchestrator:
         Raises:
             SeamViolation: If UNDERSTAND seam validation fails (HARD gate).
         """
-        # --- Step 1: Data quality gate ---
-        # This is the most important check — if data is bad, everything
-        # downstream is unreliable. Check FIRST, fail FAST.
-        dq_result = check_data_quality(rows, trace=trace)
+        # --- Core tool calls wrapped in try/except ---
+        # The core/ tools assume well-formed input data. If the input has
+        # unexpected structure, these tools may raise KeyError, TypeError, etc.
+        # We catch these so the pipeline returns a clear StageError.
+        try:
+            # --- Step 1: Data quality gate ---
+            dq_result = check_data_quality(rows, trace=trace)
 
-        # --- Step 2: Run decomposition ---
-        # Even if data quality is "warn", we continue — the analyst
-        # should see the decomposition alongside the warning.
-        # If data quality is "fail", we still run decomposition to
-        # populate the UnderstandResult, but the seam validator will
-        # halt the pipeline at step 8.
-        decomposition = run_decomposition(
-            rows=rows,
-            metric_field=metric_field,
-            dimensions=dimensions,
-            trace=trace,
-        )
+            # --- Step 2: Run decomposition ---
+            decomposition = run_decomposition(
+                rows=rows,
+                metric_field=metric_field,
+                dimensions=dimensions,
+                trace=trace,
+            )
 
-        # --- Step 3: Extract daily values for step-change detection ---
-        # Step-change detection needs daily metric averages. We extract
-        # these from the current-period rows (looking for overnight jumps
-        # within the current period).
-        daily_values = self._extract_daily_values(rows, metric_field)
+            # --- Step 3: Extract daily values for step-change detection ---
+            daily_values = self._extract_daily_values(rows, metric_field)
 
-        # --- Step 4: Detect step change ---
-        step_change = detect_step_change(daily_values, trace=trace)
+            # --- Step 4: Detect step change ---
+            step_change = detect_step_change(daily_values, trace=trace)
 
-        # --- Step 5: Match co-movement pattern ---
-        # Build the observed directions dict from the decomposition aggregate.
-        # We need direction for each metric to match against the co-movement table.
-        observed_directions = self._extract_observed_directions(rows, metric_field)
-        co_movement = match_co_movement_pattern(observed_directions, trace=trace)
+            # --- Step 5: Match co-movement pattern ---
+            observed_directions = self._extract_observed_directions(rows, metric_field)
+            co_movement = match_co_movement_pattern(observed_directions, trace=trace)
+
+        except (SeamViolation, StageError):
+            raise
+        except Exception as exc:
+            raise StageError(
+                message=(
+                    f"UNDERSTAND failed: core analysis tool raised "
+                    f"{type(exc).__name__}: {str(exc)[:200]}. "
+                    f"Check that input data has the expected columns and format."
+                ),
+                stage="UNDERSTAND",
+                violations=[f"Core tool error: {type(exc).__name__}: {str(exc)[:200]}"],
+            ) from exc
 
         # --- Step 6: Run diagnosis ---
         # Diagnosis consumes all prior analysis and produces the hypothesis.
@@ -1056,7 +1062,7 @@ class SearchMetricOrchestrator:
         from harness.prompts import normalize_hypothesis_set
         return normalize_hypothesis_set(parsed)
 
-    def _stage_dispatch(self, hypothesis_set, understand_result, trace):
+    def _stage_dispatch(self, hypothesis_set, understand_result, trace, question_type=None):
         """Stage 3: DISPATCH — investigate hypotheses using specialist agents.
 
         Routes each hypothesis to either:
@@ -1223,7 +1229,7 @@ class SearchMetricOrchestrator:
             result=finding_set,
             stage="DISPATCH",
             trace=trace,
-            question_type=self._current_question_type,  # Fix #4: enable rule_srm_check
+            question_type=question_type,
         )
 
         if not validation["passed"]:
@@ -1345,7 +1351,7 @@ class SearchMetricOrchestrator:
         )
 
     def _stage_synthesize(self, dispatch_result, understand_result,
-                          hypothesize_result, trace):
+                          hypothesize_result, trace, mode=None):
         """Stage 4: SYNTHESIZE — produce the final investigation report.
 
         Builds a prompt from all prior stages, calls the LLM, and validates
@@ -1418,7 +1424,7 @@ class SearchMetricOrchestrator:
                 result=report,
                 stage="SYNTHESIZE",
                 trace=trace,
-                mode=self._current_mode,  # Fix #4: enable rule_mode_compliance_simple
+                mode=mode,
             )
         except SeamViolation as first_violation:
             # First attempt failed — retry with violation feedback
@@ -1462,7 +1468,7 @@ class SearchMetricOrchestrator:
                     result=report,
                     stage="SYNTHESIZE",
                     trace=trace,
-                    mode=self._current_mode,  # Fix #4: enable rule_mode_compliance_simple
+                    mode=mode,
                 )
             except SeamViolation as second_violation:
                 # Both attempts failed — SOFT fallback.
@@ -1559,6 +1565,7 @@ class SearchMetricOrchestrator:
         hypothesis_set: Dict[str, Any],
         understand_result: Dict[str, Any],
         trace,
+        question_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Stage 3 (Complex mode): Parallel hypothesis investigation via DAGExecutor.
 
@@ -1622,7 +1629,7 @@ class SearchMetricOrchestrator:
             result=finding_set,
             stage="DISPATCH",
             trace=trace,
-            question_type=self._current_question_type,
+            question_type=question_type,
         )
 
         if not validation["passed"]:
@@ -1818,12 +1825,7 @@ class SearchMetricOrchestrator:
         )
         mode = mode_decision["mode"]
 
-        # Fix #4: Store mode and question_type on self so stage methods can pass
-        # them as kwargs to validate_seam(). These are per-invocation state, not
-        # config — reset on each run_v2() call. The old run() path doesn't set
-        # these, so stage methods default to None (rules skip gracefully).
-        self._current_mode = mode
-        self._current_question_type = question_brief.get("question_type")
+        question_type = question_brief.get("question_type")
 
         # --- Simple mode: direct knowledge lookup, no pipeline ---
         if mode == "simple":
@@ -1857,6 +1859,7 @@ class SearchMetricOrchestrator:
             dimensions=dimensions,
             mode=mode,
             trace=trace,
+            question_type=question_type,
         )
 
         # Augment with v2-specific fields

@@ -31,7 +31,7 @@ import re
 import time
 from typing import Callable
 
-from harness.errors import LLMAPIError, LLMParseError
+from harness.errors import LLMAPIError, LLMParseError, LLMRefusalError
 
 # Module-level logger.  The orchestrator's logging config controls verbosity.
 logger = logging.getLogger(__name__)
@@ -43,6 +43,28 @@ logger = logging.getLogger(__name__)
 # to know anything about the Anthropic SDK, retry logic, or error handling.
 # ---------------------------------------------------------------------------
 LLMCallable = Callable[[str], str]
+
+
+
+# ---------------------------------------------------------------------------
+# Refusal Detection
+# ---------------------------------------------------------------------------
+
+REFUSAL_PHRASES = [
+    "i cannot", "i can't", "i'm unable", "i am unable",
+    "i'm not able", "i apologize, but i", "i'm sorry, but i cannot",
+    "i don't think i should", "as an ai", "i must decline",
+]
+
+
+def detect_refusal(text: str) -> bool:
+    """Check if an LLM response is a refusal rather than an attempt."""
+    if not text:
+        return False
+    prefix = text[:300].lower()
+    if "{" in text[:500]:
+        return False
+    return any(phrase in prefix for phrase in REFUSAL_PHRASES)
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +95,15 @@ def extract_json(text: str) -> dict | list:
         LLMParseError: If no strategy can extract valid JSON.
     """
     strategies_tried: list[str] = []
+
+    # --- Strategy 0: Refusal detection ---
+    if detect_refusal(text):
+        preview = text[:200] + "..." if len(text) > 200 else text
+        logger.warning("LLM refused the task. Response preview: %s", preview)
+        raise LLMRefusalError(
+            message="LLM refused to perform the requested task.",
+            raw_response=text,
+        )
 
     # --- Strategy 1: Direct json.loads() on full response ---
     # Best case: the LLM followed instructions and returned pure JSON.
