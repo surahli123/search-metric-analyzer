@@ -5,6 +5,26 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## CEO + Eng System Review + Wave 5 Review Round 2 (2026-03-20)
+
+Full system review (11 sections) + Wave 5 code review with TDD and reflexion.
+
+### Fixed (review round 2, PR #21)
+- `harness/prompts.py` — Added `srm_check` field to dispatch prompt so `rule_srm_check` can fire (was silently no-op)
+- `harness/dag_executor.py` — Removed dead `except TimeoutError`, added coverage backfill for unprocessed hypotheses after circuit breaker
+- `harness/dag_executor.py` — Fixed `failure_count` semantics: backfilled hypotheses no longer counted as failures
+- `.claude/rules/02-architecture-boundaries.md` — Updated for Wave 5 (5-stage pipeline, agents/ directory, 17 rules, layer dependency clarification)
+
+### Added
+- `tests/test_prompts_srm.py` — 8 TDD tests for SRM prompt contract + end-to-end rule verification
+- 1 new backfill coverage test in `tests/test_dag_executor.py`
+- CEO + Eng combined system review (plan file: `~/.claude/plans/tranquil-sauteeing-origami.md`)
+
+### Removed
+- Git housekeeping: 3 local branches, 5 remote branches, 16 stale stashes deleted
+
+---
+
 ## Wave 5: Agent Architecture — Foundation Complete (2026-03-20)
 
 Full implementation of Wave 5 (Agent Architecture) across PRs #16-#20. Adds mode selection, declarative agents, parallel dispatch, and expanded quality gates.
