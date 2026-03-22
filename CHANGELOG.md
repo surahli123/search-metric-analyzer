@@ -5,6 +5,42 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Session: Orchestrator Decomposition + Synthetic Data + Phoenix Implementation (2026-03-21)
+
+### Added
+- `harness/stages/{__init__,understand,hypothesize,dispatch,synthesize}.py` — Extracted 4 stage methods from monolithic orchestrator into standalone modules
+- `harness/types.py` — `LLMCallable` type alias for stage function signatures
+- `harness/phoenix_tracer.py` — Phoenix/OpenTelemetry dual tracing (dual_emit, stage_span, register_phoenix, emit_guardrail)
+- `scripts/generate_investigation_data.py` — 5 investigation scenarios (ranking regression, AI adoption, connector failure, mix-shift, normal variance)
+- `data/investigations/*.csv` — 5 generated scenario CSVs (300 rows each, planted regressions)
+- `tests/test_stages.py` — 24 stage extraction tests
+- `tests/test_investigation_data.py` — 100 synthetic data tests (schema, ranges, planted signals, SQS formula, CLI)
+- `tests/test_phoenix_tracer.py` — 30 Phoenix tracer tests
+- `requirements-dev.txt` — Dev dependencies (opentelemetry, arize-phoenix)
+- `.venv/` — Python virtual environment for API dependencies
+
+### Changed
+- `harness/orchestrator.py` — Reduced from 1,872 to 399 LOC; `run_v2()` renamed to `run()`; v1 `orchestrate()` deleted
+- `contracts/seam_validator.py` — Emits guardrail spans to Phoenix
+- `harness/dag_executor.py` — OTel context propagation for thread workers
+- `harness/stages/*.py` — All stages use `dual_emit()` instead of direct TraceSpan
+- `tests/test_orchestrator_pipeline.py` — Updated for run_v2→run rename + stage extraction
+
+### Removed
+- `tests/test_agent_orchestrator.py` — v1 orchestrator tests (25 tests for deleted code)
+- v1 `orchestrate()`, `_should_orchestrate()`, `_run_agents_sequentially()`, `_fuse_verdicts()`, `_verdict_to_decision_status()` — ~447 LOC dead code
+
+### Code Review
+- 2 parallel code reviews (synthetic data + orchestrator decomp)
+- Synthetic data: 4 concerns fixed (ai_off zero invariant, P0 threshold test, SQS tolerance, seed isolation)
+- Orchestrator: 3 concerns fixed (run_diagnosis inside try/except, LLMCallable type alias, docstring typo)
+
+### Metrics
+- Tests: 1,294 backend (up from 1,040), all passing
+- PR #25 opened: feature/phoenix-integration → main
+
+---
+
 ## Arize Phoenix Integration — Design + Plan Complete (2026-03-21)
 
 Research, design, and implementation planning for integrating Arize Phoenix (open-source LLM observability) with the existing trace system.
