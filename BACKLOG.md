@@ -146,9 +146,9 @@ Redesigned from manifest pre-load to hybrid on-demand retrieval. See spec + plan
 - [ ] Task 7: Orchestrator integration (per-stage retrieval + trace + prompts)
 - [ ] Task 8: API embeddings hybrid (P5, optional — after TF-IDF eval)
 
-### Phoenix Integration: LLM Observability (DESIGNED — 2026-03-21)
+### Phoenix Integration: LLM Observability (DONE — 2026-03-21)
 
-Design + implementation plan complete. Ready for TDD implementation.
+Implemented, code-reviewed, all 1,294 tests passing. PR #26 open.
 - Design: `docs/plans/2026-03-20-arize-phoenix-integration-design.md`
 - Plan: `docs/plans/2026-03-20-phoenix-integration-implementation-plan.md`
 - Branch: `feature/phoenix-integration`

@@ -30,14 +30,20 @@ Format: version, date, summary, then categorized changes.
 - `tests/test_agent_orchestrator.py` — v1 orchestrator tests (25 tests for deleted code)
 - v1 `orchestrate()`, `_should_orchestrate()`, `_run_agents_sequentially()`, `_fuse_verdicts()`, `_verdict_to_decision_status()` — ~447 LOC dead code
 
+### Fixed
+- `harness/phoenix_tracer.py` — `stage_span()` exception handling: separated OTel setup errors from body errors to prevent `RuntimeError: generator didn't stop after throw()` (caught 8 regression failures)
+- `harness/phoenix_tracer.py` — Consolidated scattered `from typing import` statements at top with `from __future__ import annotations` (Python 3.10 compatibility)
+- `contracts/seam_validator.py` — Added explicit layer exception justification comment for contracts/ → harness/ import
+
 ### Code Review
-- 2 parallel code reviews (synthetic data + orchestrator decomp)
+- 3 parallel reviews: synthetic data, orchestrator decomp, Phoenix integration (10 findings)
 - Synthetic data: 4 concerns fixed (ai_off zero invariant, P0 threshold test, SQS tolerance, seed isolation)
 - Orchestrator: 3 concerns fixed (run_diagnosis inside try/except, LLMCallable type alias, docstring typo)
+- Phoenix: 3 fixed (stage_span exception bug, scattered imports, stale docstring), 4 accepted with justification, 3 deferred
 
 ### Metrics
 - Tests: 1,294 backend (up from 1,040), all passing
-- PR #25 opened: feature/phoenix-integration → main
+- PR #25 updated, PR #26 created: feature/phoenix-integration → main
 
 ---
 
