@@ -121,11 +121,11 @@ Full plan: `docs/plans/2026-03-18-sma-v2-improvement-plan.md`
 - [x] Code review: all 10 findings addressed (PR #20)
 
 ### Pre-Wave 6: System Review TODOs (from CEO + Eng review, PR #24)
-- [ ] Decompose orchestrator.py (1,869 LOC) → harness/stages/*.py — P1, do before Wave 6
-- [ ] Delete v1 orchestrate() dead code (~400 LOC, zero callers) — P2, bundle with decomposition
-- [ ] Rename run_v2() → run(), deprecate old run() — P2, bundle with decomposition
+- [x] Decompose orchestrator.py (1,869 LOC) → harness/stages/*.py — DONE (2026-03-21, PR #25)
+- [x] Delete v1 orchestrate() dead code (~400 LOC, zero callers) — DONE (bundled with decomposition)
+- [x] Rename run_v2() → run(), deprecate old run() — DONE (bundled with decomposition)
 - [ ] Agent .md files as source of truth for prompts (replace hardcoded prompts.py) — P2, do during Wave 6
-- [ ] Run 3-5 real investigations through pipeline with Anthropic API key — P1, highest ROI before new Wave work
+- [ ] Run 3-5 real investigations through pipeline with Anthropic API key — P1, blocked on API credits (UNDERSTAND stage validated, LLM stages need credits)
 - [ ] Fix thread-unsafe self._current_mode instance state — DONE (PR #24)
 - [ ] Add run_v2() integration tests — DONE (PR #24, 8 tests)
 - [ ] Core tool crash guard in _stage_understand — DONE (PR #24)
@@ -154,15 +154,15 @@ Design + implementation plan complete. Ready for TDD implementation.
 - Branch: `feature/phoenix-integration`
 - Eng review: 2 rounds CLEARED (7 arch decisions + 5 impl fixes)
 
-- [ ] Step 1: Scaffold phoenix_tracer.py + requirements-dev.txt (6 tests)
-- [ ] Step 2: stage_span() context manager (4 tests)
-- [ ] Step 3: dual_emit() with swimlane param (6 tests)
-- [ ] Step 4: emit_guardrail() + flush() (4 tests)
-- [ ] Step 5a: Wrap orchestrator stages in CHAIN spans (4 tests)
-- [ ] Step 5b: Replace emit calls with dual_emit() (3 tests)
-- [ ] Step 6: Wire emit_guardrail into seam_validator (2 tests)
-- [ ] Step 7: OTel context propagation in DAGExecutor (3 tests)
-- [ ] Step 8: Full integration test + graceful degradation (2 tests)
+- [x] Step 1: Scaffold phoenix_tracer.py + requirements-dev.txt — DONE (2026-03-21, PR #25)
+- [x] Step 2: stage_span() context manager — DONE
+- [x] Step 3: dual_emit() with swimlane param — DONE
+- [x] Step 4: emit_guardrail() + flush() — DONE
+- [x] Step 5a: Wrap orchestrator stages in CHAIN spans — DONE
+- [x] Step 5b: Replace emit calls with dual_emit() — DONE
+- [x] Step 6: Wire emit_guardrail into seam_validator — DONE
+- [x] Step 7: OTel context propagation in DAGExecutor — DONE
+- [x] Step 8: Full integration test + graceful degradation — DONE (30 tests)
 - [ ] TODO: Wire Phoenix into eval stress test pipeline (deferred, see TODOS.md)
 
 ### Wave 7: Data Connectivity
