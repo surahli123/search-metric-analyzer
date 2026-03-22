@@ -1,0 +1,6 @@
+# Dev-time dependencies for Phoenix/OTel observability.
+# NOT required for production — all Phoenix features degrade gracefully.
+# Install: pip install -r requirements-dev.txt
+arize-phoenix-otel
+openinference-instrumentation-anthropic
+opentelemetry-sdk

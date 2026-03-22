@@ -5,6 +5,77 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Arize Phoenix Integration — Design + Plan Complete (2026-03-21)
+
+Research, design, and implementation planning for integrating Arize Phoenix (open-source LLM observability) with the existing trace system.
+
+### Added
+- `docs/plans/2026-03-20-arize-phoenix-integration-design.md` — Full design doc: problem statement, 3 approaches evaluated, span mapping table, architecture diagram, graceful degradation strategy
+- `docs/plans/2026-03-20-phoenix-integration-implementation-plan.md` — 9-step TDD implementation plan with 31 tests across 9 atomic commits
+- `TODOS.md` — Created with eval stress test Phoenix integration follow-up
+
+### Design Decisions
+- Phoenix COMPLEMENTS existing trace system (observability), does not replace it (enforcement)
+- Dual-emit pattern: `dual_emit()` in `harness/phoenix_tracer.py` writes to InvestigationTrace + OTel in one call
+- Layer boundary preserved: trace/ (Layer 3) untouched, Phoenix integration lives in harness/ (Layer 4)
+- Idempotent `register_phoenix()` with lazy init guard — safe to call on every pipeline run
+- Batch exporter + explicit `flush()` at pipeline end — prevents both latency overhead and data loss
+- OTel context propagation in DAGExecutor ThreadPoolExecutor workers
+- Trace ID correlation: OTel trace_id set from InvestigationTrace.trace_id
+- `dual_emit()` handles both deterministic and llm_generated swimlanes via parameter
+
+### Eng Review (2 rounds)
+- Round 1: 7 architectural decisions locked (layer boundary, thread context, trace ID, exporter mode, import guard, dual emit, test strategy)
+- Round 2: 5 implementation fixes (idempotency, swimlane param, step splitting, AnthropicInstrumentor, degradation test)
+
+---
+
+## Wave 6: Knowledge Retrieval Layer — Design Complete (2026-03-21)
+
+Design session for replacing manifest-based pre-load knowledge architecture with hybrid TF-IDF + API embeddings on-demand retrieval. Informed by OpenAI, Vercel, and a16z context layer architectures.
+
+### Added
+- `docs/plans/2026-03-20-knowledge-retrieval-layer-design.md` — Full spec: 56-chunk boundary design, hybrid retrieval architecture, 25-case retrieval eval test set, query expansion design
+- `docs/plans/2026-03-20-knowledge-retrieval-layer-plan.md` — 8-task implementation plan with TDD steps
+- IC9 search architecture review of the design (6 findings, all accepted)
+
+### Design Decisions
+- Pre-load → on-demand retrieval (kernel 330 tokens + TF-IDF + API embeddings)
+- Query expansion in question_parser solves 80% of retrieval failures (P2 before P5)
+- Direct scoring, not RRF (unnecessary at 56 chunks)
+- Manifest.yaml becomes permission boundaries, not loading instructions
+- Default permission policy: DENY. Kernel chunks always allowed.
+- Hybrid weights configurable (default 0.5/0.5), tuned via retrieval eval
+
+---
+
+## CEO + Eng System Review — Critical Gaps Fixed (2026-03-20)
+
+Combined CEO (Hold Scope) + Eng system review of full pipeline. Identified 4 critical gaps, 10 TODOs. Fixed all 4 critical gaps in PR #24.
+
+### Added
+- `LLMRefusalError` in `harness/errors.py` — distinct error for model refusals vs parse failures
+- `detect_refusal()` in `harness/llm.py` — checks for common refusal phrases before JSON extraction
+- 8 `TestRunV2Integration` tests — first-ever integration tests for run_v2() pipeline (Simple/Medium/Complex modes, bad data, crash guard, thread safety)
+- `fastapi>=0.100.0` and `uvicorn>=0.23.0` in requirements.txt
+
+### Changed
+- `harness/orchestrator.py` — removed thread-unsafe `self._current_mode`/`self._current_question_type` instance state; mode and question_type now passed as parameters through `_run_pipeline()` → `_stage_dispatch()` → `_stage_synthesize()`
+- `harness/orchestrator.py` — wrapped core/ tool calls in `_stage_understand()` with try/except; unexpected errors from decompose/anomaly now raise `StageError` instead of crashing
+- `harness/llm.py` — `extract_json()` checks for refusal before attempting JSON extraction (Strategy 0)
+
+### Fixed
+- Closed 3 stale code review items in BACKLOG.md (contribution_pct naming, constrained_by validation, single violation return — all confirmed resolved)
+
+### Review Findings (deferred TODOs)
+- Decompose orchestrator.py (1,869 LOC) into harness/stages/*.py (P1)
+- Delete v1 orchestrate() dead code (~400 LOC) (P2)
+- Rename run_v2() → run() (P2)
+- Agent .md files as source of truth for prompts (P2)
+- Run 3-5 real investigations through pipeline (P1, highest ROI)
+
+---
+
 ## Subagent Discipline Rule (2026-03-20)
 
 Formalized subagent dispatch and post-completion protocols based on workflow analysis.
