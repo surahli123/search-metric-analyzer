@@ -71,6 +71,10 @@ result = orch.run(
 )
 ```
 
+## Pre-Implementation Fix
+
+**Delete stale `LLMCallable` alias in `harness/llm.py:45`.** It says `Callable[[str], str]` (1-arg) but the actual callable signature is `(prompt, system, max_tokens) -> str` (3-arg, per `harness/types.py`). This is a pre-existing bug that would confuse the implementer.
+
 ## Function Signature
 
 ```python
@@ -91,9 +95,41 @@ def make_openai_llm(
 3. `OPENAI_API_KEY` environment variable
 4. Raise `ValueError` with helpful message
 
+## Message Construction (differs from Anthropic)
+
+OpenAI puts system messages in the `messages` array, NOT as a top-level kwarg:
+
+```python
+# Anthropic (existing):
+kwargs = {"model": model, "max_tokens": max_tokens, "messages": messages}
+if system:
+    kwargs["system"] = system  # top-level kwarg
+
+# OpenAI (new — must build messages differently):
+messages = []
+if system:
+    messages.append({"role": "system", "content": system})
+messages.append({"role": "user", "content": prompt})
+```
+
+## Response Extraction (differs from Anthropic)
+
+```python
+# Anthropic: response.content[0].text
+# OpenAI:    response.choices[0].message.content
+
+response = client.chat.completions.create(**kwargs)
+if response.choices and len(response.choices) > 0:
+    content = response.choices[0].message.content
+    return content if content else ""
+return ""
+```
+
+**Edge case:** `choices` can be empty or `message.content` can be `None` (e.g., tool_calls response). Guard both.
+
 ## Error Classification Updates
 
-`_classify_api_error()` currently inspects Anthropic SDK exceptions. Add handling for OpenAI SDK exceptions:
+`_classify_api_error()` currently inspects Anthropic SDK exceptions. Both SDKs use `status_code` attributes and similar class naming patterns ("Timeout", "Connection"), so the existing classifier may already work. **Verify during implementation** — if it does, the only change is updating the docstring. If not, add OpenAI-specific handling:
 
 | OpenAI Exception | Status Code | Transient? |
 |-----------------|-------------|------------|
@@ -104,7 +140,7 @@ def make_openai_llm(
 | `openai.AuthenticationError` | 401 | No — fail fast |
 | `openai.BadRequestError` | 400 | No — fail fast |
 
-Detection: check `type(exc).__module__` starts with `"openai"` and inspect exception class name. No need to import openai types in the error classifier.
+Detection: both SDKs use `status_code` attributes and similar class names. Verify existing `_classify_api_error()` handles both before adding new logic. If it already works, just update the docstring.
 
 ## Phoenix Integration Update
 
@@ -125,7 +161,7 @@ This is safe because:
 
 ## Test Plan
 
-7 tests in `tests/test_llm.py` (existing file):
+8 tests in `tests/test_llm.py` (existing file):
 
 | Test | What it verifies |
 |------|-----------------|
@@ -136,6 +172,7 @@ This is safe because:
 | `test_openai_llm_missing_package_raises` | ImportError with helpful install message |
 | `test_classify_error_openai_rate_limit` | 429 classified as transient |
 | `test_classify_error_openai_auth` | 401 classified as permanent |
+| `test_openai_llm_empty_choices` | Handles empty `choices` array or `None` content gracefully |
 
 All tests mock the OpenAI SDK — no real API calls.
 
@@ -146,7 +183,8 @@ All tests mock the OpenAI SDK — no real API calls.
 | `harness/llm.py` | MODIFY | ~50 added |
 | `harness/phoenix_tracer.py` | MODIFY | ~5 added |
 | `requirements-dev.txt` | MODIFY | 2 lines added |
-| `tests/test_llm.py` | MODIFY | ~80 added (7 tests) |
+| `tests/test_llm.py` | MODIFY | ~90 added (8 tests) |
+| `harness/llm.py:45` | FIX | Delete stale 1-arg `LLMCallable` alias |
 
 ## NOT in Scope
 
