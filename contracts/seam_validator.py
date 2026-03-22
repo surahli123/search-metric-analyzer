@@ -664,6 +664,21 @@ def validate_seam(
             violations=violations
         )
 
+    # LAYER EXCEPTION: contracts/ → harness/ (normally forbidden).
+    # WHY: emit_guardrail must run BEFORE the gate tier check below, so it
+    # captures GUARDRAIL spans for both passing AND failing validations.
+    # Moving to callers would lose failure spans (hard/retry gates raise
+    # before the caller can emit). This is a pure observability side-effect
+    # with no logic dependency — the import is lazy and no-ops if Phoenix
+    # deps aren't installed.
+    from harness.phoenix_tracer import emit_guardrail
+    emit_guardrail(
+        stage=stage,
+        passed=passed,
+        tier=tier,
+        violations=violations,
+    )
+
     validation_result = {
         "passed": passed,
         "violations": violations,

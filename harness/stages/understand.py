@@ -14,7 +14,7 @@ Dependencies (all in core/ — no LLM needed):
 - core.decompose: run_decomposition
 - core.diagnose: run_diagnosis
 - contracts.seam_validator: validate_seam
-- trace.helpers: emit_deterministic_span
+- harness.phoenix_tracer: dual_emit
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from core.diagnose import run_diagnosis
 from contracts.seam_validator import validate_seam, SeamViolation
 from harness.errors import StageError
 from trace.collector import InvestigationTrace
-from trace.helpers import emit_deterministic_span
+from harness.phoenix_tracer import dual_emit
 
 
 def stage_understand(
@@ -153,7 +153,7 @@ def stage_understand(
 
     # --- Step 9: Emit summary trace span ---
     # Record the overall UNDERSTAND outcome for downstream stages
-    emit_deterministic_span(
+    dual_emit(
         trace,
         tool="harness.stages.understand.stage_understand",
         decision="understand_complete",
@@ -168,6 +168,7 @@ def stage_understand(
             f"co_movement={co_movement.get('likely_cause', 'unknown')}, "
             f"step_change={step_change.get('detected', False)}"
         ),
+        swimlane="deterministic",
     )
 
     return understand_result

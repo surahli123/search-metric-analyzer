@@ -27,7 +27,7 @@ from contracts.seam_validator import validate_seam
 from harness.errors import StageError, LLMParseError
 from harness.llm import extract_json
 from trace.collector import InvestigationTrace
-from trace.span import TraceSpan
+from harness.phoenix_tracer import dual_emit
 
 logger = logging.getLogger(__name__)
 
@@ -137,15 +137,13 @@ def stage_hypothesize(
         for e in hypothesis_set.get("exclusions", [])
     ]
 
-    # Use trace.emit() directly for LLM-generated spans (not deterministic)
-    # because emit_deterministic_span() sets code_enforced=True, which would
-    # be misleading for an LLM decision.
-    trace.emit(TraceSpan(
+    # Dual-emit: writes to InvestigationTrace AND OTel (if Phoenix available)
+    dual_emit(
+        trace,
         stage="HYPOTHESIZE",
         swimlane="llm_generated",
         tool="harness.stages.hypothesize.stage_hypothesize",
         decision="hypothesis_inclusion",
-        code_enforced=False,
         value={
             "included": included_archetypes,
             "excluded": excluded_archetypes,
@@ -168,7 +166,7 @@ def stage_hypothesize(
             f"included_archetypes={included_archetypes}, "
             f"has_contrarian={any(h.get('is_contrarian') for h in hypothesis_set.get('hypotheses', []))}"
         ),
-    ))
+    )
 
     # --- Step 6: Seam validation (SOFT gate) ---
     # HYPOTHESIZE uses a SOFT gate — if validation fails, we log the

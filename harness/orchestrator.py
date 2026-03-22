@@ -42,7 +42,7 @@ from harness.stages import (
     stage_synthesize,
 )
 from trace.collector import InvestigationTrace
-from trace.helpers import emit_deterministic_span
+from harness.phoenix_tracer import register_phoenix, stage_span, flush, dual_emit
 
 
 class SearchMetricOrchestrator:
@@ -168,7 +168,7 @@ class SearchMetricOrchestrator:
 
         # --- Simple mode: direct knowledge lookup, no pipeline ---
         if mode == "simple":
-            emit_deterministic_span(
+            dual_emit(
                 trace,
                 tool="harness.orchestrator.SearchMetricOrchestrator.run",
                 decision="mode_execution",
@@ -176,6 +176,7 @@ class SearchMetricOrchestrator:
                 stage="QUESTION_PARSE",
                 human_summary="Simple mode: direct knowledge lookup, skipping pipeline",
                 agent_context=f"mode=simple, question_type={question_brief.get('question_type')}",
+                swimlane="deterministic",
             )
             return {
                 "status": "complete",
@@ -274,84 +275,100 @@ class SearchMetricOrchestrator:
         Raises:
             StageError: If a pipeline stage fails.
         """
-        # --- Stage 1: UNDERSTAND (deterministic, no LLM) ---
+        # --- Phoenix observability: register tracer (idempotent) ---
+        # WHY here and not in __init__: register_phoenix() sets up OTel
+        # globally, which should happen lazily when the pipeline actually
+        # runs, not when the orchestrator is just instantiated.
+        phoenix_provider = register_phoenix()
+
         try:
-            understand_result = stage_understand(
-                question=question,
-                rows=rows,
-                metric_field=metric_field,
-                dimensions=dimensions,
-                trace=trace,
-            )
-        except SeamViolation as e:
-            blocked_understand = {
-                "question": question, "metric": metric_field,
-                "data_quality_status": "fail", "metric_direction": "unknown",
-                "severity": "blocked", "direction": "unknown",
-                "step_change": None, "co_movement_pattern": {},
-                "mix_shift_result": None, "data_quality_details": None,
+            # --- Stage 1: UNDERSTAND (deterministic, no LLM) ---
+            with stage_span("UNDERSTAND", mode=mode):
+                try:
+                    understand_result = stage_understand(
+                        question=question,
+                        rows=rows,
+                        metric_field=metric_field,
+                        dimensions=dimensions,
+                        trace=trace,
+                    )
+                except SeamViolation as e:
+                    blocked_understand = {
+                        "question": question, "metric": metric_field,
+                        "data_quality_status": "fail", "metric_direction": "unknown",
+                        "severity": "blocked", "direction": "unknown",
+                        "step_change": None, "co_movement_pattern": {},
+                        "mix_shift_result": None, "data_quality_details": None,
+                    }
+                    return self._build_blocked_report(
+                        understand_result=blocked_understand, trace=trace,
+                        reason="; ".join(e.violations),
+                    )
+
+            if understand_result.get("data_quality_status") == "fail":
+                return self._build_blocked_report(
+                    understand_result=understand_result, trace=trace,
+                    reason=understand_result.get("data_quality_details", {}).get(
+                        "reason", "Data quality check failed"),
+                )
+
+            # --- Stage 2: HYPOTHESIZE (LLM-based) ---
+            with stage_span("HYPOTHESIZE", mode=mode):
+                hypothesize_result = stage_hypothesize(
+                    understand_result=understand_result,
+                    trace=trace,
+                    llm_callable=self._llm,
+                )
+
+            # --- Stage 3: DISPATCH ---
+            # Complex mode: parallel dispatch via DAGExecutor
+            # Medium mode: sequential dispatch
+            with stage_span("DISPATCH", mode=mode):
+                if mode == "complex":
+                    dispatch_result = stage_dispatch_parallel(
+                        hypothesis_set=hypothesize_result,
+                        understand_result=understand_result,
+                        trace=trace,
+                        llm_callable=self._llm,
+                        config=self._config,
+                        question_type=question_type,
+                    )
+                else:
+                    dispatch_result = stage_dispatch(
+                        hypothesis_set=hypothesize_result,
+                        understand_result=understand_result,
+                        trace=trace,
+                        llm_callable=self._llm,
+                        config=self._config,
+                        question_type=question_type,
+                    )
+
+            # --- Stage 4: SYNTHESIZE (LLM-based, RETRY(1) then SOFT gate) ---
+            with stage_span("SYNTHESIZE", mode=mode):
+                synthesis_result = stage_synthesize(
+                    dispatch_result=dispatch_result,
+                    understand_result=understand_result,
+                    hypothesize_result=hypothesize_result,
+                    trace=trace,
+                    llm_callable=self._llm,
+                    mode=mode,
+                )
+
+            return {
+                "status": "complete",
+                "question": question,
+                "stages_completed": ["UNDERSTAND", "HYPOTHESIZE", "DISPATCH", "SYNTHESIZE"],
+                "understand_result": understand_result,
+                "hypothesize_result": hypothesize_result,
+                "dispatch_result": dispatch_result,
+                "synthesis": synthesis_result,
+                "trace": trace.to_dict(),
             }
-            return self._build_blocked_report(
-                understand_result=blocked_understand, trace=trace,
-                reason="; ".join(e.violations),
-            )
-
-        if understand_result.get("data_quality_status") == "fail":
-            return self._build_blocked_report(
-                understand_result=understand_result, trace=trace,
-                reason=understand_result.get("data_quality_details", {}).get(
-                    "reason", "Data quality check failed"),
-            )
-
-        # --- Stage 2: HYPOTHESIZE (LLM-based) ---
-        hypothesize_result = stage_hypothesize(
-            understand_result=understand_result,
-            trace=trace,
-            llm_callable=self._llm,
-        )
-
-        # --- Stage 3: DISPATCH ---
-        # Complex mode: parallel dispatch via DAGExecutor
-        # Medium mode: sequential dispatch
-        if mode == "complex":
-            dispatch_result = stage_dispatch_parallel(
-                hypothesis_set=hypothesize_result,
-                understand_result=understand_result,
-                trace=trace,
-                llm_callable=self._llm,
-                config=self._config,
-                question_type=question_type,
-            )
-        else:
-            dispatch_result = stage_dispatch(
-                hypothesis_set=hypothesize_result,
-                understand_result=understand_result,
-                trace=trace,
-                llm_callable=self._llm,
-                config=self._config,
-                question_type=question_type,
-            )
-
-        # --- Stage 4: SYNTHESIZE (LLM-based, RETRY(1) then SOFT gate) ---
-        synthesis_result = stage_synthesize(
-            dispatch_result=dispatch_result,
-            understand_result=understand_result,
-            hypothesize_result=hypothesize_result,
-            trace=trace,
-            llm_callable=self._llm,
-            mode=mode,
-        )
-
-        return {
-            "status": "complete",
-            "question": question,
-            "stages_completed": ["UNDERSTAND", "HYPOTHESIZE", "DISPATCH", "SYNTHESIZE"],
-            "understand_result": understand_result,
-            "hypothesize_result": hypothesize_result,
-            "dispatch_result": dispatch_result,
-            "synthesis": synthesis_result,
-            "trace": trace.to_dict(),
-        }
+        finally:
+            # Always flush OTel spans, even if the pipeline raised an exception.
+            # WHY in finally: ensures spans are sent to Phoenix for debugging
+            # failed investigations too — not just successful ones.
+            flush(phoenix_provider)
 
     def _build_blocked_report(
         self,
@@ -374,13 +391,14 @@ class SearchMetricOrchestrator:
             InvestigationReport dict with status="blocked".
         """
         # Emit a trace span recording the block decision
-        emit_deterministic_span(
+        dual_emit(
             trace,
             tool="harness.orchestrator.SearchMetricOrchestrator._build_blocked_report",
             decision="pipeline_blocked",
             value="blocked",
             human_summary=f"Pipeline blocked: {reason}",
             agent_context=f"blocked_reason={reason}",
+            swimlane="deterministic",
         )
 
         return {

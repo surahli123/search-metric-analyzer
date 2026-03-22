@@ -28,7 +28,7 @@ from contracts.seam_validator import validate_seam
 from harness.errors import StageError, LLMParseError
 from harness.llm import extract_json
 from trace.collector import InvestigationTrace
-from trace.span import TraceSpan
+from harness.phoenix_tracer import dual_emit
 
 logger = logging.getLogger(__name__)
 
@@ -166,12 +166,12 @@ def stage_dispatch(
     # What context did each investigator receive? This was previously
     # invisible — you saw findings but not what information the
     # investigator was given to work with.
-    trace.emit(TraceSpan(
+    dual_emit(
+        trace,
         stage="DISPATCH",
         swimlane="llm_generated",
         tool="harness.stages.dispatch.stage_dispatch",
         decision="context_construction",
-        code_enforced=False,
         value={
             "hypotheses_investigated": len(hypotheses),
             "findings_count": len(findings),
@@ -192,7 +192,7 @@ def stage_dispatch(
             f"findings_count={len(findings)}, "
             f"context_trace={context_trace_str[:300]}"
         ),
-    ))
+    )
 
     # --- Seam validation (SOFT gate) ---
     # DISPATCH uses a SOFT gate — if one finding has no evidence,

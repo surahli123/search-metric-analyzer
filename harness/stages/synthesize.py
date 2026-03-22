@@ -30,7 +30,7 @@ from contracts.seam_validator import validate_seam, SeamViolation
 from harness.errors import StageError, LLMParseError
 from harness.llm import extract_json
 from trace.collector import InvestigationTrace
-from trace.span import TraceSpan
+from harness.phoenix_tracer import dual_emit
 
 logger = logging.getLogger(__name__)
 
@@ -187,12 +187,12 @@ def _emit_synthesize_trace(report: Dict[str, Any], trace: InvestigationTrace) ->
     Previously invisible — you saw the report but not why the LLM
     chose that particular confidence grade, severity, or framing.
     """
-    trace.emit(TraceSpan(
+    dual_emit(
+        trace,
         stage="SYNTHESIZE",
         swimlane="llm_generated",
         tool="harness.stages.synthesize.stage_synthesize",
         decision="narrative_selection",
-        code_enforced=False,
         value={
             "confidence_grade": report.get("confidence_grade", ""),
             "severity": report.get("severity", ""),
@@ -216,4 +216,4 @@ def _emit_synthesize_trace(report: Dict[str, Any], trace: InvestigationTrace) ->
             f"action_count={len(report.get('recommended_actions', []))}, "
             f"has_upgrade_condition={bool(report.get('upgrade_condition'))}"
         ),
-    ))
+    )

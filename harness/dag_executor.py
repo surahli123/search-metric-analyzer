@@ -29,7 +29,7 @@ from concurrent.futures import ThreadPoolExecutor, Future, as_completed
 from typing import Any, Callable, Dict, List, Optional
 
 from harness.errors import StageError
-from trace.helpers import emit_deterministic_span
+from harness.phoenix_tracer import dual_emit, PHOENIX_AVAILABLE
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +127,39 @@ class DAGExecutor:
 
         start_time = time.monotonic()
 
+        # --- Capture OTel context for thread propagation ---
+        # WHY: ThreadPoolExecutor workers run in separate threads that don't
+        # inherit the parent thread's OTel context. Without explicit propagation,
+        # LLM calls inside workers would create orphan spans (not nested under
+        # the DISPATCH stage span). We capture the context here and attach it
+        # in each worker callable.
+        otel_context = None
+        if PHOENIX_AVAILABLE:
+            try:
+                from opentelemetry import context as otel_ctx
+                otel_context = otel_ctx.get_current()
+            except Exception:
+                pass  # OTel errors must never crash the pipeline
+
+        def _investigate_with_context(hyp, ctx):
+            """Wrapper that attaches OTel context before running investigation."""
+            token = None
+            if otel_context is not None:
+                try:
+                    from opentelemetry import context as otel_ctx
+                    token = otel_ctx.attach(otel_context)
+                except Exception:
+                    pass  # OTel errors must never crash the pipeline
+            try:
+                return self._investigate(hyp, ctx)
+            finally:
+                if token is not None:
+                    try:
+                        from opentelemetry import context as otel_ctx
+                        otel_ctx.detach(token)
+                    except Exception:
+                        pass
+
         # --- Submit all hypotheses to the thread pool ---
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             # Map future → hypothesis AND submit timestamp for result attribution.
@@ -136,7 +169,7 @@ class DAGExecutor:
             future_submitted_at: Dict[Future, float] = {}
 
             for hyp in hypotheses:
-                future = pool.submit(self._investigate, hyp, context)
+                future = pool.submit(_investigate_with_context, hyp, context)
                 future_to_hyp[future] = hyp
                 future_submitted_at[future] = time.monotonic()
 
@@ -229,26 +262,26 @@ class DAGExecutor:
                 })
 
         # --- Emit trace span ---
-        if trace is not None:
-            emit_deterministic_span(
-                trace,
-                tool="harness.dag_executor.DAGExecutor.execute",
-                decision="parallel_dispatch",
-                value=f"{'circuit_broken' if circuit_broken else 'completed'}",
-                stage="DISPATCH",
-                human_summary=(
-                    f"Parallel dispatch: {len(findings)} findings from "
-                    f"{len(hypotheses)} hypotheses in {total_duration:.1f}s. "
-                    f"Failures: {failure_count}. "
-                    f"{'CIRCUIT BREAKER TRIPPED.' if circuit_broken else ''}"
-                ),
-                agent_context=(
-                    f"total={len(hypotheses)}, success={len(hypotheses) - failure_count}, "
-                    f"failed={failure_count}, circuit_broken={circuit_broken}, "
-                    f"duration={total_duration:.1f}s, "
-                    f"missing_coverage={sorted(missing_coverage) if missing_coverage else 'none'}"
-                ),
-            )
+        dual_emit(
+            trace,
+            tool="harness.dag_executor.DAGExecutor.execute",
+            decision="parallel_dispatch",
+            value=f"{'circuit_broken' if circuit_broken else 'completed'}",
+            stage="DISPATCH",
+            human_summary=(
+                f"Parallel dispatch: {len(findings)} findings from "
+                f"{len(hypotheses)} hypotheses in {total_duration:.1f}s. "
+                f"Failures: {failure_count}. "
+                f"{'CIRCUIT BREAKER TRIPPED.' if circuit_broken else ''}"
+            ),
+            agent_context=(
+                f"total={len(hypotheses)}, success={len(hypotheses) - failure_count}, "
+                f"failed={failure_count}, circuit_broken={circuit_broken}, "
+                f"duration={total_duration:.1f}s, "
+                f"missing_coverage={sorted(missing_coverage) if missing_coverage else 'none'}"
+            ),
+            swimlane="deterministic",
+        )
 
         result = {
             "findings": findings,
