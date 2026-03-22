@@ -44,11 +44,27 @@ Implemented Phoenix/OTel integration (PR #26, merged). Then designed a generic O
 - **Virtual env:** Use `.venv/bin/python` for all commands (system Python doesn't have deps)
 - **`max_tokens` vs `max_completion_tokens`:** Some providers use the newer name. Test against Novita endpoint.
 
-## Novita AI Models (for reference)
-| Model | Input/Mt | Output/Mt | Model ID |
-|-------|----------|-----------|----------|
-| DeepSeek V3.2 | $0.27 | $0.40 | `deepseek/deepseek-v3.2` |
-| GLM-4.7-Flash | $0.07 | $0.40 | `glm-4.7-flash` |
-| MiniMax M2.7 | $0.30 | $1.20 | `minimax/minimax-m2.7` |
-| Kimi K2.5 | $0.60 | $3.00 | `moonshotai/kimi-k2.5` |
-| GPT-OSS 120B | $0.05 | $0.25 | `openai-gpt-oss-120b` |
+## Novita AI Model Test Results (tested 2026-03-22)
+
+Model IDs require provider prefix (e.g., `deepseek/deepseek-v3.2`, not just `deepseek-v3.2`).
+
+**Working models (valid JSON from search metric prompt):**
+
+| Model | Model ID | $/Mt (in/out) | Latency | Notes |
+|-------|----------|---------------|---------|-------|
+| **DeepSeek V3.2** | `deepseek/deepseek-v3.2` | $0.27/$0.40 | ~2s | Best overall, start here |
+| **GPT-OSS 120B** | `openai/gpt-oss-120b` | $0.05/$0.25 | 5.9s | Cheapest valid option |
+| **Qwen3 235B Instruct** | `qwen/qwen3-235b-a22b-instruct-2507` | $0.09/$0.58 | 6.4s | Clean structured JSON |
+| **Kimi K2 Instruct** | `moonshotai/kimi-k2-instruct` | $0.57/$2.30 | 4.9s | Good domain understanding |
+| **Gemma 3 27B** | `google/gemma-3-27b-it` | budget | 9.0s | Works, wraps JSON in fences |
+| Qwen 3.5-27B | `qwen/qwen3.5-27b` | $0.30/$2.40 | 32.6s | Valid but too slow |
+
+**Failed models (empty or invalid JSON — not usable without prompt rework):**
+
+| Model | Model ID | Issue |
+|-------|----------|-------|
+| GLM-4.7-Flash | `zai-org/glm-4.7-flash` | Empty response |
+| GLM 4.7 / GLM 5 | `zai-org/glm-4.7`, `zai-org/glm-5` | Empty responses |
+| MiniMax M2.7 / M2.5 | `minimax/minimax-m2.7`, `minimax/minimax-m2.5` | Empty/truncated |
+| Kimi K2.5 | `moonshotai/kimi-k2.5` | Empty response |
+| GPT-OSS 20B | `openai/gpt-oss-20b` | Too small, invalid JSON |
