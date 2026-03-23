@@ -11,7 +11,7 @@ from harness.errors import (
     OrchestratorError,
     StageError,
 )
-from harness.llm import extract_json, make_anthropic_llm
+from harness.llm import extract_json, make_anthropic_llm, make_openai_llm
 
 __all__ = [
     "ConnectorInvestigator",
@@ -24,4 +24,5 @@ __all__ = [
     # LLM factory and helpers
     "extract_json",
     "make_anthropic_llm",
+    "make_openai_llm",
 ]

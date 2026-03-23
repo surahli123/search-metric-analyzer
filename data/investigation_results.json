@@ -1,0 +1,68 @@
+[
+  {
+    "scenario": "ranking_regression",
+    "model": "DeepSeek V3.2",
+    "status": "PASS",
+    "reason": "OK",
+    "severity": "P1",
+    "mode": "medium",
+    "stages": 5,
+    "elapsed": 132.5,
+    "error": null
+  },
+  {
+    "scenario": "ranking_regression",
+    "model": "Qwen3 235B",
+    "status": "PASS",
+    "reason": "OK",
+    "severity": "P1",
+    "mode": "medium",
+    "stages": 5,
+    "elapsed": 111.1,
+    "error": null
+  },
+  {
+    "scenario": "ai_adoption_positive",
+    "model": "DeepSeek V3.2",
+    "status": "PASS",
+    "reason": "OK",
+    "severity": "P2",
+    "mode": "medium",
+    "stages": 5,
+    "elapsed": 118.4,
+    "error": null
+  },
+  {
+    "scenario": "ai_adoption_positive",
+    "model": "Qwen3 235B",
+    "status": "PASS",
+    "reason": "OK",
+    "severity": "P2",
+    "mode": "medium",
+    "stages": 5,
+    "elapsed": 82.8,
+    "error": null
+  },
+  {
+    "scenario": "normal_variance",
+    "model": "DeepSeek V3.2",
+    "status": "PASS",
+    "reason": "OK",
+    "severity": "normal",
+    "mode": "complex",
+    "stages": 5,
+    "elapsed": 67.5,
+    "error": null
+  },
+  {
+    "scenario": "normal_variance",
+    "model": "Qwen3 235B",
+    "status": "PASS",
+    "reason": "OK",
+    "severity": "normal",
+    "mode": "complex",
+    "stages": 5,
+    "elapsed": 59.2,
+    "error": null
+  }
+]

@@ -5,6 +5,27 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Session: Phoenix Implementation + OpenAI Factory Design (2026-03-22)
+
+### Added
+- `docs/plans/2026-03-22-openai-compatible-llm-factory-design.md` — Design spec for generic OpenAI-compatible LLM factory (Novita AI, Together, Groq, any provider)
+- PR #26 created and merged — Phoenix/OTel observability integration
+
+### Fixed
+- `harness/phoenix_tracer.py` — `stage_span()` exception handling restructured (separated OTel setup errors from body errors)
+- `harness/phoenix_tracer.py` — Consolidated scattered imports with `from __future__ import annotations`
+- `contracts/seam_validator.py` — Added layer exception justification for harness/ import
+
+### Code Review
+- Phoenix integration: 10 findings from code review agent (3 fixed, 4 accepted with justification, 3 deferred)
+- OpenAI factory spec: 2nd review round — 3 blocking issues fixed (stale type alias, response extraction, message format)
+
+### Metrics
+- Tests: 1,294 backend, all passing
+- PR #26 merged to main
+
+---
+
 ## Session: Orchestrator Decomposition + Synthetic Data + Phoenix Implementation (2026-03-21)
 
 ### Added
