@@ -159,6 +159,81 @@ class TestRegisterPhoenix:
         # Clean up
         pt._tracer_provider = None
 
+    def test_register_phoenix_calls_openai_instrumentor(self):
+        """register_phoenix() must call OpenAIInstrumentor().instrument().
+
+        WHY: Without this, OpenAI-compatible API calls (Novita, Groq, etc.)
+        are invisible in Phoenix traces. Same pattern as Anthropic instrumentor.
+        """
+        from harness.phoenix_tracer import PHOENIX_AVAILABLE
+
+        if not PHOENIX_AVAILABLE:
+            pytest.skip("OTel deps not installed")
+
+        from harness import phoenix_tracer as pt
+
+        # Reset module state
+        pt._tracer_provider = None
+
+        # Patch at the source module — OpenAIInstrumentor is imported locally
+        # inside register_phoenix(), so we patch where it lives, not where
+        # it's consumed.
+        with patch(
+            "harness.phoenix_tracer.AnthropicInstrumentor"
+        ), patch(
+            "openinference.instrumentation.openai.OpenAIInstrumentor"
+        ) as MockOpenAIInstrumentor:
+            mock_instance = MagicMock()
+            MockOpenAIInstrumentor.return_value = mock_instance
+
+            pt.register_phoenix(
+                endpoint="http://localhost:0",
+                project_name="test-openai-instrumentor",
+            )
+
+            MockOpenAIInstrumentor.assert_called_once()
+            mock_instance.instrument.assert_called_once()
+
+        # Clean up
+        pt._tracer_provider = None
+
+    def test_instrumentor_exception_graceful_skip(self):
+        """If an instrumentor raises a non-ImportError, pipeline should continue.
+
+        WHY: Observability must never block the investigation pipeline.
+        A version mismatch or API change in an instrumentor should degrade
+        gracefully — log a warning and continue without tracing.
+        """
+        from harness.phoenix_tracer import PHOENIX_AVAILABLE
+
+        if not PHOENIX_AVAILABLE:
+            pytest.skip("OTel deps not installed")
+
+        from harness import phoenix_tracer as pt
+
+        # Reset module state
+        pt._tracer_provider = None
+
+        # Make AnthropicInstrumentor raise a RuntimeError (simulating version mismatch)
+        with patch(
+            "harness.phoenix_tracer.AnthropicInstrumentor"
+        ) as MockAnthropicInstrumentor:
+            mock_instance = MagicMock()
+            mock_instance.instrument.side_effect = RuntimeError("version mismatch")
+            MockAnthropicInstrumentor.return_value = mock_instance
+
+            # Should NOT raise — should log warning and continue
+            provider = pt.register_phoenix(
+                endpoint="http://localhost:0",
+                project_name="test-graceful-skip",
+            )
+
+            # Pipeline should still get a valid provider
+            assert provider is not None
+
+        # Clean up
+        pt._tracer_provider = None
+
 
 # ---------------------------------------------------------------------------
 # Step 2: stage_span() — CHAIN span context manager

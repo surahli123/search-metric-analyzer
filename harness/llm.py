@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import time
 from typing import Callable
@@ -35,15 +36,6 @@ from harness.errors import LLMAPIError, LLMParseError, LLMRefusalError
 
 # Module-level logger.  The orchestrator's logging config controls verbosity.
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Type alias for the LLM callable that make_anthropic_llm() returns.
-# This is the contract: prompt in, text out.  The orchestrator doesn't need
-# to know anything about the Anthropic SDK, retry logic, or error handling.
-# ---------------------------------------------------------------------------
-LLMCallable = Callable[[str], str]
-
 
 
 # ---------------------------------------------------------------------------
@@ -168,19 +160,19 @@ def extract_json(text: str) -> dict | list:
 # ---------------------------------------------------------------------------
 
 def _classify_api_error(exc: Exception) -> LLMAPIError:
-    """Classify an Anthropic SDK exception as transient or permanent.
+    """Classify an LLM SDK exception as transient or permanent.
 
     WHY classify errors?
     The retry loop needs to know whether retrying will help.  Rate limits
     and server errors are transient — waiting and retrying usually works.
     Auth errors and bad requests are permanent — retrying wastes time.
 
-    This function inspects the exception type and status code to make
-    that determination.  It wraps the raw SDK exception in our LLMAPIError
-    so the rest of the harness doesn't need to import anthropic types.
+    Works with both Anthropic and OpenAI SDKs.  Both use `status_code`
+    attributes and similar class naming conventions ("Timeout", "Connection",
+    "RateLimit"), so a single classifier handles both via class-name inspection.
 
     Args:
-        exc: The exception raised by the Anthropic SDK.
+        exc: The exception raised by the LLM SDK (Anthropic or OpenAI).
 
     Returns:
         An LLMAPIError with is_transient set appropriately.
@@ -389,6 +381,135 @@ def make_anthropic_llm(
             # Anthropic responses have a content list with TextBlock objects.
             if response.content and len(response.content) > 0:
                 return response.content[0].text
+            return ""
+
+        return _call_with_retry(
+            _do_call,
+            max_attempts=max_retries,
+            base_delay=base_delay,
+            max_delay=max_delay,
+        )
+
+    return llm_callable
+
+
+def make_openai_llm(
+    base_url: str = "https://api.novita.ai/openai/v1",
+    model: str = "deepseek/deepseek-v3.2",
+    api_key: str | None = None,
+    timeout: float = 120.0,
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+    max_delay: float = 10.0,
+) -> Callable[[str, str, int], str]:
+    """Factory that returns a callable wrapping any OpenAI-compatible API.
+
+    Works with any provider that implements the OpenAI chat completions
+    endpoint: Novita AI, Together, Groq, local vLLM, etc.
+
+    The returned callable has the same signature as make_anthropic_llm():
+        (prompt: str, system: str = "", max_tokens: int = 4096) -> str
+
+    KEY DIFFERENCES from Anthropic:
+    - System message goes in the `messages` array, not a top-level kwarg.
+    - Response is at `choices[0].message.content`, not `content[0].text`.
+    - `base_url` configures which provider to talk to.
+
+    API key resolution order:
+    1. `api_key` parameter (if provided)
+    2. NOVITA_API_KEY environment variable
+    3. OPENAI_API_KEY environment variable
+    4. Raise ValueError with helpful message
+
+    Args:
+        base_url:    Provider API base URL (default: Novita AI).
+        model:       Model identifier with provider prefix (e.g., "deepseek/deepseek-v3.2").
+        api_key:     Explicit API key.  Falls back to env vars if None.
+        timeout:     Request timeout in seconds (default: 120s).
+        max_retries: Maximum retry attempts for transient errors (default: 3).
+        base_delay:  Initial retry delay in seconds (default: 1.0).
+        max_delay:   Maximum retry delay in seconds (default: 10.0).
+
+    Returns:
+        A callable that sends prompts to the OpenAI-compatible API and returns response text.
+
+    Raises:
+        ImportError: If the `openai` package is not installed.
+        ValueError: If no API key is found anywhere.
+    """
+    # --- Optional dependency check ---
+    # Same pattern as make_anthropic_llm(): checked at call time, not import time.
+    try:
+        import openai  # noqa: F811
+    except ImportError:
+        raise ImportError(
+            "The 'openai' package is required for make_openai_llm(). "
+            "Install it with: pip install openai"
+        ) from None
+
+    # --- API key resolution ---
+    # Explicit param > NOVITA_API_KEY > OPENAI_API_KEY > error.
+    # WHY this order: explicit is most reliable; NOVITA_API_KEY avoids
+    # accidentally sending an OpenAI key to a third-party provider.
+    resolved_key = api_key
+    if resolved_key is None:
+        resolved_key = os.environ.get("NOVITA_API_KEY")
+    if resolved_key is None:
+        resolved_key = os.environ.get("OPENAI_API_KEY")
+    if resolved_key is None:
+        raise ValueError(
+            "No API key found for OpenAI-compatible provider. "
+            "Either pass api_key= explicitly, or set NOVITA_API_KEY or "
+            "OPENAI_API_KEY environment variable."
+        )
+
+    # Create the client once — reused across all calls.
+    # base_url tells the SDK which provider to talk to.
+    client = openai.OpenAI(
+        base_url=base_url,
+        api_key=resolved_key,
+        timeout=timeout,
+    )
+
+    def llm_callable(
+        prompt: str,
+        system: str = "",
+        max_tokens: int = 4096,
+    ) -> str:
+        """Call the OpenAI-compatible API with retry logic.
+
+        Args:
+            prompt:     The user message / prompt to send.
+            system:     Optional system message for the model.
+            max_tokens: Maximum tokens in the response (default 4096).
+
+        Returns:
+            The model's response text.
+
+        Raises:
+            LLMAPIError: If the API call fails after all retries.
+        """
+        def _do_call() -> str:
+            """Inner function that makes the actual API call."""
+            # Build messages — OpenAI puts system in the messages array,
+            # NOT as a top-level kwarg like Anthropic.
+            messages: list[dict[str, str]] = []
+            if system:
+                messages.append({"role": "system", "content": system})
+            messages.append({"role": "user", "content": prompt})
+
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens,
+            )
+
+            # Extract text from the first choice.
+            # Guard: choices can be empty, and message.content can be None
+            # (e.g., if the model returns a tool_calls-only response).
+            if response.choices and len(response.choices) > 0:
+                content = response.choices[0].message.content
+                return content if content else ""
             return ""
 
         return _call_with_retry(

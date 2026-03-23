@@ -100,7 +100,24 @@ def register_phoenix(
     # anthropic.Client.messages.create() to emit LLM spans automatically.
     # These spans nest inside our CHAIN stage spans, giving a complete
     # picture of what happened inside each pipeline stage.
-    AnthropicInstrumentor().instrument(tracer_provider=provider)
+    # WHY broad except: observability must NEVER block the pipeline.
+    # A version mismatch or API change in the instrumentor should degrade
+    # gracefully, not crash the investigation.
+    try:
+        AnthropicInstrumentor().instrument(tracer_provider=provider)
+    except Exception:
+        logger.warning("Anthropic auto-instrumentation failed — skipping")
+
+    # Auto-instrument OpenAI SDK
+    # WHY: without this, OpenAI-compatible API calls (Novita, Together, Groq)
+    # are invisible in Phoenix traces. Same guard pattern as Anthropic.
+    try:
+        from openinference.instrumentation.openai import OpenAIInstrumentor
+        OpenAIInstrumentor().instrument(tracer_provider=provider)
+    except Exception:
+        # ImportError = package not installed (fine — skip silently)
+        # Other exceptions = version mismatch, API change (warn and continue)
+        logger.warning("OpenAI auto-instrumentation failed or not installed — skipping")
 
     _tracer_provider = provider
     logger.info(

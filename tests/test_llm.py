@@ -6,14 +6,16 @@ Test categories:
     C. Error classification — transient vs permanent mapping
     D. Retry logic — exponential backoff, attempt counting, error propagation
     E. make_anthropic_llm() — factory behavior (mocked SDK)
+    E2. make_openai_llm() — OpenAI-compatible factory (mocked SDK)
     F. Module exports — harness __init__.py re-exports
 
-All tests mock the Anthropic SDK — no real API calls are made.
+All tests mock the LLM SDKs — no real API calls are made.
 """
 
 from __future__ import annotations
 
 import json
+import os
 from unittest.mock import MagicMock, patch, PropertyMock
 import types
 
@@ -589,6 +591,291 @@ class TestMakeAnthropicLLMImportError:
 
 
 # ===========================================================================
+# E2. make_openai_llm() — OpenAI-compatible factory (mocked SDK)
+# ===========================================================================
+
+
+class TestMakeOpenAILLM:
+    """Test the OpenAI-compatible factory with a mocked OpenAI SDK.
+
+    Mirrors TestMakeAnthropicLLM structure for parity.
+    WHY separate class: OpenAI message format (system in messages array) and
+    response format (choices[0].message.content) differ from Anthropic.
+    """
+
+    def _make_mock_openai_module(self, response_text: str = "test response"):
+        """Create a mock openai module with a mock client.
+
+        Returns:
+            (mock_module, mock_client) tuple — the module for patching and
+            the client for assertions.
+        """
+        # Build a mock response that looks like an OpenAI ChatCompletion.
+        # response.choices[0].message.content
+        mock_message = MagicMock()
+        mock_message.content = response_text
+
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        # Build a mock client.
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+
+        # Build a mock module that acts like `import openai`.
+        mock_module = MagicMock()
+        mock_module.OpenAI.return_value = mock_client
+
+        return mock_module, mock_client
+
+    def test_factory_returns_callable(self):
+        """make_openai_llm() should return a callable."""
+        mock_module, _ = self._make_mock_openai_module()
+        with patch.dict("sys.modules", {"openai": mock_module}):
+            from harness.llm import make_openai_llm
+            llm = make_openai_llm(api_key="test-key")
+            assert callable(llm)
+
+    def test_callable_returns_response_text(self):
+        """The returned callable should return the model's response text."""
+        mock_module, _ = self._make_mock_openai_module(
+            response_text='{"hypothesis": "ranking_regression"}'
+        )
+        with patch.dict("sys.modules", {"openai": mock_module}):
+            from harness.llm import make_openai_llm
+            llm = make_openai_llm(api_key="test-key")
+            result = llm("Analyze this metric drop")
+            assert result == '{"hypothesis": "ranking_regression"}'
+
+    def test_callable_passes_system_message(self):
+        """System message should be in the messages array, NOT a top-level kwarg."""
+        mock_module, mock_client = self._make_mock_openai_module()
+        with patch.dict("sys.modules", {"openai": mock_module}):
+            from harness.llm import make_openai_llm
+            llm = make_openai_llm(api_key="test-key")
+            llm("prompt", system="You are a search analyst.")
+
+            call_kwargs = mock_client.chat.completions.create.call_args
+            messages = call_kwargs.kwargs.get("messages", [])
+            # First message should be system, second should be user.
+            assert messages[0] == {"role": "system", "content": "You are a search analyst."}
+            assert messages[1] == {"role": "user", "content": "prompt"}
+
+    def test_callable_omits_empty_system(self):
+        """Empty system message should NOT be included in messages array."""
+        mock_module, mock_client = self._make_mock_openai_module()
+        with patch.dict("sys.modules", {"openai": mock_module}):
+            from harness.llm import make_openai_llm
+            llm = make_openai_llm(api_key="test-key")
+            llm("prompt", system="")
+
+            call_kwargs = mock_client.chat.completions.create.call_args
+            messages = call_kwargs.kwargs.get("messages", [])
+            # Only user message — no system message.
+            assert len(messages) == 1
+            assert messages[0] == {"role": "user", "content": "prompt"}
+
+    def test_callable_passes_max_tokens(self):
+        """max_tokens should be forwarded to the API."""
+        mock_module, mock_client = self._make_mock_openai_module()
+        with patch.dict("sys.modules", {"openai": mock_module}):
+            from harness.llm import make_openai_llm
+            llm = make_openai_llm(api_key="test-key")
+            llm("prompt", max_tokens=1024)
+
+            call_kwargs = mock_client.chat.completions.create.call_args
+            assert call_kwargs.kwargs.get("max_tokens") == 1024
+
+    def test_callable_uses_configured_model(self):
+        """The model parameter should be forwarded to the API."""
+        mock_module, mock_client = self._make_mock_openai_module()
+        with patch.dict("sys.modules", {"openai": mock_module}):
+            from harness.llm import make_openai_llm
+            llm = make_openai_llm(
+                model="deepseek/deepseek-v3.2",
+                api_key="test-key",
+            )
+            llm("prompt")
+
+            call_kwargs = mock_client.chat.completions.create.call_args
+            assert call_kwargs.kwargs.get("model") == "deepseek/deepseek-v3.2"
+
+    def test_callable_handles_empty_choices(self):
+        """If the response has no choices, return empty string."""
+        mock_module, _ = self._make_mock_openai_module()
+        # Override: empty choices list.
+        mock_response = MagicMock()
+        mock_response.choices = []
+        mock_client = mock_module.OpenAI.return_value
+        mock_client.chat.completions.create.return_value = mock_response
+
+        with patch.dict("sys.modules", {"openai": mock_module}):
+            from harness.llm import make_openai_llm
+            llm = make_openai_llm(api_key="test-key")
+            result = llm("prompt")
+            assert result == ""
+
+    def test_callable_handles_none_content(self):
+        """If message.content is None (e.g., tool_calls response), return empty string."""
+        mock_module, _ = self._make_mock_openai_module()
+        # Override: content is None.
+        mock_message = MagicMock()
+        mock_message.content = None
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_client = mock_module.OpenAI.return_value
+        mock_client.chat.completions.create.return_value = mock_response
+
+        with patch.dict("sys.modules", {"openai": mock_module}):
+            from harness.llm import make_openai_llm
+            llm = make_openai_llm(api_key="test-key")
+            result = llm("prompt")
+            assert result == ""
+
+    def test_factory_sets_base_url_on_client(self):
+        """The base_url parameter should be passed to the OpenAI client.
+
+        WHY this test: the entire point of this factory is to talk to
+        non-OpenAI providers (Novita, Groq, etc.) via base_url.
+        """
+        mock_module, _ = self._make_mock_openai_module()
+        with patch.dict("sys.modules", {"openai": mock_module}):
+            from harness.llm import make_openai_llm
+            make_openai_llm(
+                base_url="https://api.novita.ai/openai/v1",
+                api_key="test-key",
+            )
+            # Verify the client was created with the base_url.
+            call_kwargs = mock_module.OpenAI.call_args
+            assert call_kwargs.kwargs.get("base_url") == "https://api.novita.ai/openai/v1"
+
+    def test_factory_sets_timeout_on_client(self):
+        """The timeout parameter should be passed to the OpenAI client."""
+        mock_module, _ = self._make_mock_openai_module()
+        with patch.dict("sys.modules", {"openai": mock_module}):
+            from harness.llm import make_openai_llm
+            make_openai_llm(timeout=60.0, api_key="test-key")
+            call_kwargs = mock_module.OpenAI.call_args
+            assert call_kwargs.kwargs.get("timeout") == 60.0
+
+
+class TestOpenAILLMApiKeyResolution:
+    """Test API key resolution chain for make_openai_llm().
+
+    Resolution order: explicit param > NOVITA_API_KEY > OPENAI_API_KEY > ValueError.
+    """
+
+    def _make_mock_openai_module(self):
+        """Minimal mock — we only care about key resolution, not responses."""
+        mock_module = MagicMock()
+        mock_client = MagicMock()
+        mock_module.OpenAI.return_value = mock_client
+        # Set up a minimal valid response so the factory doesn't error.
+        mock_msg = MagicMock()
+        mock_msg.content = "ok"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_msg
+        mock_resp = MagicMock()
+        mock_resp.choices = [mock_choice]
+        mock_client.chat.completions.create.return_value = mock_resp
+        return mock_module
+
+    def test_explicit_api_key_overrides_env(self):
+        """Explicit api_key parameter should take precedence over env vars."""
+        mock_module = self._make_mock_openai_module()
+        with patch.dict("sys.modules", {"openai": mock_module}):
+            with patch.dict("os.environ", {"NOVITA_API_KEY": "env-novita", "OPENAI_API_KEY": "env-openai"}):
+                from harness.llm import make_openai_llm
+                make_openai_llm(api_key="explicit-key")
+                call_kwargs = mock_module.OpenAI.call_args
+                assert call_kwargs.kwargs.get("api_key") == "explicit-key"
+
+    def test_api_key_from_novita_env(self):
+        """Should fall back to NOVITA_API_KEY when no explicit key."""
+        mock_module = self._make_mock_openai_module()
+        with patch.dict("sys.modules", {"openai": mock_module}):
+            with patch.dict("os.environ", {"NOVITA_API_KEY": "novita-key"}, clear=False):
+                # Ensure OPENAI_API_KEY is not set.
+                import os
+                os.environ.pop("OPENAI_API_KEY", None)
+                from harness.llm import make_openai_llm
+                make_openai_llm(api_key=None)
+                call_kwargs = mock_module.OpenAI.call_args
+                assert call_kwargs.kwargs.get("api_key") == "novita-key"
+
+    def test_api_key_from_openai_env(self):
+        """Should fall back to OPENAI_API_KEY when NOVITA_API_KEY is absent."""
+        mock_module = self._make_mock_openai_module()
+        with patch.dict("sys.modules", {"openai": mock_module}):
+            with patch.dict("os.environ", {"OPENAI_API_KEY": "openai-key"}, clear=False):
+                import os
+                os.environ.pop("NOVITA_API_KEY", None)
+                from harness.llm import make_openai_llm
+                make_openai_llm(api_key=None)
+                call_kwargs = mock_module.OpenAI.call_args
+                assert call_kwargs.kwargs.get("api_key") == "openai-key"
+
+    def test_no_api_key_raises_value_error(self):
+        """Should raise ValueError with helpful message when no key found."""
+        mock_module = self._make_mock_openai_module()
+        with patch.dict("sys.modules", {"openai": mock_module}):
+            with patch.dict("os.environ", {}, clear=True):
+                from harness.llm import make_openai_llm
+                with pytest.raises(ValueError) as exc_info:
+                    make_openai_llm(api_key=None)
+                assert "NOVITA_API_KEY" in str(exc_info.value)
+                assert "OPENAI_API_KEY" in str(exc_info.value)
+
+
+class TestMakeOpenAILLMImportError:
+    """Test behavior when openai package is not installed."""
+
+    def test_missing_openai_raises_import_error(self):
+        """Should raise ImportError with helpful message when openai is missing."""
+        with patch.dict("sys.modules", {"openai": None}):
+            with pytest.raises(ImportError) as exc_info:
+                import importlib
+                import harness.llm
+                importlib.reload(harness.llm)
+                harness.llm.make_openai_llm(api_key="test")
+            assert "pip install openai" in str(exc_info.value)
+
+
+class TestClassifyErrorOpenAI:
+    """Verify _classify_api_error() handles OpenAI SDK error types.
+
+    WHY: The classifier uses class-name inspection (e.g., "Timeout" in name).
+    Both Anthropic and OpenAI SDKs follow similar naming conventions, so the
+    existing classifier should work for both. These tests verify that.
+    """
+
+    def test_openai_rate_limit_is_transient(self):
+        """OpenAI 429 (rate limit) should be classified as transient."""
+        exc = type("RateLimitError", (Exception,), {"status_code": 429})()
+        result = _classify_api_error(exc)
+        assert result.is_transient is True
+        assert result.status_code == 429
+
+    def test_openai_auth_error_is_permanent(self):
+        """OpenAI 401 (auth failure) should be classified as permanent."""
+        exc = type("AuthenticationError", (Exception,), {"status_code": 401})()
+        result = _classify_api_error(exc)
+        assert result.is_transient is False
+        assert result.status_code == 401
+
+    def test_openai_timeout_is_transient(self):
+        """OpenAI APITimeoutError (no status code) should be transient."""
+        exc = type("APITimeoutError", (Exception,), {"status_code": None})()
+        result = _classify_api_error(exc)
+        assert result.is_transient is True
+
+
+# ===========================================================================
 # F. Module exports — harness __init__.py re-exports
 # ===========================================================================
 
@@ -613,6 +900,11 @@ class TestModuleExports:
         from harness import extract_json, make_anthropic_llm
         assert callable(extract_json)
         assert callable(make_anthropic_llm)
+
+    def test_openai_llm_export(self):
+        """make_openai_llm should be importable from harness."""
+        from harness import make_openai_llm
+        assert callable(make_openai_llm)
 
 
 # ===========================================================================

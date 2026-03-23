@@ -3,4 +3,9 @@
 # Install: pip install -r requirements-dev.txt
 arize-phoenix-otel
 openinference-instrumentation-anthropic
+openinference-instrumentation-openai
 opentelemetry-sdk
+
+# LLM SDK for OpenAI-compatible providers (Novita, Together, Groq, local vLLM)
+# Also in requirements.txt (commented) for documentation; here for easy dev install.
+openai
