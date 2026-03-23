@@ -5,6 +5,35 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Session: OpenAI Factory Implementation + First Real Investigations (2026-03-22)
+
+### Added
+- `harness/llm.py` — `make_openai_llm()` factory for OpenAI-compatible APIs (Novita AI, Together, Groq, local vLLM)
+- `harness/phoenix_tracer.py` — OpenAI auto-instrumentation + broadened exception handling (both instrumentors now catch `Exception`, not just `ImportError`)
+- `scripts/run_investigations.py` — Investigation runner with lightweight oracle (automated pass/fail per scenario)
+- `data/investigation_results.json` — Results from 6 investigations (3 scenarios × 2 models)
+- 21 new tests: 18 factory tests (mirrors Anthropic parity), 3 error classification tests
+- PR #27 created and merged — OpenAI factory + investigations
+
+### Fixed
+- Deleted stale `LLMCallable = Callable[[str], str]` alias in `harness/llm.py` (wrong 1-arg signature, dead code)
+- Updated `_classify_api_error()` docstring to reflect both Anthropic and OpenAI SDK support
+
+### Investigation Results
+- **6/6 PASS** across DeepSeek V3.2 + Qwen3 235B on ranking_regression, ai_adoption_positive, normal_variance
+- Pipeline correctly identifies ranking regression as P1, AI adoption as P2 (not regression), normal variance as noise
+- Cost: ~$0.004/investigation with DeepSeek V3.2
+
+### Reviews
+- Eng review (`/plan-eng-review`): 6 issues found, all resolved (test gaps 8→21, runner oracle, dependency placement, instrumentor exception handling)
+- Codex adversarial review: 11 findings, all addressed
+- Pre-landing review (`/review`): 2 informational auto-fixes (import placement, blank line)
+
+### Metrics
+- Tests: 1,324 total (21 new), all passing
+
+---
+
 ## Session: Phoenix Implementation + OpenAI Factory Design (2026-03-22)
 
 ### Added
