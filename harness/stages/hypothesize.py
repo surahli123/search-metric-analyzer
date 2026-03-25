@@ -36,6 +36,7 @@ def stage_hypothesize(
     understand_result: Dict[str, Any],
     trace: InvestigationTrace,
     llm_callable: LLMCallable,
+    domain=None,  # Optional[DomainInterface] — defaults to SearchMetricsDomain
 ) -> Dict[str, Any]:
     """Stage 2: HYPOTHESIZE — LLM generates hypotheses from UNDERSTAND results.
 
@@ -57,6 +58,13 @@ def stage_hypothesize(
         understand_result: Output from stage_understand().
         trace: InvestigationTrace to record decisions to.
         llm_callable: Function with signature (prompt, system, max_tokens) -> str.
+        domain: Optional DomainInterface instance. When provided, prompts come
+            from domain.get_prompts("hypothesize") instead of hardcoded imports.
+            Defaults to SearchMetricsDomain for backward compatibility — callers
+            that don't pass a domain get the same behavior as before.
+            Think of this like a strategy pattern: the domain is a swappable
+            "prompt provider" so other domains (e.g., DataAgent) can plug in
+            their own prompt callables without forking this stage.
 
     Returns:
         HypothesisSet dict with keys: hypotheses, exclusions, investigation_context.
@@ -65,11 +73,17 @@ def stage_hypothesize(
         StageError: If JSON extraction from LLM response fails.
         LLMAPIError: If LLM call fails with a transient error (propagates).
     """
-    from domains.search_metrics.prompts import (
-        build_hypothesize_system_prompt,
-        build_hypothesize_user_prompt,
-        normalize_hypothesis_set,
-    )
+    # Get prompts from domain (defaults to SearchMetricsDomain for backward compat).
+    # WHY lazy import here: avoids circular imports at module load time, and keeps
+    # SearchMetricsDomain as the fallback without hard-wiring it in the module
+    # signature — the same pattern used for optional heavy dependencies.
+    if domain is None:
+        from domains.search_metrics import SearchMetricsDomain
+        domain = SearchMetricsDomain()
+    prompts = domain.get_prompts("hypothesize")
+    build_hypothesize_system_prompt = prompts["system_prompt"]
+    build_hypothesize_user_prompt = prompts["user_prompt"]
+    normalize_hypothesis_set = prompts["normalize"]
 
     # --- Step 1: Load corrections (past diagnostic mistakes to avoid) ---
     # We load corrections for the current metric so the LLM knows what

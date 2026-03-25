@@ -638,3 +638,61 @@ class TestBonusFixAgentFailureLogging:
             mock_logger.warning.assert_called_once()
             call_args = mock_logger.warning.call_args
             assert "failed" in call_args[0][0]  # format string contains "failed"
+
+
+# ===========================================================================
+# Domain Wiring Tests for HYPOTHESIZE Stage
+# ===========================================================================
+
+
+class TestHypothesizeDomainWiring:
+    """Verify stage_hypothesize uses domain.get_prompts() instead of hardcoded imports."""
+
+    def test_accepts_domain_parameter(self):
+        """stage_hypothesize should accept an optional domain parameter."""
+        import inspect
+        from harness.stages.hypothesize import stage_hypothesize
+        sig = inspect.signature(stage_hypothesize)
+        assert "domain" in sig.parameters
+
+    def test_uses_domain_prompts(self):
+        """When domain is provided, prompts come from domain.get_prompts()."""
+        from unittest.mock import MagicMock
+        from harness.stages.hypothesize import stage_hypothesize
+        from trace.collector import InvestigationTrace
+
+        mock_domain = MagicMock()
+        from domains.search_metrics import SearchMetricsDomain
+        real_domain = SearchMetricsDomain()
+        mock_domain.get_prompts.return_value = real_domain.get_prompts("hypothesize")
+        mock_domain.name = "mock_domain"
+
+        trace = InvestigationTrace(question="test")
+        understand_result = {
+            "metric": "click_quality",
+            "metric_direction": "down",
+            "severity": "P1",
+            "co_movement_pattern": {"pattern_name": "unknown"},
+            "mix_shift_result": None,
+        }
+
+        def mock_llm(prompt, system, max_tokens):
+            return '{"hypotheses": [{"hypothesis_id": "h1", "archetype": "ranking_regression", "is_contrarian": true, "confirms_if": ["test"], "expected_magnitude": "2%"}, {"hypothesis_id": "h2", "archetype": "connector_change", "is_contrarian": false, "confirms_if": ["test2"], "expected_magnitude": "3%"}, {"hypothesis_id": "h3", "archetype": "experiment_ramp", "is_contrarian": false, "confirms_if": ["test3"], "expected_magnitude": "1%"}], "exclusions": []}'
+
+        result = stage_hypothesize(
+            understand_result=understand_result,
+            trace=trace,
+            llm_callable=mock_llm,
+            domain=mock_domain,
+        )
+
+        mock_domain.get_prompts.assert_called_once_with("hypothesize")
+        assert len(result.get("hypotheses", [])) >= 1
+
+    def test_defaults_to_search_metrics_when_no_domain(self):
+        """Without domain param, should still work (backward compat)."""
+        import inspect
+        from harness.stages.hypothesize import stage_hypothesize
+        sig = inspect.signature(stage_hypothesize)
+        param = sig.parameters["domain"]
+        assert param.default is None
