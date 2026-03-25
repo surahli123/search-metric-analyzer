@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // \"\"' | { read -r f; echo \"$f\" | grep -qE '\\.py$' && python3 -m pytest tests/ -x -q --tb=short --ignore=tests/test_web_backend.py --ignore=tests/test_eval.py 2>&1 | tail -5 || true; }",
+            "timeout": 120,
+            "statusMessage": "Running tests..."
+          }
+        ]
+      }
+    ]
+  }
+}

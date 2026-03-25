@@ -42,6 +42,7 @@ def stage_synthesize(
     trace: InvestigationTrace,
     llm_callable: LLMCallable,
     mode: Optional[str] = None,
+    domain=None,  # Optional[DomainInterface] — injected by orchestrator
 ) -> Dict[str, Any]:
     """Stage 4: SYNTHESIZE — produce the final investigation report.
 
@@ -58,6 +59,8 @@ def stage_synthesize(
         trace: InvestigationTrace to record decisions to.
         llm_callable: Function with signature (prompt, system, max_tokens) -> str.
         mode: Pipeline mode ("medium" or "complex") for seam validation.
+        domain: DomainInterface instance providing prompt builders. Defaults to
+                SearchMetricsDomain if None (backward-compatible fallback).
 
     Returns:
         SynthesisReport dict with 7 mandatory sections + metadata.
@@ -65,12 +68,16 @@ def stage_synthesize(
     Raises:
         StageError: If JSON extraction from LLM response fails on both attempts.
     """
-    from domains.search_metrics.prompts import (
-        build_synthesize_system_prompt,
-        build_synthesize_user_prompt,
-        build_synthesize_retry_prompt,
-        normalize_synthesis_report,
-    )
+    # Resolve domain — backward-compatible fallback to search_metrics
+    if domain is None:
+        from domains.search_metrics import SearchMetricsDomain
+        domain = SearchMetricsDomain()
+
+    synthesize_prompts = domain.get_prompts("synthesize")
+    build_synthesize_system_prompt = synthesize_prompts["system_prompt"]
+    build_synthesize_user_prompt = synthesize_prompts["user_prompt"]
+    build_synthesize_retry_prompt = synthesize_prompts["retry_prompt"]
+    normalize_synthesis_report = synthesize_prompts["normalize"]
 
     system_prompt = build_synthesize_system_prompt()
     dispatch_context = trace.agent_context_for("DISPATCH", max_tokens=1500)

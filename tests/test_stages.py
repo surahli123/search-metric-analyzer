@@ -696,3 +696,201 @@ class TestHypothesizeDomainWiring:
         sig = inspect.signature(stage_hypothesize)
         param = sig.parameters["domain"]
         assert param.default is None
+
+
+# ===========================================================================
+# Domain Wiring Tests for DISPATCH Stage
+# ===========================================================================
+
+
+class TestDispatchDomainWiring:
+    """Verify stage_dispatch and stage_dispatch_parallel use domain.get_prompts()."""
+
+    def test_stage_dispatch_accepts_domain(self):
+        import inspect
+        from harness.stages.dispatch import stage_dispatch
+        sig = inspect.signature(stage_dispatch)
+        assert "domain" in sig.parameters
+
+    def test_stage_dispatch_parallel_accepts_domain(self):
+        import inspect
+        from harness.stages.dispatch import stage_dispatch_parallel
+        sig = inspect.signature(stage_dispatch_parallel)
+        assert "domain" in sig.parameters
+
+    def test_dispatch_uses_domain_prompts(self):
+        from unittest.mock import MagicMock
+        from harness.stages.dispatch import stage_dispatch
+        from trace.collector import InvestigationTrace
+        from trace.span import TraceSpan
+
+        mock_domain = MagicMock()
+        from domains.search_metrics import SearchMetricsDomain
+        real_domain = SearchMetricsDomain()
+        mock_domain.get_prompts.return_value = real_domain.get_prompts("dispatch")
+        mock_domain.name = "mock_domain"
+
+        trace = InvestigationTrace(question="test")
+        # Emit a HYPOTHESIZE span so agent_context_for("HYPOTHESIZE") has data
+        span: TraceSpan = {
+            "stage": "HYPOTHESIZE",
+            "swimlane": "llm_generated",
+            "tool": "test",
+            "decision": "test",
+            "value": "test",
+            "human_summary": "test",
+            "agent_context": "test",
+        }
+        trace.emit(span)
+
+        hypothesis_set = {
+            "hypotheses": [
+                {"hypothesis_id": "h1", "archetype": "ranking_regression",
+                 "confirms_if": ["test"], "expected_magnitude": "2%"}
+            ]
+        }
+        understand_result = {"metric": "click_quality", "metric_direction": "down"}
+
+        def mock_llm(prompt, system, max_tokens):
+            return '{"agent_name": "test", "hypothesis_id": "h1", "verdict": "confirmed", "confidence": 0.8, "evidence": [{"metric": "cq", "direction": "down"}], "narrative": "Test finding"}'
+
+        result = stage_dispatch(
+            hypothesis_set=hypothesis_set,
+            understand_result=understand_result,
+            trace=trace,
+            llm_callable=mock_llm,
+            config={},
+            domain=mock_domain,
+        )
+
+        mock_domain.get_prompts.assert_called_once_with("dispatch")
+        assert len(result["findings"]) == 1
+
+    def test_dispatch_parallel_uses_domain_prompts(self):
+        """Parallel dispatch should also pass domain through to _dispatch_via_llm."""
+        from unittest.mock import MagicMock
+        from harness.stages.dispatch import stage_dispatch_parallel
+        from trace.collector import InvestigationTrace
+        from trace.span import TraceSpan
+
+        mock_domain = MagicMock()
+        from domains.search_metrics import SearchMetricsDomain
+        real_domain = SearchMetricsDomain()
+        mock_domain.get_prompts.return_value = real_domain.get_prompts("dispatch")
+        mock_domain.name = "mock_domain"
+
+        trace = InvestigationTrace(question="test")
+        # Emit a HYPOTHESIZE span so agent_context_for("HYPOTHESIZE") has data
+        span: TraceSpan = {
+            "stage": "HYPOTHESIZE",
+            "swimlane": "llm_generated",
+            "tool": "test",
+            "decision": "test",
+            "value": "test",
+            "human_summary": "test",
+            "agent_context": "test",
+        }
+        trace.emit(span)
+
+        hypothesis_set = {
+            "hypotheses": [
+                {"hypothesis_id": "h1", "archetype": "ranking_regression",
+                 "confirms_if": ["test"], "expected_magnitude": "2%"}
+            ]
+        }
+        understand_result = {"metric": "click_quality", "metric_direction": "down"}
+
+        def mock_llm(prompt, system, max_tokens):
+            return '{"agent_name": "test", "hypothesis_id": "h1", "verdict": "confirmed", "confidence": 0.8, "evidence": [{"metric": "cq", "direction": "down"}], "narrative": "Test finding"}'
+
+        result = stage_dispatch_parallel(
+            hypothesis_set=hypothesis_set,
+            understand_result=understand_result,
+            trace=trace,
+            llm_callable=mock_llm,
+            config={},
+            domain=mock_domain,
+        )
+
+        mock_domain.get_prompts.assert_called_once_with("dispatch")
+        assert len(result["findings"]) == 1
+
+    def test_dispatch_defaults_to_search_metrics(self):
+        import inspect
+        from harness.stages.dispatch import stage_dispatch
+        sig = inspect.signature(stage_dispatch)
+        assert sig.parameters["domain"].default is None
+
+
+# ===========================================================================
+# Domain Wiring Tests for SYNTHESIZE Stage
+# ===========================================================================
+
+
+class TestSynthesizeDomainWiring:
+    """Verify stage_synthesize uses domain.get_prompts()."""
+
+    def test_stage_synthesize_accepts_domain(self):
+        import inspect
+        from harness.stages.synthesize import stage_synthesize
+        sig = inspect.signature(stage_synthesize)
+        assert "domain" in sig.parameters
+
+    def test_synthesize_defaults_to_search_metrics(self):
+        import inspect
+        from harness.stages.synthesize import stage_synthesize
+        sig = inspect.signature(stage_synthesize)
+        assert sig.parameters["domain"].default is None
+
+    def test_synthesize_uses_domain_prompts(self):
+        """When domain is passed, stage_synthesize calls domain.get_prompts('synthesize')."""
+        import json
+        from unittest.mock import MagicMock
+        from harness.stages.synthesize import stage_synthesize
+        from trace.collector import InvestigationTrace
+
+        mock_domain = MagicMock()
+        from domains.search_metrics import SearchMetricsDomain
+        real_domain = SearchMetricsDomain()
+        mock_domain.get_prompts.return_value = real_domain.get_prompts("synthesize")
+        mock_domain.name = "mock_domain"
+
+        trace = InvestigationTrace(question="test")
+
+        dispatch_result = {
+            "findings": [
+                {"agent_name": "test", "hypothesis_id": "h1", "verdict": "confirmed",
+                 "confidence": 0.8, "evidence": [{"metric": "cq", "direction": "down"}],
+                 "narrative": "Test finding"}
+            ]
+        }
+        understand_result = {"metric": "click_quality", "metric_direction": "down"}
+        hypothesize_result = {
+            "hypotheses": [{"hypothesis_id": "h1", "archetype": "ranking_regression"}]
+        }
+
+        # Mock LLM returns a valid synthesis report
+        def mock_llm(prompt, system, max_tokens):
+            return json.dumps({
+                "tldr": "Click Quality dropped due to ranking regression.",
+                "confidence_grade": "High",
+                "severity": "P1",
+                "root_cause": "Ranking model change.",
+                "dimensional_breakdown": "Standard tier most affected.",
+                "hypothesis_and_evidence": "Ranking regression confirmed.",
+                "validation_summary": "All checks passed.",
+                "upgrade_condition": "Would upgrade to P0 if premium tier also affected.",
+                "recommended_actions": [{"action": "Revert model", "owner": "Search team"}],
+            })
+
+        result = stage_synthesize(
+            dispatch_result=dispatch_result,
+            understand_result=understand_result,
+            hypothesize_result=hypothesize_result,
+            trace=trace,
+            llm_callable=mock_llm,
+            domain=mock_domain,
+        )
+
+        mock_domain.get_prompts.assert_called_with("synthesize")
+        assert "tldr" in result
