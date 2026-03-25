@@ -3,43 +3,43 @@
 
 agents:
   - name: understand
-    file: agents/understand.md
+    file: domains/search_metrics/agents/understand.md
     pipeline_step: 1
     depends_on: []
     critical: true
 
   - name: hypothesize
-    file: agents/hypothesize.md
+    file: domains/search_metrics/agents/hypothesize.md
     pipeline_step: 2
     depends_on: [understand]
     critical: true
 
   - name: dispatch-ranking
-    file: agents/dispatch-ranking.md
+    file: domains/search_metrics/agents/dispatch-ranking.md
     pipeline_step: 3
     depends_on: [hypothesize]
     critical: false
 
   - name: dispatch-connector
-    file: agents/dispatch-connector.md
+    file: domains/search_metrics/agents/dispatch-connector.md
     pipeline_step: 3
     depends_on: [hypothesize]
     critical: false
 
   - name: dispatch-ai-quality
-    file: agents/dispatch-ai-quality.md
+    file: domains/search_metrics/agents/dispatch-ai-quality.md
     pipeline_step: 3
     depends_on: [hypothesize]
     critical: false
 
   - name: investigation-sub-agent
-    file: agents/investigation-sub-agent.md
+    file: domains/search_metrics/agents/investigation-sub-agent.md
     pipeline_step: 3
     depends_on: [hypothesize]
     critical: false
 
   - name: synthesize
-    file: agents/synthesize.md
+    file: domains/search_metrics/agents/synthesize.md
     pipeline_step: 4
     depends_on: [dispatch-ranking, dispatch-connector, dispatch-ai-quality]
     critical: true

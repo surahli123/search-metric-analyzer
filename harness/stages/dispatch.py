@@ -10,7 +10,7 @@ _stage_dispatch_parallel() to keep the orchestrator small and each
 stage independently testable.
 
 Dependencies:
-- harness.prompts: build_dispatch_* prompt functions
+- domains.search_metrics.prompts: build_dispatch_* prompt functions
 - harness.llm: extract_json
 - harness.dag_executor: DAGExecutor (parallel mode only)
 - contracts.seam_validator: validate_seam
@@ -390,7 +390,7 @@ def _dispatch_via_llm(
     Builds a per-hypothesis prompt, calls the LLM, and parses the
     response into a SubAgentFinding dict.
     """
-    from harness.prompts import build_dispatch_system_prompt, build_dispatch_user_prompt
+    from domains.search_metrics.prompts import build_dispatch_system_prompt, build_dispatch_user_prompt
 
     hyp_id = hypothesis.get("hypothesis_id", "unknown")
 

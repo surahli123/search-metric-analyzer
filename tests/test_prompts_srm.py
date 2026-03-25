@@ -9,7 +9,7 @@ These tests verify the fix.
 
 import pytest
 
-from harness.prompts import build_dispatch_system_prompt
+from domains.search_metrics.prompts import build_dispatch_system_prompt
 
 
 class TestDispatchPromptSRMField:

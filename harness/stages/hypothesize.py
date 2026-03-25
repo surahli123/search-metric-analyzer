@@ -9,7 +9,7 @@ The LLM callable is passed as an explicit parameter.
 
 Dependencies:
 - core.corrections: load_corrections, find_relevant_corrections
-- harness.prompts: build_hypothesize_* prompt functions, normalize_hypothesis_set
+- domains.search_metrics.prompts: build_hypothesize_* prompt functions, normalize_hypothesis_set
 - harness.llm: extract_json
 - contracts.seam_validator: validate_seam
 - trace: emit TraceSpan
@@ -65,7 +65,7 @@ def stage_hypothesize(
         StageError: If JSON extraction from LLM response fails.
         LLMAPIError: If LLM call fails with a transient error (propagates).
     """
-    from harness.prompts import (
+    from domains.search_metrics.prompts import (
         build_hypothesize_system_prompt,
         build_hypothesize_user_prompt,
         normalize_hypothesis_set,

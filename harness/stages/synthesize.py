@@ -13,7 +13,7 @@ Extracted from SearchMetricOrchestrator._stage_synthesize() to keep
 the orchestrator small and each stage independently testable.
 
 Dependencies:
-- harness.prompts: build_synthesize_* prompt functions, normalize_synthesis_report
+- domains.search_metrics.prompts: build_synthesize_* prompt functions, normalize_synthesis_report
 - harness.llm: extract_json
 - contracts.seam_validator: validate_seam
 - trace: emit TraceSpan
@@ -65,7 +65,7 @@ def stage_synthesize(
     Raises:
         StageError: If JSON extraction from LLM response fails on both attempts.
     """
-    from harness.prompts import (
+    from domains.search_metrics.prompts import (
         build_synthesize_system_prompt,
         build_synthesize_user_prompt,
         build_synthesize_retry_prompt,

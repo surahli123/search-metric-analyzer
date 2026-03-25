@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 SKILL_FILE = ROOT / "skills" / "search-metric-analyzer.md"
 TOOLS_DIR = ROOT / "core"
-KNOWLEDGE_DIR = ROOT / "data" / "knowledge"
+KNOWLEDGE_DIR = ROOT / "domains" / "search_metrics" / "knowledge"
 
 
 class TestSkillFileExists:
@@ -203,12 +203,12 @@ class TestSkillFileKnowledgeReferences:
 
     def test_references_metric_definitions(self, content):
         assert "metric_definitions.yaml" in content, (
-            "Must reference data/knowledge/metric_definitions.yaml"
+            "Must reference domains/search_metrics/knowledge/metric_definitions.yaml"
         )
 
     def test_references_historical_patterns(self, content):
         assert "historical_patterns.yaml" in content, (
-            "Must reference data/knowledge/historical_patterns.yaml"
+            "Must reference domains/search_metrics/knowledge/historical_patterns.yaml"
         )
 
     def test_knowledge_files_exist(self):
@@ -218,17 +218,17 @@ class TestSkillFileKnowledgeReferences:
 
     def test_references_search_pipeline_knowledge(self, content):
         assert "search_pipeline_knowledge.yaml" in content, (
-            "Must reference data/knowledge/search_pipeline_knowledge.yaml"
+            "Must reference domains/search_metrics/knowledge/search_pipeline_knowledge.yaml"
         )
 
     def test_references_evaluation_methods(self, content):
         assert "evaluation_methods.yaml" in content, (
-            "Must reference data/knowledge/evaluation_methods.yaml"
+            "Must reference domains/search_metrics/knowledge/evaluation_methods.yaml"
         )
 
     def test_references_architecture_tradeoffs(self, content):
         assert "architecture_tradeoffs.yaml" in content, (
-            "Must reference data/knowledge/architecture_tradeoffs.yaml"
+            "Must reference domains/search_metrics/knowledge/architecture_tradeoffs.yaml"
         )
 
     def test_new_knowledge_files_exist(self):

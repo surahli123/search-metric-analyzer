@@ -85,9 +85,9 @@ def _load_co_movement_table() -> List[Dict[str, Any]]:
     import yaml
 
     # Resolve path relative to this file's location, not cwd.
-    # core/anomaly.py -> project_root/data/knowledge/metric_definitions.yaml
+    # core/anomaly.py -> project_root/domains/search_metrics/knowledge/metric_definitions.yaml
     project_root = Path(__file__).resolve().parent.parent
-    yaml_path = project_root / "data" / "knowledge" / "metric_definitions.yaml"
+    yaml_path = project_root / "domains" / "search_metrics" / "knowledge" / "metric_definitions.yaml"
 
     with open(yaml_path, "r") as f:
         definitions = yaml.safe_load(f)
@@ -419,7 +419,7 @@ def match_co_movement_pattern(
     first check if the PATTERN of metric movements matches a known failure mode.
     This narrows the hypothesis space before doing expensive decomposition.
 
-    The diagnostic table is loaded from data/knowledge/metric_definitions.yaml.
+    The diagnostic table is loaded from domains/search_metrics/knowledge/metric_definitions.yaml.
 
     v1.4 CHANGE (DS-STAR scored matching):
     Instead of returning the first pattern where ALL metrics match, we now

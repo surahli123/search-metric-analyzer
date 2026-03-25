@@ -6,7 +6,7 @@ As the number of agents grows beyond 3 lead agents, we need a structured way to:
 2. Validate that the dependency graph is acyclic (no circular dependencies)
 3. Build execution plans that respect dependency order and enable parallelism
 
-DESIGN DECISION: Registry is a YAML file (agents/registry.yaml), not code.
+DESIGN DECISION: Registry is a YAML file (domains/search_metrics/agents/registry.yaml), not code.
 Same rationale as the knowledge manifest — declarative config is easier to audit,
 review, and modify than Python dictionaries buried in code. The registry schema
 is validated at load time, so typos surface immediately.
@@ -58,7 +58,7 @@ STEP_INT_TO_NAME = {1: "understand", 2: "hypothesize", 3: "dispatch", 4: "synthe
 # =============================================================================
 
 def load_registry(path: str) -> Dict[str, Any]:
-    """Parse agents/registry.yaml and validate its top-level schema.
+    """Parse domains/search_metrics/agents/registry.yaml and validate its top-level schema.
 
     WHY validate here instead of letting callers handle bad data?
     Fail-fast principle: if the registry is malformed, we want to surface

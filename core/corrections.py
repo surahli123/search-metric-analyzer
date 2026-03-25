@@ -37,7 +37,7 @@ import yaml
 # Default path: corrections.yaml lives alongside metric_definitions.yaml
 _DEFAULT_PATH = (
     Path(__file__).resolve().parent.parent
-    / "data" / "knowledge" / "corrections.yaml"
+    / "domains" / "search_metrics" / "knowledge" / "corrections.yaml"
 )
 
 # Valid correction sources — tracks HOW the correction was captured.
@@ -60,7 +60,7 @@ def load_corrections(yaml_path: Optional[str] = None) -> List[Dict[str, Any]]:
 
     Args:
         yaml_path: Override path to corrections YAML. If None, uses the
-            default path (data/knowledge/corrections.yaml).
+            default path (domains/search_metrics/knowledge/corrections.yaml).
 
     Returns:
         List of correction dicts. Each has at minimum:
@@ -284,7 +284,7 @@ def main():
     )
     parser.add_argument(
         "--yaml-path", default=None,
-        help="Custom YAML path (default: data/knowledge/corrections.yaml)",
+        help="Custom YAML path (default: domains/search_metrics/knowledge/corrections.yaml)",
     )
 
     args = parser.parse_args()

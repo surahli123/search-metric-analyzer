@@ -37,7 +37,7 @@ class TestLoadRegistry:
 
     def test_loads_project_registry(self):
         """The real registry.yaml loads successfully."""
-        path = os.path.join(PROJECT_ROOT, "agents", "registry.yaml")
+        path = os.path.join(PROJECT_ROOT, "domains", "search_metrics", "agents", "registry.yaml")
         registry = load_registry(path)
         assert "agents" in registry
         assert isinstance(registry["agents"], list)
@@ -81,7 +81,7 @@ class TestValidateRegistry:
 
     def test_project_registry_is_valid(self):
         """The real registry validates with zero errors."""
-        path = os.path.join(PROJECT_ROOT, "agents", "registry.yaml")
+        path = os.path.join(PROJECT_ROOT, "domains", "search_metrics", "agents", "registry.yaml")
         registry = load_registry(path)
         errors = validate_registry(registry, base_dir=PROJECT_ROOT)
         assert errors == [], f"Registry validation errors: {errors}"
@@ -129,7 +129,7 @@ class TestCycleDetection:
 
     def test_no_cycles_in_project_registry(self):
         """The real registry has no cycles."""
-        path = os.path.join(PROJECT_ROOT, "agents", "registry.yaml")
+        path = os.path.join(PROJECT_ROOT, "domains", "search_metrics", "agents", "registry.yaml")
         registry = load_registry(path)
         errors = _detect_cycles(registry["agents"])
         assert errors == []
@@ -178,14 +178,14 @@ class TestParseContract:
 
     def test_parses_understand_contract(self):
         """The understand.md agent has a parseable CONTRACT block."""
-        path = os.path.join(PROJECT_ROOT, "agents", "understand.md")
+        path = os.path.join(PROJECT_ROOT, "domains", "search_metrics", "agents", "understand.md")
         contract = parse_contract(path)
         # Should have a contract (may be empty dict if no block exists)
         assert isinstance(contract, dict)
 
     def test_parses_all_agent_contracts(self):
         """Every agent .md file can be parsed without errors."""
-        agents_dir = os.path.join(PROJECT_ROOT, "agents")
+        agents_dir = os.path.join(PROJECT_ROOT, "domains", "search_metrics", "agents")
         md_files = [f for f in os.listdir(agents_dir) if f.endswith(".md")]
         for md_file in md_files:
             path = os.path.join(agents_dir, md_file)
@@ -245,7 +245,7 @@ class TestBuildExecutionPlan:
 
     @pytest.fixture
     def project_registry(self):
-        path = os.path.join(PROJECT_ROOT, "agents", "registry.yaml")
+        path = os.path.join(PROJECT_ROOT, "domains", "search_metrics", "agents", "registry.yaml")
         return load_registry(path)
 
     def test_simple_mode_returns_empty(self, project_registry):
@@ -311,13 +311,13 @@ class TestRegistryIntegration:
     """Integration tests verifying registry structure matches expectations."""
 
     def test_seven_agents_defined(self):
-        path = os.path.join(PROJECT_ROOT, "agents", "registry.yaml")
+        path = os.path.join(PROJECT_ROOT, "domains", "search_metrics", "agents", "registry.yaml")
         registry = load_registry(path)
         assert len(registry["agents"]) == 7
 
     def test_three_critical_agents(self):
         """3 agents are marked critical: understand, hypothesize, synthesize."""
-        path = os.path.join(PROJECT_ROOT, "agents", "registry.yaml")
+        path = os.path.join(PROJECT_ROOT, "domains", "search_metrics", "agents", "registry.yaml")
         registry = load_registry(path)
         critical = [a for a in registry["agents"] if a.get("critical")]
         assert len(critical) == 3
@@ -326,7 +326,7 @@ class TestRegistryIntegration:
 
     def test_four_dispatch_agents(self):
         """4 agents in the dispatch stage (pipeline_step=3)."""
-        path = os.path.join(PROJECT_ROOT, "agents", "registry.yaml")
+        path = os.path.join(PROJECT_ROOT, "domains", "search_metrics", "agents", "registry.yaml")
         registry = load_registry(path)
         dispatch = [a for a in registry["agents"] if a.get("pipeline_step") == 3]
         assert len(dispatch) == 4

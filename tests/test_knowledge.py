@@ -5,7 +5,7 @@ import pytest
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-KNOWLEDGE_DIR = ROOT / "data" / "knowledge"
+KNOWLEDGE_DIR = ROOT / "domains" / "search_metrics" / "knowledge"
 
 
 class TestMetricDefinitions:

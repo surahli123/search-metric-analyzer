@@ -82,7 +82,7 @@ CSV_COLUMNS = [
 
 # ---------------------------------------------------------------------------
 # Baseline metric values by segment.
-# Source: data/knowledge/metric_definitions.yaml + rules/01-metric-invariants.md
+# Source: domains/search_metrics/knowledge/metric_definitions.yaml + rules/01-metric-invariants.md
 #
 # WHY per-segment baselines?
 # Enterprise Search metrics vary significantly by segment. A 0.220 CQ for
