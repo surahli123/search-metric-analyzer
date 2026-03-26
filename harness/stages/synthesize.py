@@ -13,7 +13,7 @@ Extracted from SearchMetricOrchestrator._stage_synthesize() to keep
 the orchestrator small and each stage independently testable.
 
 Dependencies:
-- domains.search_metrics.prompts: build_synthesize_* prompt functions, normalize_synthesis_report
+- DomainInterface: domain.get_prompts("synthesize") for prompt builders
 - harness.llm: extract_json
 - contracts.seam_validator: validate_seam
 - trace: emit TraceSpan

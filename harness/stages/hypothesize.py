@@ -8,8 +8,8 @@ the orchestrator class small and each stage independently testable.
 The LLM callable is passed as an explicit parameter.
 
 Dependencies:
+- DomainInterface: domain.get_prompts("hypothesize") for prompt builders
 - core.corrections: load_corrections, find_relevant_corrections
-- domains.search_metrics.prompts: build_hypothesize_* prompt functions, normalize_hypothesis_set
 - harness.llm: extract_json
 - contracts.seam_validator: validate_seam
 - trace: emit TraceSpan

@@ -10,7 +10,7 @@ _stage_dispatch_parallel() to keep the orchestrator small and each
 stage independently testable.
 
 Dependencies:
-- domains.search_metrics.prompts: build_dispatch_* prompt functions
+- DomainInterface: domain.get_prompts("dispatch") for prompt builders
 - harness.llm: extract_json
 - harness.dag_executor: DAGExecutor (parallel mode only)
 - contracts.seam_validator: validate_seam
