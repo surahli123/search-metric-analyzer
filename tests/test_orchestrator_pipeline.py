@@ -2666,3 +2666,41 @@ class TestRunIntegration:
         # Verify no per-invocation state was stored on the instance
         assert not hasattr(orch, "_current_mode")
         assert not hasattr(orch, "_current_question_type")
+
+
+class TestOrchestratorDomainWiring:
+    """Verify orchestrator accepts and passes domain to stages."""
+
+    def test_accepts_domain_parameter(self):
+        import inspect
+        from harness.orchestrator import SearchMetricOrchestrator
+        sig = inspect.signature(SearchMetricOrchestrator.__init__)
+        assert "domain" in sig.parameters
+
+    def test_domain_defaults_to_none(self):
+        """Without domain param, orchestrator creates SearchMetricsDomain internally."""
+        import inspect
+        from harness.orchestrator import SearchMetricOrchestrator
+        sig = inspect.signature(SearchMetricOrchestrator.__init__)
+        assert sig.parameters["domain"].default is None
+
+    def test_stores_domain_instance(self):
+        """Orchestrator should store the domain for passing to stages."""
+        from harness.orchestrator import SearchMetricOrchestrator
+        from domains.search_metrics import SearchMetricsDomain
+
+        domain = SearchMetricsDomain()
+        orch = SearchMetricOrchestrator(
+            llm_callable=lambda p, s, m: "{}",
+            domain=domain,
+        )
+        assert orch._domain is domain
+
+    def test_default_domain_is_search_metrics(self):
+        """When no domain is passed, orchestrator creates SearchMetricsDomain."""
+        from harness.orchestrator import SearchMetricOrchestrator
+        from domains.search_metrics import SearchMetricsDomain
+
+        orch = SearchMetricOrchestrator(llm_callable=lambda p, s, m: "{}")
+        assert isinstance(orch._domain, SearchMetricsDomain)
+        assert orch._domain.name == "search_metrics"
