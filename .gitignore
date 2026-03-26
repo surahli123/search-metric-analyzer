@@ -20,5 +20,10 @@ __pycache__/
 .worktrees/
 .superpowers/
 
+# Claude Code local artifacts
+.claude/settings.json
+.claude/worktrees/
+.context/
+
 .vercel
 .gstack/
