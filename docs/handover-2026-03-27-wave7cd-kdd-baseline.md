@@ -1,4 +1,4 @@
-# Handover: Wave 7C/7D Complete + KDD Baseline Results
+# Handover: Wave 7C/7D Complete + KDD Baseline + v2 Prompt Tuning Results
 
 ## Project
 **Search Metric Analyzer** — `/Users/surahli/Documents/projects/Search_Metric_Analyzer`
@@ -20,14 +20,47 @@ with gstack + Codex found 20 issues, all fixed. Baseline: 15/50 completed, 5/50 
 - **Virtual env**: `.venv/` with anthropic, pyyaml, pytest, openai, fastapi, duckdb
 - **Novita API**: NOVITA_API_KEY in ~/.zshrc, DeepSeek V3.2, ~$0.004/task
 
-## Priority 1: Prompt Tuning (Improve Completion Rate)
+## v2 Prompt Tuning Results (same session)
+
+Committed as `acfacd1` on main. Changes: schema summary header, DuckDB hints, values-only output.
+
+| Metric | v1 | v2 | Delta |
+|--------|----|----|-------|
+| Completed | 15/50 (30%) | 19/50 (38%) | +4 |
+| Accurate | 5/50 (10%) | 4/50 (8%) | -1 |
+
+Completion improved (+4 tasks, schema summary helped). Accuracy slightly regressed —
+"no headers" SYNTHESIZE prompt hurt the evaluator's header-stripping heuristic.
+
+### v2 accurate tasks: task_214, task_305, task_420 (+ 1 from batch 3 unclear)
+### v1 accurate tasks that regressed: task_26, task_200, task_67
+
+## Priority 1: Three Quick Fixes (highest ROI)
 
 The #1 failure mode is **table not found** (50% of failures). The LLM guesses table
 names because `_build_schema_context()` doesn't surface all available tables clearly.
 
-### Specific fixes needed:
+### Three quick fixes (do these first):
 
-1. **Schema context quality** (`kdd/runner.py:_build_schema_context`)
+0. **CRASH BUG: `_extract_best_sql` breaks on list response** (`kdd/runner.py:~423`)
+   - LLM sometimes returns a list instead of `{"approaches": [...]}` dict
+   - `hyp_result.get("approaches")` throws `AttributeError: 'list' object has no attribute 'get'`
+   - Fix: if isinstance(hyp_result, list), wrap as `{"approaches": hyp_result, "best_approach_index": 0}`
+   - Could flip ~5 tasks from failed to completed
+
+1. **Revert SYNTHESIZE to include headers** (`domains/data_analysis/prompts.py`)
+   - "No headers" instruction caused accuracy regression (task_26, task_200, task_67 lost)
+   - The evaluator's header-stripping heuristic works better than LLM header omission
+   - Revert to: "Format as CSV with header row + data rows"
+
+2. **Add SQL retry on error** (`kdd/runner.py:run_task`)
+   - When sql_executor returns an error, feed the error message back to the LLM
+   - Ask: "Your SQL failed with this error: {error}. Fix the SQL."
+   - Single retry could fix type mismatches, wrong table names, escaping issues
+
+### Additional improvements (if time):
+
+3. **Schema context quality** (`kdd/runner.py:_build_schema_context`)
    - Ensure ALL table names from SQLite DBs are listed prominently
    - Include table names from CSVs with explicit "Available tables:" header
    - Add JSON file keys/structure for JSON-only tasks
