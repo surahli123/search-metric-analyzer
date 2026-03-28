@@ -48,7 +48,14 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import duckdb
+# Lazy import: duckdb is only needed for _execute_unified (mixed SQLite+CSV).
+# Guard the import so kdd.runner can be imported in environments without duckdb
+# (e.g., SQLite-only tasks or unit tests with mocks).
+try:
+    import duckdb
+    _HAS_DUCKDB = True
+except ImportError:
+    _HAS_DUCKDB = False
 
 from kdd.task_loader import load_task
 from kdd.evaluator import evaluate
@@ -340,6 +347,34 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
                 f"-- Sample rows:\n-- " + "\n-- ".join(sample_lines)
             )
 
+    # JSON files — structure and keys give the LLM context for tasks
+    # that use JSON as a data source (e.g., task_11: Patient.json)
+    for json_path in context_files.get("json", []):
+        result = read_file(json_path, max_chars=2000)
+        if result["error"]:
+            sections.append(f"-- Error reading {json_path}: {result['error']}")
+            continue
+
+        content = result["content"]
+        json_type = content.get("type", "unknown")
+        table_name = Path(json_path).stem
+        data = content.get("data", {})
+
+        # Show structure: for objects, list top-level keys; for arrays, show first item
+        if json_type == "object" and isinstance(data, dict):
+            keys = list(data.keys())[:20]  # cap at 20 keys for prompt budget
+            sections.append(
+                f"-- JSON: {table_name} (object, {len(data)} keys)\n"
+                f"-- Keys: {', '.join(keys)}"
+            )
+        elif json_type == "array" and isinstance(data, list):
+            sections.append(
+                f"-- JSON: {table_name} (array, {len(data)} items)"
+            )
+            if data and isinstance(data[0], dict):
+                keys = list(data[0].keys())[:20]
+                sections.append(f"-- Item keys: {', '.join(keys)}")
+
     if not sections:
         return "(No schema information available)"
 
@@ -392,6 +427,7 @@ def _execute_sql_for_task(task: Dict[str, Any], sql_query: str, max_rows: int = 
     context_files = task.get("context_files", {})
     db_files = context_files.get("db", [])
     csv_files = context_files.get("csv", [])
+    json_files = context_files.get("json", [])
 
     if db_files and csv_files:
         # Unified mode — load both SQLite tables and CSVs into DuckDB
@@ -400,10 +436,30 @@ def _execute_sql_for_task(task: Dict[str, Any], sql_query: str, max_rows: int = 
         return execute_sql(query=sql_query, db_path=db_files[0])
     elif csv_files:
         return execute_sql(query=sql_query, csv_paths=csv_files)
-    else:
+    elif json_files:
+        # JSON-only tasks (e.g., task_11): read JSON files and return
+        # their content as a single-row result for the LLM to synthesize.
+        # The LLM's "SQL" is ignored — we just return the raw JSON data.
+        combined = []
+        for jf in json_files:
+            result = read_file(jf)
+            if result.get("error") is None:
+                combined.append({"file": Path(jf).name, "data": result["content"].get("data", "")})
         return {
-            "columns": [], "rows": [], "row_count": 0,
-            "truncated": False, "error": "No data files found",
+            "columns": ["file", "data"],
+            "rows": combined,
+            "row_count": len(combined),
+            "truncated": False,
+            "error": None,
+        }
+    else:
+        # Markdown-only tasks (extreme difficulty) — no structured data
+        return {
+            "columns": ["note"],
+            "rows": [{"note": "No structured data files. Answer must come from knowledge.md context."}],
+            "row_count": 1,
+            "truncated": False,
+            "error": None,
         }
 
 
@@ -424,6 +480,9 @@ def _execute_unified(
     5. Execute the query
     """
     _error = lambda msg: {"columns": [], "rows": [], "row_count": 0, "truncated": False, "error": msg}
+
+    if not _HAS_DUCKDB:
+        return _error("duckdb is not installed — cannot run unified queries. pip install duckdb")
 
     # Allowlist: only SELECT/WITH queries
     first_word = query.strip().split()[0].lower() if query.strip() else ""

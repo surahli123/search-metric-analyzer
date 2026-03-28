@@ -229,15 +229,33 @@ def _strip_header_if_present(
         )
     )
 
-    if header_matches and len(pred_rows) == gold_data_count + 1:
-        # Predicted has header + exact number of data rows — strip header
+    # Check if first row looks non-numeric (likely a header even if it
+    # doesn't match gold header). Gold files often use SQL expressions like
+    # COUNT(DISTINCT T1.ID) while the LLM outputs "count" or "total".
+    first_row_is_non_numeric = any(
+        not _is_numeric(cell) for cell in first_row
+    )
+
+    if header_matches and len(pred_rows) >= gold_data_count + 1:
+        # Predicted header matches gold header — strip it
         return pred_rows[1:]
-    elif header_matches and len(pred_rows) > gold_data_count:
-        # Predicted has header but more data rows than expected — strip header
+    elif first_row_is_non_numeric and len(pred_rows) == gold_data_count + 1:
+        # First row looks like a header (non-numeric) and stripping it
+        # gives the exact gold data count — strip it even if header text
+        # doesn't match (LLM may use different column names)
         return pred_rows[1:]
     else:
         # No header detected or row count matches data count — keep all rows
         return pred_rows
+
+
+def _is_numeric(s: str) -> bool:
+    """Check if a string looks like a number (int or float)."""
+    try:
+        float(s.strip())
+        return True
+    except (ValueError, OverflowError):
+        return False
 
 
 # ---------------------------------------------------------------------------
