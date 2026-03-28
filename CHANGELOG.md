@@ -5,6 +5,44 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Session: Domain Plugin + KDD Runner + Baseline (2026-03-27)
+
+### Added — Wave 7A/7B (PR #28)
+- `contracts/domain_interface.py` — DomainInterface Protocol (6 methods)
+- `domains/search_metrics/` — SearchMetricsDomain extracted from harness/
+- `core/sql_executor.py` — DuckDB/SQLite read-only SQL with allowlist write-block + external access lockdown
+- `core/file_reader.py` — Multi-format reader (CSV/JSON/SQLite/markdown/text)
+- `tests/fixtures/` — Tracked test fixtures for CI-safe testing
+
+### Added — Wave 7C/7D (PR #29)
+- `domains/data_analysis/` — DataAnalysisDomain for KDD tasks (task-scoped)
+- `kdd/runner.py` — 2-LLM-call pipeline (HYPOTHESIZE SQL → execute → SYNTHESIZE CSV)
+- `kdd/task_loader.py` — Discover KDD task files by extension
+- `kdd/evaluator.py` — Compare predicted vs gold.csv (numeric tolerance, header stripping)
+- Unified DuckDB backend for mixed SQLite+CSV tasks
+
+### Fixed — Review Findings (4 review rounds, 20 issues)
+- Allowlist write-block replacing denylist (EXPORT/CALL/LOAD bypass eliminated)
+- DuckDB external access locked down after data loading
+- validate_seam handles dict-based domain rules
+- sqlite_% internal tables filtered from file_reader output
+- Resource leak in unified backend (try/finally)
+- Evaluator header stripping for SQL-expression gold headers
+- JSON-only task support
+
+### KDD Baseline Results
+- **15/50 completed (30%)**, **5/50 accurate (10%)**
+- #1 failure: table not found (50%) — LLM guesses table names
+- Accurate tasks: task_26, task_67, task_200, task_305, task_420
+
+### Stats
+- 2 PRs merged (#28, #29), 69 files changed, +6,769 lines
+- 1,522 backend tests (79 new)
+- 6 review rounds (gstack + Codex), 20 issues found and fixed
+- Cost: ~$0.20 for 50-task batch run
+
+---
+
 ## Session: OpenAI Factory Implementation + First Real Investigations (2026-03-22)
 
 ### Added
