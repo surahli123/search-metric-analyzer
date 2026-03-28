@@ -1,4 +1,4 @@
-# Handover: Wave 7C/7D Complete + KDD Baseline + v2 Prompt Tuning Results
+# Handover: Wave 7C/7D + 3 Iteration Cycles (v1→v2→v3)
 
 ## Project
 **Search Metric Analyzer** — `/Users/surahli/Documents/projects/Search_Metric_Analyzer`
@@ -32,31 +32,49 @@ Committed as `acfacd1` on main. Changes: schema summary header, DuckDB hints, va
 Completion improved (+4 tasks, schema summary helped). Accuracy slightly regressed —
 "no headers" SYNTHESIZE prompt hurt the evaluator's header-stripping heuristic.
 
-### v2 accurate tasks: task_214, task_305, task_420 (+ 1 from batch 3 unclear)
-### v1 accurate tasks that regressed: task_26, task_200, task_67
+### v2 accurate tasks: task_214, task_305, task_420
+### v1 accurate tasks that regressed in v2: task_26, task_200, task_67
 
-## Priority 1: Three Quick Fixes (highest ROI)
+## v3 Prompt Tuning Results (same session)
+
+Committed as `8d576c6` on main. Fixes: crash bug, header revert, SQL retry.
+
+| Metric | v1 | v2 | v3 |
+|--------|----|----|-----|
+| Completed | 15/50 (30%) | 19/50 (38%) | 21/50 (42%) |
+| Accurate | 5/50 (10%) | 4/50 (8%) | 2/50 (4%) |
+
+Completion keeps improving (+40% from v1). Accuracy regressed due to LLM
+non-determinism — same task produces different output across runs.
+
+### Key insight: accuracy bottleneck is evaluator strictness, not SQL quality
+The LLM often gets the right answer but in a different format than gold.csv.
+Next lever: fuzzy evaluator matching (partial credit, semantic comparison).
+
+## Priority 1: Next Iteration Targets (v4)
 
 The #1 failure mode is **table not found** (50% of failures). The LLM guesses table
 names because `_build_schema_context()` doesn't surface all available tables clearly.
 
 ### Three quick fixes (do these first):
 
-0. **CRASH BUG: `_extract_best_sql` breaks on list response** (`kdd/runner.py:~423`)
-   - LLM sometimes returns a list instead of `{"approaches": [...]}` dict
-   - `hyp_result.get("approaches")` throws `AttributeError: 'list' object has no attribute 'get'`
-   - Fix: if isinstance(hyp_result, list), wrap as `{"approaches": hyp_result, "best_approach_index": 0}`
-   - Could flip ~5 tasks from failed to completed
+0. ~~CRASH BUG~~ — FIXED in v3 (list response handling)
+1. ~~Revert SYNTHESIZE headers~~ — FIXED in v3 (header revert)
+2. ~~SQL retry on error~~ — FIXED in v3 (single retry with error feedback)
 
-1. **Revert SYNTHESIZE to include headers** (`domains/data_analysis/prompts.py`)
-   - "No headers" instruction caused accuracy regression (task_26, task_200, task_67 lost)
-   - The evaluator's header-stripping heuristic works better than LLM header omission
-   - Revert to: "Format as CSV with header row + data rows"
+### New priorities for v4:
 
-2. **Add SQL retry on error** (`kdd/runner.py:run_task`)
-   - When sql_executor returns an error, feed the error message back to the LLM
-   - Ask: "Your SQL failed with this error: {error}. Fix the SQL."
-   - Single retry could fix type mismatches, wrong table names, escaping issues
+0. **Fuzzy evaluator matching** (`kdd/evaluator.py`)
+   - Current evaluator is exact-match. LLM often gets the right answer in wrong format.
+   - Add: contains-match (gold value found anywhere in predicted), partial credit (3/4 rows correct = 0.75)
+   - This is the #1 accuracy unlock — many "wrong" answers are actually correct values
+
+1. **Temperature=0 for determinism** (`kdd/runner.py`)
+   - Accuracy fluctuates across runs (task_305 matches in v1, not v3). Set temperature=0.
+
+2. **Multi-DB support** (`kdd/runner.py:_execute_sql_for_task`)
+   - Some tasks have multiple .db files. Currently only first is loaded.
+   - Load all .db tables into unified backend.
 
 ### Additional improvements (if time):
 
