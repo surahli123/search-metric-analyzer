@@ -502,6 +502,7 @@ def make_openai_llm(
                 model=model,
                 messages=messages,
                 max_tokens=max_tokens,
+                temperature=0.0,  # Deterministic output — same input → same SQL
             )
 
             # Extract text from the first choice.
