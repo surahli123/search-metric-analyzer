@@ -163,6 +163,31 @@ def run_task(
         # Determine which backend to use: SQLite (.db) or DuckDB (CSV).
         sql_result = _execute_sql_for_task(task, sql_query)
 
+        # --- Step 5b: SQL retry on error ---
+        # If the first SQL attempt fails (wrong table name, type mismatch, etc.),
+        # feed the error back to the LLM and ask for a corrected query.
+        # Single retry only — more retries risk burning API budget on hopeless queries.
+        if sql_result["error"]:
+            logger.info("SQL failed: %s — retrying with error feedback", sql_result["error"])
+            retry_prompt = (
+                f"Your SQL query failed with this error:\n"
+                f"  {sql_result['error']}\n\n"
+                f"Original SQL:\n  {sql_query}\n\n"
+                f"Fix the SQL query. Common issues:\n"
+                f"- Wrong table name (check AVAILABLE TABLES in the schema)\n"
+                f"- Type mismatch (use CAST(col AS INTEGER) for comparisons)\n"
+                f"- Apostrophe escaping (use '' not \\')\n\n"
+                f"Return the same JSON format as before with the corrected SQL."
+            )
+            try:
+                retry_response = llm_callable(retry_prompt, hyp_system, 2000)
+                retry_result = extract_json(retry_response)
+                retry_sql = _extract_best_sql(retry_result)
+                if retry_sql:
+                    sql_result = _execute_sql_for_task(task, retry_sql)
+            except Exception:
+                pass  # Retry failed — fall through to original error handling
+
         if sql_result["error"]:
             return _error_result(
                 task_id=task_id,
@@ -407,7 +432,7 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
 # Internal helpers — SQL extraction and execution
 # ---------------------------------------------------------------------------
 
-def _extract_best_sql(hyp_result: dict) -> Optional[str]:
+def _extract_best_sql(hyp_result) -> Optional[str]:
     """Extract the best SQL query from the HYPOTHESIZE result.
 
     The hypothesize response has this shape:
@@ -417,9 +442,19 @@ def _extract_best_sql(hyp_result: dict) -> Optional[str]:
         "reasoning": "..."
     }
 
+    WHY defensive type handling: LLMs sometimes return a list of approaches
+    directly instead of wrapping them in {"approaches": [...]}. We normalize
+    both shapes to avoid AttributeError crashes. (Found in v2 batch run.)
+
     We use best_approach_index if valid, otherwise fall back to the first approach.
     Returns None if no approaches exist or no SQL is found.
     """
+    # Normalize: if LLM returned a list directly, wrap it
+    if isinstance(hyp_result, list):
+        hyp_result = {"approaches": hyp_result, "best_approach_index": 0}
+    if not isinstance(hyp_result, dict):
+        return None
+
     approaches = hyp_result.get("approaches", [])
     if not approaches:
         return None
