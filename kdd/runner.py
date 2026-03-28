@@ -486,29 +486,19 @@ def _execute_sql_for_task(task: Dict[str, Any], sql_query: str, max_rows: int = 
     csv_files = context_files.get("csv", [])
     json_files = context_files.get("json", [])
 
-    if db_files and csv_files:
-        # Unified mode — load both SQLite tables and CSVs into DuckDB
-        return _execute_unified(sql_query, db_files, csv_files, max_rows)
+    # Count how many data source types we have
+    source_types = sum(1 for s in [db_files, csv_files, json_files] if s)
+
+    if source_types >= 2 or json_files:
+        # Unified mode — load ALL sources into one DuckDB connection.
+        # WHY json_files always triggers unified: JSON files contain
+        # {"table": "name", "records": [...]} that must be loaded as
+        # DuckDB tables for SQL queries. The basic execute_sql can't do this.
+        return _execute_unified(sql_query, db_files, csv_files, max_rows, json_files)
     elif db_files:
         return execute_sql(query=sql_query, db_path=db_files[0])
     elif csv_files:
         return execute_sql(query=sql_query, csv_paths=csv_files)
-    elif json_files:
-        # JSON-only tasks (e.g., task_11): read JSON files and return
-        # their content as a single-row result for the LLM to synthesize.
-        # The LLM's "SQL" is ignored — we just return the raw JSON data.
-        combined = []
-        for jf in json_files:
-            result = read_file(jf)
-            if result.get("error") is None:
-                combined.append({"file": Path(jf).name, "data": result["content"].get("data", "")})
-        return {
-            "columns": ["file", "data"],
-            "rows": combined,
-            "row_count": len(combined),
-            "truncated": False,
-            "error": None,
-        }
     else:
         # Markdown-only tasks (extreme difficulty) — no structured data
         return {
@@ -534,12 +524,13 @@ def _apply_limit_if_missing(query: str, max_rows: int) -> str:
 
 def _execute_unified(
     query: str, db_files: list, csv_files: list, max_rows: int = 1000,
+    json_files: list = None,
 ) -> dict:
-    """Load both SQLite tables and CSVs into a single DuckDB connection.
+    """Load SQLite tables, CSVs, and JSON files into a single DuckDB connection.
 
-    WHY this exists: KDD tasks have mixed data sources (e.g., event.db + attendance.csv)
-    and the LLM generates SQL that JOINs across them. Neither sql_executor's SQLite
-    mode nor its DuckDB mode can handle both. This function creates a unified namespace.
+    WHY this exists: KDD tasks have mixed data sources (e.g., event.db + attendance.csv
+    + gasstations.json) and the LLM generates SQL that JOINs across them. This function
+    creates a unified namespace where all sources are queryable as tables.
 
     Steps:
     1. Create in-memory DuckDB connection
@@ -610,6 +601,45 @@ def _execute_unified(
                 f'CREATE TABLE "{table_name}" AS '
                 f"SELECT * FROM read_csv_auto('{safe_path}')"
             )
+
+        # --- Load JSON files as DuckDB tables ---
+        # KDD JSON files follow the pattern: {"table": "name", "records": [{...}, ...]}
+        # We extract the records array and create a table from it.
+        for json_path in (json_files or []):
+            resolved = Path(json_path).resolve()
+            if not resolved.exists():
+                continue
+            try:
+                with open(resolved, encoding="utf-8") as fh:
+                    data = json.load(fh)
+
+                # Extract table name and records from the KDD JSON format
+                if isinstance(data, dict) and "records" in data:
+                    table_name = re.sub(r'[^a-zA-Z0-9_]', '_',
+                                        data.get("table", Path(json_path).stem))
+                    records = data["records"]
+                elif isinstance(data, dict) and "table" not in data:
+                    # Plain dict — use filename as table, wrap as single record
+                    table_name = re.sub(r'[^a-zA-Z0-9_]', '_', Path(json_path).stem)
+                    records = [data]
+                elif isinstance(data, list):
+                    table_name = re.sub(r'[^a-zA-Z0-9_]', '_', Path(json_path).stem)
+                    records = data
+                else:
+                    continue
+
+                if records and isinstance(records[0], dict):
+                    col_names = list(records[0].keys())
+                    col_defs = ", ".join(f'"{c}" VARCHAR' for c in col_names)
+                    conn.execute(f'CREATE TABLE "{table_name}" ({col_defs})')
+                    placeholders = ", ".join(["?"] * len(col_names))
+                    # Insert in batches to avoid huge single statements
+                    batch = [tuple(str(r.get(c, "")) for c in col_names) for r in records]
+                    conn.executemany(
+                        f'INSERT INTO "{table_name}" VALUES ({placeholders})', batch
+                    )
+            except Exception as e:
+                logging.warning(f"Failed to load JSON {json_path}: {e}")
 
         # Lock down external access after loading all data
         conn.execute("SET enable_external_access = false")
