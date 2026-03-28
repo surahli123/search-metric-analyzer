@@ -143,11 +143,36 @@ def _read_json(path: str, max_chars: int, size_bytes: int) -> dict:
     """Parse a JSON file.
 
     WHY truncation check: Some KDD tasks ship JSON files with tens of thousands
-    of records. We still parse the whole thing (we need json.load to validate it),
-    but we truncate the repr before returning so callers don't accidentally embed
-    a 10 MB dict into a prompt.
+    of records. We truncate the repr before returning so callers don't
+    accidentally embed a 10 MB dict into a prompt.
+
+    WHY size guard: json.load() materializes the entire file in memory twice
+    (raw string + Python objects). For files much larger than max_chars, we
+    skip full parsing and return a raw-text preview instead. This bounds
+    memory to ~max_chars rather than the full file size.
     """
+    # Size guard: if the file is much larger than max_chars, don't bother
+    # parsing — just return a raw text preview. The 4x multiplier accounts
+    # for JSON's overhead (quotes, braces, whitespace) vs. data content.
+    _MAX_PARSE_BYTES = max(max_chars * 4, 1_000_000)  # at least 1 MB
+
     try:
+        if size_bytes > _MAX_PARSE_BYTES:
+            # File too large to parse safely — return raw text preview
+            with open(path, encoding="utf-8") as fh:
+                preview = fh.read(max_chars)
+            return _ok(
+                fmt="json",
+                path=path,
+                content={
+                    "data": preview,
+                    "type": "large_file_preview",
+                    "note": f"File is {size_bytes:,} bytes — showing first {max_chars:,} chars as text",
+                },
+                size_bytes=size_bytes,
+                truncated=True,
+            )
+
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
 

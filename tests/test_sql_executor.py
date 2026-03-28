@@ -119,6 +119,21 @@ class TestDuckDBFixture:
         assert result["error"] is not None
         assert result["row_count"] == 0
 
+    def test_blocks_arbitrary_file_read_via_select(self):
+        """read_csv_auto('/etc/passwd') inside a SELECT must be blocked.
+
+        After registering CSVs, external file access is disabled so the
+        user query can only access the registered tables — not arbitrary
+        files on disk via DuckDB table functions.
+        """
+        result = execute_sql(
+            "SELECT * FROM read_csv_auto('/etc/passwd') LIMIT 1",
+            csv_paths=[FIXTURE_CSV_EVENTS],
+        )
+        assert result["error"] is not None, (
+            "Arbitrary file read via read_csv_auto should be blocked"
+        )
+
 
 # ===========================================================================
 # SQLite mode

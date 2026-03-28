@@ -264,10 +264,15 @@ def _run_duckdb(query: str, csv_paths: list, max_rows: int) -> dict:
         conn = duckdb.connect()
 
         try:
-            # Register each CSV as a named view using read_csv_auto().
-            # A VIEW (not a table) keeps data on disk and avoids loading
-            # everything into memory — DuckDB will push predicates down to
-            # the CSV scan layer.
+            # Materialize each CSV as an in-memory table, then disable
+            # external file access before running the user's query.
+            # WHY tables instead of views: views are lazy — they re-read the
+            # CSV file at query time, so disabling external access would break
+            # them. Tables copy data into memory during CREATE TABLE, allowing
+            # us to lock down the connection before executing untrusted SQL.
+            # WHY lock down: without it, a query like
+            #   SELECT * FROM read_csv_auto('/etc/passwd')
+            # can read arbitrary files on the host, bypassing csv_paths.
             for csv_path in csv_paths:
                 # Sanitize filename stem → valid SQL identifier.
                 # E.g., "my-data (2).csv" → "my_data__2_"
@@ -279,9 +284,13 @@ def _run_duckdb(query: str, csv_paths: list, max_rows: int) -> dict:
                 # Double-quote the table name so reserved words (e.g.,
                 # "select.csv" → table "select") don't cause syntax errors.
                 conn.execute(
-                    f'CREATE VIEW "{table_name}" AS '
+                    f'CREATE TABLE "{table_name}" AS '
                     f"SELECT * FROM read_csv_auto('{safe_path}')"
                 )
+
+            # Lock down: no more file system access after tables are loaded.
+            # This blocks read_csv_auto(), read_parquet(), etc. in the user query.
+            conn.execute("SET enable_external_access = false")
 
             bounded_query = _apply_limit(query, max_rows)
             rel = conn.execute(bounded_query)
