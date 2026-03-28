@@ -378,7 +378,29 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
     if not sections:
         return "(No schema information available)"
 
-    return "\n\n".join(sections)
+    # Build a prominent table summary at the top so the LLM sees
+    # all available table names before the detailed schemas.
+    # This is the #1 fix for the "table not found" failure mode (50% of errors).
+    table_names = []
+    for db_path in context_files.get("db", []):
+        result = read_file(db_path)
+        if result.get("error") is None:
+            for table in result["content"].get("tables", []):
+                table_names.append(f"  - {table['name']} (from {Path(db_path).name}, {table['row_count']} rows)")
+    for csv_path in context_files.get("csv", []):
+        stem = Path(csv_path).stem
+        table_names.append(f"  - {stem} (from {Path(csv_path).name})")
+    for json_path in context_files.get("json", []):
+        stem = Path(json_path).stem
+        table_names.append(f"  - {stem} (from {Path(json_path).name}, JSON)")
+
+    header = "=== AVAILABLE TABLES (use ONLY these names in your SQL) ===\n"
+    if table_names:
+        header += "\n".join(table_names)
+    else:
+        header += "  (none)"
+
+    return header + "\n\n=== DETAILED SCHEMAS ===\n\n" + "\n\n".join(sections)
 
 
 # ---------------------------------------------------------------------------
