@@ -42,9 +42,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import duckdb
 
 from kdd.task_loader import load_task
 from kdd.evaluator import evaluate
@@ -372,35 +376,132 @@ def _extract_best_sql(hyp_result: dict) -> Optional[str]:
     return sql.strip() if sql and sql.strip() else None
 
 
-def _execute_sql_for_task(task: Dict[str, Any], sql_query: str) -> dict:
+def _execute_sql_for_task(task: Dict[str, Any], sql_query: str, max_rows: int = 1000) -> dict:
     """Execute a SQL query using the appropriate backend for this task.
 
     Decision logic:
-    - If the task has .db files -> use SQLite backend (first db file)
-    - If the task has .csv files -> use DuckDB backend (all csv files)
-    - If both -> prefer .db (it has explicit schema, more reliable)
+    - ONLY .csv files -> use execute_sql with csv_paths (DuckDB)
+    - ONLY .db files -> use execute_sql with db_path (SQLite)
+    - BOTH .csv AND .db -> unified DuckDB connection that loads both
+      WHY: KDD tasks often require JOINs across CSV and SQLite tables
+      (e.g., task_145: event.db + attendance.csv). Neither backend alone
+      has all tables. We load everything into one DuckDB connection.
 
-    Returns the sql_executor result dict with columns, rows, error, etc.
+    Returns the sql_executor result dict shape: columns, rows, row_count, truncated, error.
     """
     context_files = task.get("context_files", {})
     db_files = context_files.get("db", [])
     csv_files = context_files.get("csv", [])
 
-    if db_files:
-        # SQLite mode — use the first .db file
+    if db_files and csv_files:
+        # Unified mode — load both SQLite tables and CSVs into DuckDB
+        return _execute_unified(sql_query, db_files, csv_files, max_rows)
+    elif db_files:
         return execute_sql(query=sql_query, db_path=db_files[0])
     elif csv_files:
-        # DuckDB mode — register all CSV files as tables
         return execute_sql(query=sql_query, csv_paths=csv_files)
     else:
-        # No data files — this shouldn't happen for valid KDD tasks
         return {
-            "columns": [],
-            "rows": [],
-            "row_count": 0,
-            "truncated": False,
-            "error": "No data files found (no .db or .csv in context/)",
+            "columns": [], "rows": [], "row_count": 0,
+            "truncated": False, "error": "No data files found",
         }
+
+
+def _execute_unified(
+    query: str, db_files: list, csv_files: list, max_rows: int = 1000,
+) -> dict:
+    """Load both SQLite tables and CSVs into a single DuckDB connection.
+
+    WHY this exists: KDD tasks have mixed data sources (e.g., event.db + attendance.csv)
+    and the LLM generates SQL that JOINs across them. Neither sql_executor's SQLite
+    mode nor its DuckDB mode can handle both. This function creates a unified namespace.
+
+    Steps:
+    1. Create in-memory DuckDB connection
+    2. For each .db file: read all tables via sqlite3, create DuckDB tables from data
+    3. For each .csv file: register via read_csv_auto
+    4. Lock down external access
+    5. Execute the query
+    """
+    _error = lambda msg: {"columns": [], "rows": [], "row_count": 0, "truncated": False, "error": msg}
+
+    # Allowlist: only SELECT/WITH queries
+    first_word = query.strip().split()[0].lower() if query.strip() else ""
+    if first_word not in ("select", "with"):
+        return _error(f"Write operation blocked: '{first_word.upper()}' not allowed.")
+
+    try:
+        conn = duckdb.connect()
+
+        # --- Load SQLite tables into DuckDB ---
+        for db_path in db_files:
+            resolved = Path(db_path).resolve()
+            if not resolved.exists():
+                continue
+            try:
+                sqlite_conn = sqlite3.connect(f"file:{resolved}?mode=ro", uri=True)
+                cursor = sqlite_conn.cursor()
+                # Get all user tables
+                cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                )
+                for (table_name,) in cursor.fetchall():
+                    # Read all data from the SQLite table
+                    cursor.execute(f"SELECT * FROM [{table_name}]")
+                    rows = cursor.fetchall()
+                    col_names = [desc[0] for desc in cursor.description]
+                    # Create the table in DuckDB
+                    safe_name = re.sub(r'[^a-zA-Z0-9_]', '_', table_name)
+                    if rows:
+                        # Build column defs from first row types
+                        placeholders = ", ".join(["?"] * len(col_names))
+                        col_defs = ", ".join(f'"{c}" VARCHAR' for c in col_names)
+                        conn.execute(f'CREATE TABLE "{safe_name}" ({col_defs})')
+                        conn.executemany(
+                            f'INSERT INTO "{safe_name}" VALUES ({placeholders})', rows
+                        )
+                    else:
+                        col_defs = ", ".join(f'"{c}" VARCHAR' for c in col_names)
+                        conn.execute(f'CREATE TABLE "{safe_name}" ({col_defs})')
+                sqlite_conn.close()
+            except Exception as e:
+                logging.warning(f"Failed to load SQLite {db_path}: {e}")
+
+        # --- Register CSVs as DuckDB tables ---
+        for csv_path in csv_files:
+            resolved = Path(csv_path).resolve()
+            if not resolved.exists():
+                continue
+            table_name = re.sub(r'[^a-zA-Z0-9_]', '_', Path(csv_path).stem)
+            safe_path = str(resolved).replace("'", "''")
+            conn.execute(
+                f'CREATE TABLE "{table_name}" AS '
+                f"SELECT * FROM read_csv_auto('{safe_path}')"
+            )
+
+        # Lock down external access after loading all data
+        conn.execute("SET enable_external_access = false")
+
+        # Execute the query
+        rel = conn.execute(query)
+        raw_rows = rel.fetchmany(max_rows + 1)
+        truncated = len(raw_rows) > max_rows
+        if truncated:
+            raw_rows = raw_rows[:max_rows]
+
+        columns = [desc[0] for desc in rel.description] if rel.description else []
+        rows = [dict(zip(columns, row)) for row in raw_rows]
+
+        conn.close()
+        return {
+            "columns": columns,
+            "rows": rows,
+            "row_count": len(rows),
+            "truncated": truncated,
+            "error": None,
+        }
+    except Exception as e:
+        return _error(f"Unified query error: {e}")
 
 
 def _format_sql_result(sql_result: dict) -> str:
