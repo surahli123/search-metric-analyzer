@@ -53,7 +53,7 @@ import duckdb
 from kdd.task_loader import load_task
 from kdd.evaluator import evaluate
 from core.file_reader import read_file
-from core.sql_executor import execute_sql
+from core.sql_executor import execute_sql, _apply_limit
 from domains.data_analysis import DataAnalysisDomain
 from harness.llm import extract_json
 from harness.errors import LLMParseError, LLMRefusalError
@@ -430,6 +430,7 @@ def _execute_unified(
     if first_word not in ("select", "with"):
         return _error(f"Write operation blocked: '{first_word.upper()}' not allowed.")
 
+    conn = None
     try:
         conn = duckdb.connect()
 
@@ -438,6 +439,7 @@ def _execute_unified(
             resolved = Path(db_path).resolve()
             if not resolved.exists():
                 continue
+            sqlite_conn = None
             try:
                 sqlite_conn = sqlite3.connect(f"file:{resolved}?mode=ro", uri=True)
                 cursor = sqlite_conn.cursor()
@@ -453,7 +455,6 @@ def _execute_unified(
                     # Create the table in DuckDB
                     safe_name = re.sub(r'[^a-zA-Z0-9_]', '_', table_name)
                     if rows:
-                        # Build column defs from first row types
                         placeholders = ", ".join(["?"] * len(col_names))
                         col_defs = ", ".join(f'"{c}" VARCHAR' for c in col_names)
                         conn.execute(f'CREATE TABLE "{safe_name}" ({col_defs})')
@@ -463,9 +464,12 @@ def _execute_unified(
                     else:
                         col_defs = ", ".join(f'"{c}" VARCHAR' for c in col_names)
                         conn.execute(f'CREATE TABLE "{safe_name}" ({col_defs})')
-                sqlite_conn.close()
             except Exception as e:
                 logging.warning(f"Failed to load SQLite {db_path}: {e}")
+            finally:
+                # Always close SQLite connection to prevent resource leak
+                if sqlite_conn is not None:
+                    sqlite_conn.close()
 
         # --- Register CSVs as DuckDB tables ---
         for csv_path in csv_files:
@@ -482,8 +486,9 @@ def _execute_unified(
         # Lock down external access after loading all data
         conn.execute("SET enable_external_access = false")
 
-        # Execute the query
-        rel = conn.execute(query)
+        # Apply LIMIT to prevent unbounded scans (matches sql_executor pattern)
+        bounded_query = _apply_limit(query, max_rows)
+        rel = conn.execute(bounded_query)
         raw_rows = rel.fetchmany(max_rows + 1)
         truncated = len(raw_rows) > max_rows
         if truncated:
@@ -492,7 +497,6 @@ def _execute_unified(
         columns = [desc[0] for desc in rel.description] if rel.description else []
         rows = [dict(zip(columns, row)) for row in raw_rows]
 
-        conn.close()
         return {
             "columns": columns,
             "rows": rows,
@@ -502,6 +506,10 @@ def _execute_unified(
         }
     except Exception as e:
         return _error(f"Unified query error: {e}")
+    finally:
+        # Always close DuckDB connection to prevent resource leak
+        if conn is not None:
+            conn.close()
 
 
 def _format_sql_result(sql_result: dict) -> str:

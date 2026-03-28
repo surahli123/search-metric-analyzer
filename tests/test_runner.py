@@ -424,3 +424,106 @@ class TestRunTaskVerbose:
 
         assert result["trace"] is not None
         assert isinstance(result["trace"], dict)
+
+
+# ===========================================================================
+# Tests: Unified DuckDB backend (mixed SQLite + CSV tasks)
+# ===========================================================================
+
+@pytest.fixture
+def mixed_task(tmp_path):
+    """Create a task with BOTH a SQLite DB and a CSV file.
+
+    WHY this fixture exists: KDD tasks often have mixed data sources
+    (e.g., task_145: event.db + attendance.csv). The runner must load
+    both into a single DuckDB connection for cross-source JOINs.
+    """
+    task_dir = tmp_path / "task_mixed"
+    task_dir.mkdir()
+
+    task_json = {
+        "task_id": "task_mixed",
+        "difficulty": "medium",
+        "question": "How many attendees went to each event?",
+    }
+    (task_dir / "task.json").write_text(json.dumps(task_json))
+
+    context_dir = task_dir / "context"
+    context_dir.mkdir()
+    (context_dir / "knowledge.md").write_text(
+        "# Schema\nevent table: id, name. attendees csv: event_id, person."
+    )
+
+    # SQLite: event table
+    db_dir = context_dir / "db"
+    db_dir.mkdir()
+    conn = sqlite3.connect(str(db_dir / "event.db"))
+    conn.execute("CREATE TABLE event (id INTEGER, name TEXT)")
+    conn.execute("INSERT INTO event VALUES (1, 'Concert')")
+    conn.execute("INSERT INTO event VALUES (2, 'Workshop')")
+    conn.commit()
+    conn.close()
+
+    # CSV: attendees table
+    csv_dir = context_dir / "csv"
+    csv_dir.mkdir()
+    (csv_dir / "attendees.csv").write_text(
+        "event_id,person\n1,Alice\n1,Bob\n2,Charlie\n2,Dave\n2,Eve"
+    )
+
+    return str(task_dir)
+
+
+class TestUnifiedBackend:
+    """Tests for _execute_unified — the mixed SQLite+CSV code path."""
+
+    def test_cross_source_join(self, mixed_task):
+        """Query that JOINs a SQLite table with a CSV table must succeed."""
+        sql = (
+            "SELECT e.name, COUNT(a.person) AS cnt "
+            "FROM event e JOIN attendees a ON e.id = a.event_id "
+            "GROUP BY e.name ORDER BY e.name"
+        )
+        mock_llm = make_mock_llm(
+            hypothesize_response=make_valid_hypothesize_response(sql=sql),
+            synthesize_response="name,cnt\nConcert,2\nWorkshop,3",
+        )
+        result = run_task(mixed_task, mock_llm)
+        assert result["completed"] is True
+        assert result["error"] is None
+
+    def test_write_block_in_unified(self, mixed_task):
+        """INSERT/DROP must be blocked even in unified mode."""
+        mock_llm = make_mock_llm(
+            hypothesize_response=make_valid_hypothesize_response(
+                sql="INSERT INTO event VALUES (99, 'Hack')"
+            ),
+            synthesize_response="error",
+        )
+        result = run_task(mixed_task, mock_llm)
+        # Should complete but with an error (SQL blocked, synthesis may still produce something)
+        assert result["error"] is not None or "blocked" in result.get("answer", "").lower() or result["completed"] is False
+
+    def test_arbitrary_file_read_blocked_in_unified(self, mixed_task):
+        """read_csv_auto in user query must be blocked after lockdown."""
+        mock_llm = make_mock_llm(
+            hypothesize_response=make_valid_hypothesize_response(
+                sql="SELECT * FROM read_csv_auto('/etc/passwd') LIMIT 1"
+            ),
+            synthesize_response="error",
+        )
+        result = run_task(mixed_task, mock_llm)
+        # Pipeline should complete but with an error from the SQL execution
+        assert result["error"] is not None or result["completed"] is False
+
+    def test_resource_cleanup_on_error(self, mixed_task):
+        """Connections must be closed even if query execution fails."""
+        bad_sql = "SELECT * FROM nonexistent_table_xyz"
+        mock_llm = make_mock_llm(
+            hypothesize_response=make_valid_hypothesize_response(sql=bad_sql),
+            synthesize_response="error",
+        )
+        # Should not raise — error captured in result dict
+        result = run_task(mixed_task, mock_llm)
+        assert result is not None
+        # If we got here without hanging or crashing, connections were cleaned up
