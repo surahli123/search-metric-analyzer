@@ -60,7 +60,7 @@ except ImportError:
 from kdd.task_loader import load_task
 from kdd.evaluator import evaluate
 from core.file_reader import read_file
-from core.sql_executor import execute_sql, _apply_limit
+from core.sql_executor import execute_sql
 from domains.data_analysis import DataAnalysisDomain
 from harness.llm import extract_json
 from harness.errors import LLMParseError, LLMRefusalError
@@ -463,6 +463,18 @@ def _execute_sql_for_task(task: Dict[str, Any], sql_query: str, max_rows: int = 
         }
 
 
+def _apply_limit_if_missing(query: str, max_rows: int) -> str:
+    """Append LIMIT to a query if it doesn't already have one.
+
+    Inlined from core.sql_executor._apply_limit to avoid importing a private
+    function across module boundaries. Same logic: check for "limit" keyword
+    (case-insensitive), append max_rows+1 for truncation detection.
+    """
+    if "limit" not in query.lower():
+        return f"{query.rstrip(';')} LIMIT {max_rows + 1}"
+    return query
+
+
 def _execute_unified(
     query: str, db_files: list, csv_files: list, max_rows: int = 1000,
 ) -> dict:
@@ -546,7 +558,7 @@ def _execute_unified(
         conn.execute("SET enable_external_access = false")
 
         # Apply LIMIT to prevent unbounded scans (matches sql_executor pattern)
-        bounded_query = _apply_limit(query, max_rows)
+        bounded_query = _apply_limit_if_missing(query, max_rows)
         rel = conn.execute(bounded_query)
         raw_rows = rel.fetchmany(max_rows + 1)
         truncated = len(raw_rows) > max_rows
