@@ -575,6 +575,10 @@ def _execute_unified(
     if first_word not in ("select", "with"):
         return _error(f"Write operation blocked: '{first_word.upper()}' not allowed.")
 
+    # Max rows to load per table — prevents OOM/hangs on large datasets.
+    # Defined here (not inside loops) so both SQLite and JSON loading share it.
+    _MAX_LOAD_ROWS = 100_000
+
     conn = None
     try:
         conn = duckdb.connect()
@@ -599,21 +603,18 @@ def _execute_unified(
                     col_names = [c[1] for c in col_info]
                     col_types = [_sqlite_to_duckdb_type(c[2]) for c in col_info]
 
-                    # Check row count first — cap at 100K to prevent OOM/hangs
-                    # on large tables (task_250: 1.5M rows, task_257: 2M rows).
-                    # 100K rows is enough for any KDD query — the LLM's SQL
-                    # uses WHERE/JOIN/GROUP BY that reduces output anyway.
-                    _MAX_SQLITE_ROWS = 100_000
+                    # Check row count first — cap to prevent OOM/hangs on
+                    # large tables (task_250: 1.5M rows, task_257: 2M rows).
                     cursor.execute(f"SELECT COUNT(*) FROM [{table_name}]")
                     row_count = cursor.fetchone()[0]
 
-                    if row_count > _MAX_SQLITE_ROWS:
+                    if row_count > _MAX_LOAD_ROWS:
                         logging.info(
                             f"Table {table_name} has {row_count} rows — "
-                            f"loading first {_MAX_SQLITE_ROWS} only"
+                            f"loading first {_MAX_LOAD_ROWS} only"
                         )
                         cursor.execute(
-                            f"SELECT * FROM [{table_name}] LIMIT {_MAX_SQLITE_ROWS}"
+                            f"SELECT * FROM [{table_name}] LIMIT {_MAX_LOAD_ROWS}"
                         )
                     else:
                         cursor.execute(f"SELECT * FROM [{table_name}]")
@@ -676,12 +677,12 @@ def _execute_unified(
 
                 if records and isinstance(records[0], dict):
                     # Cap JSON records at 100K to prevent OOM on large files
-                    if len(records) > _MAX_SQLITE_ROWS:
+                    if len(records) > _MAX_LOAD_ROWS:
                         logging.info(
                             f"JSON {table_name} has {len(records)} records — "
-                            f"loading first {_MAX_SQLITE_ROWS} only"
+                            f"loading first {_MAX_LOAD_ROWS} only"
                         )
-                        records = records[:_MAX_SQLITE_ROWS]
+                        records = records[:_MAX_LOAD_ROWS]
                     col_names = list(records[0].keys())
                     col_defs = ", ".join(f'"{c}" VARCHAR' for c in col_names)
                     conn.execute(f'CREATE TABLE "{table_name}" ({col_defs})')
