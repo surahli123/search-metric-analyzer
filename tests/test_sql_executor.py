@@ -1,40 +1,130 @@
 """Tests for core/sql_executor.py.
 
-Uses real KDD demo data at data/kdd_tasks/demo_samples/input/ to verify
-both the SQLite and DuckDB paths against actual files — not mocks.
+Two test tiers:
+  1. Fixture-based (always run) — small tracked files in tests/fixtures/
+  2. KDD-data-based (skip on CI) — real demo data at data/kdd_tasks/demo_samples/
 
 Test structure mirrors the module structure:
-  TestSQLiteMode     — happy path, write blocking, row limits, missing files
-  TestDuckDBMode     — CSV registration, multi-table joins, missing files
-  TestInputValidation — query validation and mutual-exclusion checks
-
-All tests are relative to the project root (the pytest working directory is
-set to the project root via conftest.py / pytest.ini).
+  TestSQLiteFixture / TestDuckDBFixture — always-run core coverage
+  TestSQLiteMode / TestDuckDBMode      — KDD data (skipped when absent)
+  TestInputValidation                  — query validation (no external data)
 """
+
+import os
 
 import pytest
 from core.sql_executor import execute_sql
 
 # ---------------------------------------------------------------------------
-# Paths to real KDD demo data — these must exist for the tests to run.
-# If you're getting FileNotFoundError here, check that the demo_samples
-# archive has been unpacked into data/kdd_tasks/.
+# Tracked fixtures (always available — committed to repo)
 # ---------------------------------------------------------------------------
+FIXTURE_DB = "tests/fixtures/db/events.db"
+FIXTURE_CSV_EVENTS = "tests/fixtures/csv/events.csv"
+FIXTURE_CSV_ATTENDEES = "tests/fixtures/csv/attendees.csv"
 
-# task_145: event.db (SQLite, single "event" table, 42 rows)
-#           attendance.csv (two columns: link_to_event, link_to_member)
+# ---------------------------------------------------------------------------
+# KDD demo data paths (gitignored — only available locally)
+# ---------------------------------------------------------------------------
 TASK_145_EVENT_DB = "data/kdd_tasks/demo_samples/input/task_145/context/db/event.db"
 TASK_145_ATTENDANCE_CSV = "data/kdd_tasks/demo_samples/input/task_145/context/csv/attendance.csv"
-
-# task_64: superpower.csv + hero_power.csv (two tables for join/multi-CSV test)
 TASK_64_SUPERPOWER_CSV = "data/kdd_tasks/demo_samples/input/task_64/context/csv/superpower.csv"
 TASK_64_HERO_POWER_CSV = "data/kdd_tasks/demo_samples/input/task_64/context/csv/hero_power.csv"
+
+_HAS_KDD_DATA = os.path.exists(TASK_145_EVENT_DB)
+_skip_no_kdd = pytest.mark.skipif(not _HAS_KDD_DATA, reason="KDD demo data not available")
+
+
+# ===========================================================================
+# Fixture-based tests (always run — no external data dependency)
+# ===========================================================================
+
+class TestSQLiteFixture:
+    """Core SQLite tests using tracked fixtures."""
+
+    def test_query_fixture_db(self):
+        result = execute_sql("SELECT event_id, type FROM event LIMIT 3", db_path=FIXTURE_DB)
+        assert result["error"] is None, f"Unexpected error: {result['error']}"
+        assert result["row_count"] == 3
+        assert "event_id" in result["columns"]
+
+    def test_blocks_drop(self):
+        result = execute_sql("DROP TABLE event", db_path=FIXTURE_DB)
+        assert result["error"] is not None
+        assert "blocked" in result["error"].lower()
+
+    def test_blocks_insert(self):
+        result = execute_sql("INSERT INTO event VALUES (99,'x','y','z')", db_path=FIXTURE_DB)
+        assert result["error"] is not None
+        assert "blocked" in result["error"].lower()
+
+    def test_blocks_export(self):
+        """EXPORT is not SELECT — allowlist should reject it."""
+        result = execute_sql("EXPORT DATABASE '/tmp/leak'", db_path=FIXTURE_DB)
+        assert result["error"] is not None
+
+    def test_blocks_call(self):
+        result = execute_sql("CALL some_function()", db_path=FIXTURE_DB)
+        assert result["error"] is not None
+
+    def test_allows_with_cte(self):
+        """WITH (CTE) queries must be allowed — they're read-only."""
+        result = execute_sql(
+            "WITH counts AS (SELECT type, COUNT(*) AS n FROM event GROUP BY type) "
+            "SELECT * FROM counts",
+            db_path=FIXTURE_DB,
+        )
+        assert result["error"] is None, f"CTE query blocked: {result['error']}"
+        assert result["row_count"] > 0
+
+    def test_max_rows_truncation(self):
+        result = execute_sql("SELECT * FROM event", db_path=FIXTURE_DB, max_rows=2)
+        assert result["error"] is None
+        assert result["row_count"] <= 2
+        assert result["truncated"] is True
+
+    def test_result_shape(self):
+        result = execute_sql("SELECT * FROM event LIMIT 1", db_path=FIXTURE_DB)
+        for key in ("columns", "rows", "row_count", "truncated", "error"):
+            assert key in result
+
+
+class TestDuckDBFixture:
+    """Core DuckDB tests using tracked CSV fixtures."""
+
+    def test_query_single_csv(self):
+        result = execute_sql("SELECT * FROM events LIMIT 3", csv_paths=[FIXTURE_CSV_EVENTS])
+        assert result["error"] is None, f"Unexpected error: {result['error']}"
+        assert result["row_count"] == 3
+        assert "event_id" in result["columns"]
+
+    def test_multi_csv_join(self):
+        result = execute_sql(
+            'SELECT e.event_id, a.member_name FROM "events" e '
+            'JOIN "attendees" a ON e.event_id = a.event_id LIMIT 5',
+            csv_paths=[FIXTURE_CSV_EVENTS, FIXTURE_CSV_ATTENDEES],
+        )
+        assert result["error"] is None, f"Unexpected error: {result['error']}"
+        assert result["row_count"] > 0
+
+    def test_max_rows_duckdb(self):
+        result = execute_sql(
+            "SELECT * FROM attendees", csv_paths=[FIXTURE_CSV_ATTENDEES], max_rows=2,
+        )
+        assert result["error"] is None
+        assert result["row_count"] <= 2
+        assert result["truncated"] is True
+
+    def test_nonexistent_csv_returns_error(self):
+        result = execute_sql("SELECT * FROM foo", csv_paths=["nonexistent/file.csv"])
+        assert result["error"] is not None
+        assert result["row_count"] == 0
 
 
 # ===========================================================================
 # SQLite mode
 # ===========================================================================
 
+@_skip_no_kdd
 class TestSQLiteMode:
 
     def test_query_sqlite_db(self):
@@ -137,6 +227,7 @@ class TestSQLiteMode:
 # DuckDB mode
 # ===========================================================================
 
+@_skip_no_kdd
 class TestDuckDBMode:
 
     def test_query_single_csv(self):
@@ -234,7 +325,7 @@ class TestInputValidation:
 
     def test_empty_query_returns_error(self):
         """An empty or whitespace-only query should fail before touching any data."""
-        result = execute_sql("   ", db_path=TASK_145_EVENT_DB)
+        result = execute_sql("   ", db_path=FIXTURE_DB)
         assert result["error"] is not None
 
     def test_blocked_keywords_comprehensive(self):
@@ -248,7 +339,7 @@ class TestInputValidation:
         for keyword in write_keywords:
             result = execute_sql(
                 f"{keyword} INTO something VALUES (1)",
-                db_path=TASK_145_EVENT_DB,
+                db_path=FIXTURE_DB,
             )
             assert result["error"] is not None, (
                 f"Expected {keyword} to be blocked, but got no error"

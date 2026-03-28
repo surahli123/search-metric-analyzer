@@ -1,0 +1,6 @@
+event_id,type,date,venue
+1,concert,2025-01-15,hall_a
+2,conference,2025-02-20,hall_b
+3,workshop,2025-03-10,room_c
+4,concert,2025-04-05,hall_a
+5,meetup,2025-05-12,room_d

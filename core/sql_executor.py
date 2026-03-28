@@ -50,19 +50,14 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
-# Write-blocking constants
+# Write-blocking: allowlist approach
 # ---------------------------------------------------------------------------
 
-# These keywords, when found at the start of a query, indicate a mutating
-# operation. We check the first "word" of the trimmed query (case-insensitive)
-# so that "  drop table foo" and "DROP TABLE foo" are both blocked.
-# SELECT is the ONLY allowed first keyword.
-_BLOCKED_FIRST_KEYWORDS = frozenset({
-    "insert", "update", "delete", "drop",
-    "create", "alter", "truncate", "replace",
-    "attach", "detach",  # DuckDB attach could be used to escape read-only mode
-    "copy",  # COPY TO can export data to disk, bypassing read-only intent
-})
+# Only SELECT and WITH (for CTEs) are allowed as the first keyword.
+# An allowlist is safer than a denylist — new DuckDB commands (EXPORT,
+# CALL, LOAD, INSTALL, etc.) are blocked by default without us having to
+# enumerate every possible write/side-effect keyword.
+_ALLOWED_FIRST_KEYWORDS = frozenset({"select", "with"})
 
 
 # ---------------------------------------------------------------------------
@@ -151,15 +146,18 @@ def _validate_inputs(query: str, db_path: str, csv_paths: list) -> str | None:
 
 
 def _check_write_block(query: str) -> str | None:
-    """Return an error message if the query starts with a write keyword.
+    """Return an error message if the query doesn't start with an allowed keyword.
 
-    We split on whitespace and check the first token. This is intentionally
-    simple — a determined adversary could bypass it, but for a diagnostic
-    tool used by trusted agents this is the right balance of safety vs
-    complexity. If we need SQL parsing, add sqlglot in a future wave.
+    Allowlist approach: only SELECT and WITH (CTEs) are permitted.
+    Everything else — INSERT, DROP, EXPORT, CALL, LOAD, etc. — is rejected
+    without needing to maintain a denylist of every possible write command.
+
+    Still intentionally simple (first-token check). A determined adversary
+    could bypass it, but for a diagnostic tool used by trusted agents this
+    is the right balance of safety vs complexity.
     """
     first_word = query.strip().split()[0].lower()
-    if first_word in _BLOCKED_FIRST_KEYWORDS:
+    if first_word not in _ALLOWED_FIRST_KEYWORDS:
         return (
             f"Write operation blocked: '{first_word.upper()}' queries are not "
             f"allowed. Only SELECT queries are permitted in read-only mode."
@@ -278,8 +276,10 @@ def _run_duckdb(query: str, csv_paths: list, max_rows: int) -> dict:
                 # We use single quotes around the path and escape any
                 # embedded single quotes for safety.
                 safe_path = str(resolved).replace("'", "''")
+                # Double-quote the table name so reserved words (e.g.,
+                # "select.csv" → table "select") don't cause syntax errors.
                 conn.execute(
-                    f"CREATE VIEW {table_name} AS "
+                    f'CREATE VIEW "{table_name}" AS '
                     f"SELECT * FROM read_csv_auto('{safe_path}')"
                 )
 

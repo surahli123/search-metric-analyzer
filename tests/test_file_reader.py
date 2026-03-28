@@ -1,17 +1,12 @@
 """
 tests/test_file_reader.py — Tests for core/file_reader.py
 
-Uses real KDD demo data at:
-  data/kdd_tasks/demo_samples/input/task_145/  — CSV, SQLite, markdown
-  data/kdd_tasks/demo_samples/input/task_11/   — JSON
+Two test tiers:
+  1. Fixture-based (always run) — small tracked files in tests/fixtures/
+  2. KDD-data-based (skip on CI) — real demo data at data/kdd_tasks/demo_samples/
 
-WHY real data instead of fixtures: The whole point of file_reader is to handle
-the exact files that KDD tasks provide. Synthetic fixtures would let us miss
-encoding quirks, unusual SQLite schemas, or malformed CSVs that actually exist
-in the dataset.
-
-All tests are run from the project root (pytest's default cwd), so paths are
-relative to /Users/surahli/Documents/projects/Search_Metric_Analyzer/.
+WHY both: Fixtures guarantee CI coverage. KDD data catches encoding quirks,
+unusual SQLite schemas, and malformed CSVs that exist in the real dataset.
 """
 
 import glob
@@ -20,22 +15,104 @@ import tempfile
 
 import pytest
 
-# Use a relative import so pytest can find the module regardless of how it's invoked.
-# sys.path manipulation is handled by conftest.py (project root on path).
 from core.file_reader import read_file
 
+# ---------------------------------------------------------------------------
+# Tracked fixtures (always available — committed to repo)
+# ---------------------------------------------------------------------------
+_FIXTURE_CSV = "tests/fixtures/csv/events.csv"
+_FIXTURE_DB = "tests/fixtures/db/events.db"
+_FIXTURE_JSON = "tests/fixtures/json/config.json"
+_FIXTURE_MD = "tests/fixtures/knowledge.md"
 
 # ---------------------------------------------------------------------------
-# Helper: base paths
+# KDD demo data paths (gitignored — only available locally)
 # ---------------------------------------------------------------------------
 _TASK_145 = "data/kdd_tasks/demo_samples/input/task_145/context"
 _TASK_11  = "data/kdd_tasks/demo_samples/input/task_11/context"
+
+_HAS_KDD_DATA = os.path.exists(f"{_TASK_145}/db/event.db")
+_skip_no_kdd = pytest.mark.skipif(not _HAS_KDD_DATA, reason="KDD demo data not available")
+
+
+# ===========================================================================
+# Fixture-based tests (always run)
+# ===========================================================================
+
+class TestCSVFixture:
+    def test_reads_csv(self):
+        result = read_file(_FIXTURE_CSV)
+        assert result["format"] == "csv"
+        assert result["error"] is None
+        assert "event_id" in result["content"]["columns"]
+        assert len(result["content"]["rows"]) == 5
+
+    def test_csv_max_rows(self):
+        result = read_file(_FIXTURE_CSV, max_rows=2)
+        assert result["content"]["row_count"] <= 2
+
+    def test_csv_rows_are_dicts(self):
+        result = read_file(_FIXTURE_CSV, max_rows=3)
+        for row in result["content"]["rows"]:
+            assert isinstance(row, dict)
+
+
+class TestJSONFixture:
+    def test_reads_json_object(self):
+        result = read_file(_FIXTURE_JSON)
+        assert result["format"] == "json"
+        assert result["error"] is None
+        assert result["content"]["type"] == "object"
+
+    def test_json_has_data(self):
+        result = read_file(_FIXTURE_JSON)
+        assert "data" in result["content"]
+
+
+class TestSQLiteFixture:
+    def test_reads_sqlite_schema(self):
+        result = read_file(_FIXTURE_DB)
+        assert result["format"] == "sqlite"
+        assert result["error"] is None
+        assert len(result["content"]["tables"]) >= 1
+
+    def test_sqlite_table_keys(self):
+        result = read_file(_FIXTURE_DB)
+        table = result["content"]["tables"][0]
+        assert "name" in table
+        assert "schema" in table
+        assert "row_count" in table
+        assert table["row_count"] == 5
+
+    def test_sqlite_excludes_internal_tables(self):
+        """sqlite_sequence and similar internal tables must be filtered out."""
+        result = read_file(_FIXTURE_DB)
+        table_names = [t["name"] for t in result["content"]["tables"]]
+        for name in table_names:
+            assert not name.startswith("sqlite_"), f"Internal table leaked: {name}"
+
+
+class TestMarkdownFixture:
+    def test_reads_markdown(self):
+        result = read_file(_FIXTURE_MD)
+        assert result["format"] == "markdown"
+        assert result["error"] is None
+        assert len(result["content"]["text"]) > 0
+
+    def test_markdown_line_count(self):
+        result = read_file(_FIXTURE_MD)
+        assert result["content"]["line_count"] > 0
+
+    def test_markdown_truncation(self):
+        result = read_file(_FIXTURE_MD, max_chars=10)
+        assert len(result["content"]["text"]) <= 10
 
 
 # ---------------------------------------------------------------------------
 # CSV
 # ---------------------------------------------------------------------------
 
+@_skip_no_kdd
 class TestCSVReader:
     def test_reads_csv(self):
         result = read_file(f"{_TASK_145}/csv/attendance.csv")
@@ -88,6 +165,7 @@ class TestCSVReader:
 # JSON
 # ---------------------------------------------------------------------------
 
+@_skip_no_kdd
 class TestJSONReader:
     def test_reads_json_object(self):
         """Patient.json is a top-level dict (object)."""
@@ -128,6 +206,7 @@ class TestJSONReader:
 # SQLite
 # ---------------------------------------------------------------------------
 
+@_skip_no_kdd
 class TestSQLiteReader:
     def test_reads_sqlite_schema(self):
         result = read_file(f"{_TASK_145}/db/event.db")
@@ -169,6 +248,7 @@ class TestSQLiteReader:
 # Markdown
 # ---------------------------------------------------------------------------
 
+@_skip_no_kdd
 class TestMarkdownReader:
     def test_reads_markdown(self):
         result = read_file(f"{_TASK_145}/context/knowledge.md")
@@ -204,7 +284,7 @@ class TestMarkdownReader:
         assert result["truncated"] is False
 
     def test_markdown_reports_size_bytes(self):
-        result = read_file("data/kdd_tasks/demo_samples/input/task_145/context/knowledge.md")
+        result = read_file(_FIXTURE_MD)
         assert result["size_bytes"] > 0
 
 
@@ -248,7 +328,7 @@ class TestErrorHandling:
 
     def test_reports_file_size(self):
         """size_bytes is populated for files that exist."""
-        result = read_file("data/kdd_tasks/demo_samples/input/task_145/context/knowledge.md")
+        result = read_file(_FIXTURE_MD)
         assert result["size_bytes"] > 0
 
     def test_size_bytes_zero_for_missing_file(self):
@@ -260,7 +340,7 @@ class TestErrorHandling:
         """Every result — success or failure — must have all six top-level keys."""
         required_keys = {"format", "path", "content", "size_bytes", "truncated", "error"}
         for path in [
-            "data/kdd_tasks/demo_samples/input/task_145/context/knowledge.md",
+            _FIXTURE_MD,
             "nonexistent_file.csv",
         ]:
             result = read_file(path)
@@ -270,6 +350,6 @@ class TestErrorHandling:
 
     def test_path_echoed_in_result(self):
         """The path field must echo back the exact string passed in."""
-        p = "data/kdd_tasks/demo_samples/input/task_145/context/knowledge.md"
+        p = _FIXTURE_MD
         result = read_file(p)
         assert result["path"] == p
