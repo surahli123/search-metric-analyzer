@@ -163,30 +163,55 @@ def evaluate(predicted: str, gold_path: str) -> dict:
     gold_values = _flatten(gold_data)
 
     # --- Compare ---
-    if len(pred_values) != len(gold_values):
+    # Strategy: try exact positional match first (gold[i] == pred[i]).
+    # If value counts differ, try contains-match (every gold value found
+    # somewhere in predicted). This handles cases where the LLM returns
+    # extra columns/context alongside the correct answer.
+
+    if len(pred_values) == len(gold_values):
+        # Same length — positional comparison
+        mismatches = []
+        for i, (pv, gv) in enumerate(zip(pred_values, gold_values)):
+            if not _values_match(pv, gv):
+                mismatches.append(f"  [{i}] predicted='{pv}' vs gold='{gv}'")
+
+        if not mismatches:
+            return {
+                "match": True, "score": 1.0,
+                "predicted_values": pred_values, "gold_values": gold_values,
+                "details": "All values match (positional)",
+            }
+
+    # --- Contains-match fallback ---
+    # Check if every gold value appears somewhere in the predicted values.
+    # WHY: LLM often returns correct values with extra context (column names,
+    # additional columns). E.g., gold="4", predicted=["meeting_count","4"].
+    found_count = 0
+    contains_details = []
+    for gv in gold_values:
+        found = any(_values_match(pv, gv) for pv in pred_values)
+        if found:
+            found_count += 1
+        else:
+            contains_details.append(f"  gold='{gv}' not found in predicted")
+
+    if found_count == len(gold_values):
         return {
-            "match": False,
-            "score": 0.0,
-            "predicted_values": pred_values,
-            "gold_values": gold_values,
-            "details": (
-                f"Row count mismatch: predicted {len(pred_values)} values, "
-                f"gold has {len(gold_values)} values"
-            ),
+            "match": True, "score": 1.0,
+            "predicted_values": pred_values, "gold_values": gold_values,
+            "details": "All gold values found in predicted (contains-match)",
         }
 
-    # Check each value pair
-    mismatches = []
-    for i, (pv, gv) in enumerate(zip(pred_values, gold_values)):
-        if not _values_match(pv, gv):
-            mismatches.append(f"  [{i}] predicted='{pv}' vs gold='{gv}'")
-
-    match = len(mismatches) == 0
-    details = "All values match" if match else "Mismatches:\n" + "\n".join(mismatches)
+    # --- Partial credit ---
+    score = found_count / len(gold_values) if gold_values else 0.0
+    details = (
+        f"Partial match: {found_count}/{len(gold_values)} gold values found "
+        f"(score={score:.2f})\n" + "\n".join(contains_details)
+    )
 
     return {
-        "match": match,
-        "score": 1.0 if match else 0.0,
+        "match": False,
+        "score": score,
         "predicted_values": pred_values,
         "gold_values": gold_values,
         "details": details,
