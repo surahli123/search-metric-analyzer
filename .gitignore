@@ -1,6 +1,9 @@
 # Synthetic data (large CSVs, regenerable via tools/generate_synthetic_data.py)
 data/synthetic/*.csv
 
+# KDD competition data (large binary/data files, not tracked)
+data/kdd_tasks/
+
 # Python
 __pycache__/
 *.pyc
@@ -16,6 +19,11 @@ __pycache__/
 # Git worktrees
 .worktrees/
 .superpowers/
+
+# Claude Code local artifacts
+.claude/settings.json
+.claude/worktrees/
+.context/
 
 .vercel
 .gstack/

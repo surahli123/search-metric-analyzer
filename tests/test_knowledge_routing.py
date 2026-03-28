@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 RULES_DIR = ROOT / ".claude" / "rules"
-KNOWLEDGE_DIR = ROOT / "data" / "knowledge"
+KNOWLEDGE_DIR = ROOT / "domains" / "search_metrics" / "knowledge"
 ROUTING_TABLE_PATH = RULES_DIR / "04-knowledge-routing.md"
 
 

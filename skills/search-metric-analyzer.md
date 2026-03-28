@@ -30,11 +30,11 @@ Before starting, confirm these resources are available:
 - **Contract enforcement** (seam validator CLI):
   - `python3 -m contracts.seam_validator --stage {stage} --input {json_file}` -- validates stage output against 17 business rules
 - **Knowledge files** (domain-encoded YAML):
-  - `data/knowledge/metric_definitions.yaml` -- metric formulas, relationships, baselines, co-movement diagnostic table
-  - `data/knowledge/historical_patterns.yaml` -- seasonal patterns, past incidents, diagnostic shortcuts
-  - `data/knowledge/search_pipeline_knowledge.yaml` -- pipeline components, failure modes, causal chains, benchmarks
-  - `data/knowledge/evaluation_methods.yaml` -- LLM-as-Judge methodology, measurement pitfalls, calibration
-  - `data/knowledge/architecture_tradeoffs.yaml` -- cost optimization patterns, token economics, failure modes
+  - `domains/search_metrics/knowledge/metric_definitions.yaml` -- metric formulas, relationships, baselines, co-movement diagnostic table
+  - `domains/search_metrics/knowledge/historical_patterns.yaml` -- seasonal patterns, past incidents, diagnostic shortcuts
+  - `domains/search_metrics/knowledge/search_pipeline_knowledge.yaml` -- pipeline components, failure modes, causal chains, benchmarks
+  - `domains/search_metrics/knowledge/evaluation_methods.yaml` -- LLM-as-Judge methodology, measurement pitfalls, calibration
+  - `domains/search_metrics/knowledge/architecture_tradeoffs.yaml` -- cost optimization patterns, token economics, failure modes
 - **Output templates** (markdown):
   - `templates/slack_message.md` -- Slack message structure
   - `templates/short_report.md` -- 1-page report structure
@@ -133,7 +133,7 @@ python3 core/anomaly.py --input {data_file} --check co_movement --directions '{"
 ```
 
 Compare the observed pattern against the co-movement diagnostic table
-(encoded in `data/knowledge/metric_definitions.yaml`). Key patterns:
+(encoded in `domains/search_metrics/knowledge/metric_definitions.yaml`). Key patterns:
 
 | Click Quality | Search Quality Success | AI Trigger | AI Success | Zero-Result | Latency | Likely Cause |
 |--------------|----------------------|------------|------------|-------------|---------|-------------|
@@ -147,16 +147,16 @@ If the pattern matches "AI answers working" --> label as **POSITIVE signal**, no
 
 ### 1e. Domain Context
 
-Draw on knowledge from `data/knowledge/historical_patterns.yaml`:
+Draw on knowledge from `domains/search_metrics/knowledge/historical_patterns.yaml`:
 - What recent system changes could be relevant?
 - Does this match any known seasonal pattern (end-of-quarter, onboarding wave)?
 - Are there diagnostic shortcuts that apply (connector health failure, model fallback spike)?
 
-Also consult `data/knowledge/search_pipeline_knowledge.yaml` for:
+Also consult `domains/search_metrics/knowledge/search_pipeline_knowledge.yaml` for:
 - Which pipeline component's failure modes match the observed metric signature?
 - Do the causal chains explain why multiple metrics moved together?
 
-And check `data/knowledge/evaluation_methods.yaml` for:
+And check `domains/search_metrics/knowledge/evaluation_methods.yaml` for:
 - Could this be a measurement artifact (judge calibration shift, unlabeled-not-irrelevant)?
 - Did the evaluation methodology change recently (model version, prompt, label schema)?
 
@@ -241,9 +241,9 @@ For each hypothesis, specify:
 - `expected_magnitude` -- expected size of effect
 - `is_contrarian` -- at least one hypothesis must be contrarian (challenges the obvious interpretation)
 
-Reference `data/knowledge/metric_definitions.yaml` for expected patterns.
-Consult `data/knowledge/search_pipeline_knowledge.yaml` failure modes and causal chains.
-For cost-related hypotheses, check `data/knowledge/architecture_tradeoffs.yaml`.
+Reference `domains/search_metrics/knowledge/metric_definitions.yaml` for expected patterns.
+Consult `domains/search_metrics/knowledge/search_pipeline_knowledge.yaml` failure modes and causal chains.
+For cost-related hypotheses, check `domains/search_metrics/knowledge/architecture_tradeoffs.yaml`.
 
 **Simple mode:** Skip this step entirely.
 **Medium mode:** Investigate all hypotheses sequentially. Use the evidence to rank them.
@@ -516,7 +516,7 @@ Click Quality drops.
 If `zero_result_rate` spiked AND the drop is concentrated in one `connector_type`:
 - Skip full hypothesis investigation
 - Report directly: "Connector outage for {connector_type}"
-- Check `data/knowledge/historical_patterns.yaml` for known connector patterns
+- Check `domains/search_metrics/knowledge/historical_patterns.yaml` for known connector patterns
 - Action: "Check connector health dashboard (Infra team)"
 
 ### Single Tenant Dominance

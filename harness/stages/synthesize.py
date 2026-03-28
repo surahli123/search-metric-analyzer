@@ -13,7 +13,7 @@ Extracted from SearchMetricOrchestrator._stage_synthesize() to keep
 the orchestrator small and each stage independently testable.
 
 Dependencies:
-- harness.prompts: build_synthesize_* prompt functions, normalize_synthesis_report
+- DomainInterface: domain.get_prompts("synthesize") for prompt builders
 - harness.llm: extract_json
 - contracts.seam_validator: validate_seam
 - trace: emit TraceSpan
@@ -42,6 +42,7 @@ def stage_synthesize(
     trace: InvestigationTrace,
     llm_callable: LLMCallable,
     mode: Optional[str] = None,
+    domain=None,  # Optional[DomainInterface] — injected by orchestrator
 ) -> Dict[str, Any]:
     """Stage 4: SYNTHESIZE — produce the final investigation report.
 
@@ -58,6 +59,8 @@ def stage_synthesize(
         trace: InvestigationTrace to record decisions to.
         llm_callable: Function with signature (prompt, system, max_tokens) -> str.
         mode: Pipeline mode ("medium" or "complex") for seam validation.
+        domain: DomainInterface instance providing prompt builders. Defaults to
+                SearchMetricsDomain if None (backward-compatible fallback).
 
     Returns:
         SynthesisReport dict with 7 mandatory sections + metadata.
@@ -65,12 +68,16 @@ def stage_synthesize(
     Raises:
         StageError: If JSON extraction from LLM response fails on both attempts.
     """
-    from harness.prompts import (
-        build_synthesize_system_prompt,
-        build_synthesize_user_prompt,
-        build_synthesize_retry_prompt,
-        normalize_synthesis_report,
-    )
+    # Resolve domain — backward-compatible fallback to search_metrics
+    if domain is None:
+        from domains.search_metrics import SearchMetricsDomain
+        domain = SearchMetricsDomain()
+
+    synthesize_prompts = domain.get_prompts("synthesize")
+    build_synthesize_system_prompt = synthesize_prompts["system_prompt"]
+    build_synthesize_user_prompt = synthesize_prompts["user_prompt"]
+    build_synthesize_retry_prompt = synthesize_prompts["retry_prompt"]
+    normalize_synthesis_report = synthesize_prompts["normalize"]
 
     system_prompt = build_synthesize_system_prompt()
     dispatch_context = trace.agent_context_for("DISPATCH", max_tokens=1500)
@@ -101,7 +108,9 @@ def stage_synthesize(
 
     # Save the first attempt so we can fall back to it if retry also fails.
     # (I1 fix: explicit save prevents stale variable bugs in the retry path.)
-    first_attempt_report = report
+    # Shallow copy so normalize_synthesis_report mutations on retry don't
+    # corrupt this fallback.
+    first_attempt_report = dict(report)
 
     # --- RETRY(1) then SOFT validation gate ---
     # validate_seam raises SeamViolation for "retry" tier.

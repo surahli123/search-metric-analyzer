@@ -10,7 +10,7 @@ _stage_dispatch_parallel() to keep the orchestrator small and each
 stage independently testable.
 
 Dependencies:
-- harness.prompts: build_dispatch_* prompt functions
+- DomainInterface: domain.get_prompts("dispatch") for prompt builders
 - harness.llm: extract_json
 - harness.dag_executor: DAGExecutor (parallel mode only)
 - contracts.seam_validator: validate_seam
@@ -40,6 +40,7 @@ def stage_dispatch(
     llm_callable: LLMCallable,
     config: Dict[str, Any],
     question_type: Optional[str] = None,
+    domain=None,  # Optional[DomainInterface] — injected by orchestrator
 ) -> Dict[str, Any]:
     """Stage 3: DISPATCH (Sequential) — investigate hypotheses one at a time.
 
@@ -58,6 +59,8 @@ def stage_dispatch(
         llm_callable: Function with signature (prompt, system, max_tokens) -> str.
         config: Orchestrator config dict (may contain "agents" key).
         question_type: Optional question type for seam validation rules.
+        domain: DomainInterface instance providing prompt builders. Defaults to
+                SearchMetricsDomain if None (backward-compatible fallback).
 
     Returns:
         FindingSet dict with keys: findings, context_construction_trace.
@@ -92,6 +95,17 @@ def stage_dispatch(
     findings = []
     agents = config.get("agents")
 
+    # Resolve prompt builders lazily — only needed for the LLM path.
+    # Hoisted above the loop so we pay one get_prompts() call, not N.
+    # Skipped entirely when agents are provided (custom domains may
+    # not have dispatch prompts at all).
+    dispatch_prompts = None
+    if not agents:
+        if domain is None:
+            from domains.search_metrics import SearchMetricsDomain
+            domain = SearchMetricsDomain()
+        dispatch_prompts = domain.get_prompts("dispatch")
+
     for hyp in hypotheses:
         hyp_id = hyp.get("hypothesis_id", "unknown")
 
@@ -106,11 +120,15 @@ def stage_dispatch(
                 )
             else:
                 # --- LLM path ---
+                # Pass the pre-resolved dispatch_prompts dict (hoisted above
+                # the loop) rather than letting _dispatch_via_llm call
+                # domain.get_prompts() itself on every hypothesis.
                 finding = _dispatch_via_llm(
                     hypothesis=hyp,
                     understand_result=understand_result,
                     hypothesize_context=hypothesize_context,
                     llm_callable=llm_callable,
+                    dispatch_prompts=dispatch_prompts,
                 )
 
             findings.append(finding)
@@ -221,6 +239,7 @@ def stage_dispatch_parallel(
     llm_callable: LLMCallable,
     config: Dict[str, Any],
     question_type: Optional[str] = None,
+    domain=None,  # Optional[DomainInterface] — injected by orchestrator
 ) -> Dict[str, Any]:
     """Stage 3 (Complex mode): Parallel hypothesis investigation via DAGExecutor.
 
@@ -238,6 +257,8 @@ def stage_dispatch_parallel(
         llm_callable: Function with signature (prompt, system, max_tokens) -> str.
         config: Orchestrator config dict (timeout, workers, circuit breaker settings).
         question_type: Optional question type for seam validation rules.
+        domain: DomainInterface instance providing prompt builders. Defaults to
+                SearchMetricsDomain if None (backward-compatible fallback).
 
     Returns:
         FindingSet dict with keys: findings, context_construction_trace.
@@ -263,13 +284,25 @@ def stage_dispatch_parallel(
         "hypothesize_context": hypothesize_context,
     }
 
-    # The investigate function wraps _dispatch_via_llm for each hypothesis
+    # --- Resolve prompt builders once (shared across all parallel threads) ---
+    # In parallel mode, N threads all call _dispatch_via_llm concurrently.
+    # Resolve get_prompts() once here so threads share the same callable
+    # references — no lock contention, no repeated domain work.
+    if domain is None:
+        from domains.search_metrics import SearchMetricsDomain
+        domain = SearchMetricsDomain()
+    dispatch_prompts = domain.get_prompts("dispatch")
+
+    # The investigate function wraps _dispatch_via_llm for each hypothesis.
+    # dispatch_prompts is captured in the closure so each thread uses the
+    # same pre-resolved builders without extra domain calls.
     def investigate_hypothesis(hyp, ctx):
         return _dispatch_via_llm(
             hypothesis=hyp,
             understand_result=ctx["understand_result"],
             hypothesize_context=ctx["hypothesize_context"],
             llm_callable=llm_callable,
+            dispatch_prompts=dispatch_prompts,
         )
 
     executor = DAGExecutor(
@@ -384,13 +417,32 @@ def _dispatch_via_llm(
     understand_result: Dict[str, Any],
     hypothesize_context: str,
     llm_callable: LLMCallable,
+    dispatch_prompts: Optional[Dict] = None,
 ) -> Dict[str, Any]:
     """Investigate a single hypothesis using the LLM callable.
 
     Builds a per-hypothesis prompt, calls the LLM, and parses the
     response into a SubAgentFinding dict.
+
+    Args:
+        hypothesis: A single hypothesis dict from HypothesisSet.
+        understand_result: Output from stage_understand().
+        hypothesize_context: Token-budgeted trace summary from HYPOTHESIZE.
+        llm_callable: Function with signature (prompt, system, max_tokens) -> str.
+        dispatch_prompts: Pre-resolved prompt builder dict from domain.get_prompts("dispatch").
+                          Callers (stage_dispatch/stage_dispatch_parallel) resolve this once
+                          and pass it in so this function doesn't call domain.get_prompts()
+                          on every hypothesis. Falls back to SearchMetricsDomain if None
+                          (supports direct calls in tests and legacy code).
     """
-    from harness.prompts import build_dispatch_system_prompt, build_dispatch_user_prompt
+    # Prompt builders are resolved by the caller — this avoids N get_prompts()
+    # calls for N hypotheses. The fallback handles direct calls to this
+    # function (e.g., from tests that bypass stage_dispatch).
+    if dispatch_prompts is None:
+        from domains.search_metrics import SearchMetricsDomain
+        dispatch_prompts = SearchMetricsDomain().get_prompts("dispatch")
+    build_dispatch_system_prompt = dispatch_prompts["system_prompt"]
+    build_dispatch_user_prompt = dispatch_prompts["user_prompt"]
 
     hyp_id = hypothesis.get("hypothesis_id", "unknown")
 

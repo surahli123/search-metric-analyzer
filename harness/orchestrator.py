@@ -89,11 +89,23 @@ class SearchMetricOrchestrator:
         self,
         llm_callable: Any,
         config: Optional[Dict[str, Any]] = None,
+        domain=None,  # Optional[DomainInterface]
     ):
         self._llm = llm_callable
         self._config = dict(self.DEFAULT_CONFIG)
         if config:
             self._config.update(config)
+
+        # Default to search_metrics domain for backward compatibility.
+        # Created eagerly here (once) rather than lazily in each stage call.
+        # The stages also have a lazy fallback, but that only fires when a
+        # stage is called standalone (tests, external callers). When called
+        # through the orchestrator, self._domain is always populated here.
+        # When data_analysis domain is added, callers will pass it explicitly.
+        if domain is None:
+            from domains.search_metrics import SearchMetricsDomain
+            domain = SearchMetricsDomain()
+        self._domain = domain
 
     def run(
         self,
@@ -318,6 +330,7 @@ class SearchMetricOrchestrator:
                     understand_result=understand_result,
                     trace=trace,
                     llm_callable=self._llm,
+                    domain=self._domain,
                 )
 
             # --- Stage 3: DISPATCH ---
@@ -332,6 +345,7 @@ class SearchMetricOrchestrator:
                         llm_callable=self._llm,
                         config=self._config,
                         question_type=question_type,
+                        domain=self._domain,
                     )
                 else:
                     dispatch_result = stage_dispatch(
@@ -341,6 +355,7 @@ class SearchMetricOrchestrator:
                         llm_callable=self._llm,
                         config=self._config,
                         question_type=question_type,
+                        domain=self._domain,
                     )
 
             # --- Stage 4: SYNTHESIZE (LLM-based, RETRY(1) then SOFT gate) ---
@@ -352,6 +367,7 @@ class SearchMetricOrchestrator:
                     trace=trace,
                     llm_callable=self._llm,
                     mode=mode,
+                    domain=self._domain,
                 )
 
             return {

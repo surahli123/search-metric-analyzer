@@ -8,13 +8,13 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 
 # Path to knowledge files
-KNOWLEDGE_DIR = ROOT / "data" / "knowledge"
+KNOWLEDGE_DIR = ROOT / "domains" / "search_metrics" / "knowledge"
 SYNTHETIC_DIR = ROOT / "data" / "synthetic"
 
 
 @pytest.fixture
 def knowledge_dir():
-    """Path to the data/knowledge directory."""
+    """Path to the domains/search_metrics/knowledge directory."""
     return KNOWLEDGE_DIR
 
 

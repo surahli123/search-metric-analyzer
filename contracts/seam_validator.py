@@ -36,6 +36,21 @@ import re
 import sys
 from typing import Any, Callable, Dict, List, Optional, Type
 
+# Domain-specific rules imported from their canonical home in the domain module.
+# WHY this cross-layer import exists: STAGE_RULES needs to contain ALL rules
+# (generic + domain-specific) for backward compatibility — existing code calls
+# validate_seam() without a domain parameter and expects all 17 rules to run.
+# When the data_analysis domain is added, it will bypass STAGE_RULES and provide
+# its own rules via domain.get_quality_rules(). At that point, the domain-specific
+# rules can be removed from STAGE_RULES and this import can be deleted.
+from domains.search_metrics.rules import (
+    rule_question_brief_valid,
+    rule_hypotheses_consistent_with_co_movement,
+    rule_mix_shift_considered_when_detected,
+    rule_effect_size_proportionality,
+    VALID_QUESTION_TYPES,  # Re-export for any code that imports from here
+)
+
 # Import contracts (used for type reference only — we validate dict structure)
 # We don't import trace here to avoid circular deps; trace is passed in
 
@@ -75,39 +90,10 @@ GATE_TIERS = {
 
 
 # =============================================================================
-# QUESTION_PARSE business rules (Wave 5)
+# QUESTION_PARSE business rules
 # =============================================================================
-
-VALID_QUESTION_TYPES = {"sev", "experiment", "trend", "deep_dive", "system_understanding", "adhoc"}
-
-
-def rule_question_brief_valid(result: Dict, **kwargs) -> Optional[str]:
-    """HARD CHECK on question_type validity; SOFT warning on missing metric hints.
-
-    The question parser produces a QuestionBrief that routes investigations
-    to the right mode (Simple/Medium/Complex). If the question_type is invalid,
-    mode selection will route incorrectly — garbage in, garbage out (HARD).
-
-    Missing metric hints are a WARNING, not a blocker. Users often say
-    "our search quality dropped" without the full canonical name. The
-    pipeline should still attempt to help, inferring the metric from context.
-    (Fix: relaxed from HARD to informational — review finding #3)
-    """
-    question_type = result.get("question_type")
-    if question_type not in VALID_QUESTION_TYPES:
-        return (
-            f"question_type '{question_type}' is invalid — "
-            f"must be one of {sorted(VALID_QUESTION_TYPES)}. "
-            f"Re-parse the question with a valid classification."
-        )
-
-    # Metric hints are INFORMATIONAL for non-adhoc types — not a blocking violation.
-    # Users frequently describe metrics without canonical names (e.g., "search quality"
-    # instead of "search_quality_success"). The pipeline should still proceed and attempt
-    # to infer the metric from the question text and decomposition results.
-    # This was previously a HARD block but was relaxed per review finding #3.
-
-    return None
+# rule_question_brief_valid + VALID_QUESTION_TYPES are imported from
+# domains.search_metrics.rules (search-specific question types).
 
 
 # =============================================================================
@@ -201,62 +187,8 @@ def rule_expected_magnitude_present(result: Dict, **kwargs) -> Optional[str]:
     return None
 
 
-def rule_hypotheses_consistent_with_co_movement(result: Dict, **kwargs) -> Optional[str]:
-    """Amendment 2: Prevent flagging expected AI-driven CQ drops as anomalous.
-
-    If UNDERSTAND identified 'ai_adoption_expected' co-movement, no hypothesis
-    should have archetype 'click_quality_degradation' unless explicitly marked
-    as contrarian (is_contrarian=True).
-
-    This is the signature domain rule of the Search Metric Analyzer — the
-    "AI adoption trap" where AI answers work well → users click less →
-    CQ drops → team panics → but it's actually a POSITIVE signal.
-
-    The understand_result is passed via kwargs so this rule can cross-reference
-    the UNDERSTAND output.
-    """
-    understand = kwargs.get("understand_result", {})
-    co_movement = understand.get("co_movement_pattern", {})
-    pattern = co_movement.get("pattern_name", "")
-
-    if pattern == "ai_adoption_expected":
-        for h in result.get("hypotheses", []):
-            if (h.get("archetype") == "click_quality_degradation"
-                    and not h.get("is_contrarian")):
-                return (
-                    f"Hypothesis '{h.get('hypothesis_id', 'unknown')}' has archetype "
-                    f"'click_quality_degradation' but co-movement pattern is "
-                    f"'ai_adoption_expected' (AI answers working → fewer clicks → "
-                    f"expected CQ drop). Must be marked is_contrarian=True or removed."
-                )
-    return None
-
-
-def rule_mix_shift_considered_when_detected(result: Dict, **kwargs) -> Optional[str]:
-    """Amendment 3: If mix-shift was detected, at least one hypothesis must address it.
-
-    Mix-shift causes 30-40% of Enterprise metric movements. If UNDERSTAND
-    detected significant mix-shift (contribution > 25%), HYPOTHESIZE must
-    include at least one mix-shift hypothesis.
-    """
-    understand = kwargs.get("understand_result", {})
-    mix_shift = understand.get("mix_shift_result", {})
-
-    if mix_shift and mix_shift.get("detected") and mix_shift.get("contribution_pct", 0) > 0.25:
-        hyps = result.get("hypotheses", [])
-        has_mix_shift_hyp = any(
-            h.get("archetype") in ("mix_shift", "segment_mix_shift")
-            for h in hyps
-        )
-        if not has_mix_shift_hyp:
-            pct = mix_shift.get("contribution_pct", 0)
-            return (
-                f"Mix-shift explains {pct:.0%} of metric movement but no "
-                f"mix-shift hypothesis was generated. Mix-shift causes 30-40% "
-                f"of Enterprise metric movements — this must be investigated. "
-                f"Add a hypothesis with archetype='mix_shift' or 'segment_mix_shift' to the hypothesis set."
-            )
-    return None
+# rule_hypotheses_consistent_with_co_movement and rule_mix_shift_considered_when_detected
+# are imported from domains.search_metrics.rules (search-specific domain invariants).
 
 
 # =============================================================================
@@ -378,32 +310,8 @@ def rule_all_mandatory_sections_present(result: Dict, **kwargs) -> Optional[str]
     return None
 
 
-def rule_effect_size_proportionality(result: Dict, **kwargs) -> Optional[str]:
-    """IC9 Phase 2: P0 severity must use proportional language.
-
-    If severity is P0 (critical incident), the report should not contain
-    minimizing language like "minor", "slight", "small". This catches
-    the case where the LLM hedges on a genuinely severe issue.
-
-    Uses word-boundary matching (\\b) to avoid false positives on words
-    like "smaller", "minority", "smallest" — which are not minimizing.
-    """
-    if result.get("severity") == "P0":
-        minimizing_words = {"minor", "slight", "small", "marginal", "negligible", "trivial"}
-        # Check tldr and root_cause — the most visible sections
-        for field in ["tldr", "root_cause"]:
-            text = result.get(field, "").lower()
-            # Use word-boundary regex to match whole words only
-            # e.g., "minor" matches but "minority" does not
-            found = [w for w in minimizing_words if re.search(r'\b' + w + r'\b', text)]
-            if found:
-                return (
-                    f"P0 severity but '{field}' uses minimizing language: "
-                    f"{', '.join(found)}. A P0 is a critical incident — "
-                    f"language must match severity to avoid downplaying impact. "
-                    f"Replace minimizing words (minor/slight/small) with proportional language (significant/substantial/critical)."
-                )
-    return None
+# rule_effect_size_proportionality is imported from domains.search_metrics.rules
+# (P0 severity language check — depends on search metric alert threshold system).
 
 
 def rule_upgrade_condition_stated(result: Dict, **kwargs) -> Optional[str]:
@@ -601,12 +509,13 @@ def validate_seam(
     stage: str,
     trace=None,  # Optional[InvestigationTrace] — not typed to avoid circular import
     business_rules: Optional[List[Callable]] = None,
+    domain_rules: Optional[List[Callable]] = None,
     **kwargs
 ) -> Dict[str, Any]:
     """Validate a stage output against its contract and business rules.
 
     This is the core enforcement function. It:
-    1. Runs all business rules for the stage
+    1. Runs all business rules for the stage (generic + domain-specific)
     2. Collects violations
     3. Emits a seam span to the trace (if provided)
     4. Handles the violation according to the stage's gate tier:
@@ -619,6 +528,10 @@ def validate_seam(
         stage: "QUESTION_PARSE" | "UNDERSTAND" | "HYPOTHESIZE" | "DISPATCH" | "SYNTHESIZE"
         trace: Optional InvestigationTrace to emit seam spans to
         business_rules: Override rules (default: STAGE_RULES[stage])
+        domain_rules: Additional domain-specific rules to run alongside
+            the base rules. Use this when a domain provides extra validation
+            beyond what STAGE_RULES contains. These rules are appended to
+            (not replacing) the base rules.
         **kwargs: Additional context passed to rules (e.g., understand_result)
 
     Returns:
@@ -629,14 +542,25 @@ def validate_seam(
         - checks: Dict[str, bool] — per-rule results
     """
     rules = business_rules or STAGE_RULES.get(stage, [])
+    # Append domain-specific rules if provided (e.g., from domain.get_quality_rules())
+    if domain_rules:
+        rules = list(rules) + list(domain_rules)
     tier = GATE_TIERS.get(stage, "soft")
 
     violations = []
     checks = {}
 
     for rule in rules:
-        rule_name = rule.__name__
-        violation = rule(result, **kwargs)
+        # Domain rules from get_quality_rules() arrive as dicts
+        # {name, stage, check} — extract the callable and name.
+        # Built-in rules are plain functions with __name__.
+        if isinstance(rule, dict):
+            rule_name = rule["name"]
+            rule_fn = rule["check"]
+        else:
+            rule_name = rule.__name__
+            rule_fn = rule
+        violation = rule_fn(result, **kwargs)
         if violation:
             violations.append(violation)
             checks[rule_name] = False

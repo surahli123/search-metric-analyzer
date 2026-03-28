@@ -35,19 +35,19 @@ from trace.helpers import emit_deterministic_span
 
 MODES = {
     "simple": {
-        "agent_file": "agents/lead-agent-simple.md",
+        "agent_file": "domains/search_metrics/agents/lead-agent-simple.md",
         "description": "Direct knowledge lookup, no pipeline stages",
         "max_tokens": 5000,
         "stages": [],  # No pipeline stages — direct answer
     },
     "medium": {
-        "agent_file": "agents/lead-agent-medium.md",
+        "agent_file": "domains/search_metrics/agents/lead-agent-medium.md",
         "description": "Standard 4-stage pipeline",
         "max_tokens": 20000,
         "stages": ["UNDERSTAND", "HYPOTHESIZE", "DISPATCH", "SYNTHESIZE"],
     },
     "complex": {
-        "agent_file": "agents/lead-agent-complex.md",
+        "agent_file": "domains/search_metrics/agents/lead-agent-complex.md",
         "description": "Full pipeline with parallel sub-agent dispatch",
         "max_tokens": 40000,
         "stages": ["UNDERSTAND", "HYPOTHESIZE", "DISPATCH", "SYNTHESIZE"],

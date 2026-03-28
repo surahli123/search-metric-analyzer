@@ -267,7 +267,7 @@ class TestModeDefinitions:
     def test_all_modes_have_agent_file(self):
         for mode, info in MODES.items():
             assert "agent_file" in info, f"{mode} missing agent_file"
-            assert info["agent_file"].startswith("agents/")
+            assert info["agent_file"].startswith("domains/search_metrics/agents/")
 
     def test_simple_has_no_stages(self):
         assert MODES["simple"]["stages"] == []
