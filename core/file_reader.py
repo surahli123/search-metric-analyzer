@@ -210,9 +210,11 @@ def _read_sqlite(path: str, size_bytes: int) -> dict:
         try:
             cur = con.cursor()
 
-            # Fetch all user-defined tables (exclude sqlite internal tables)
+            # Fetch all user-defined tables (exclude sqlite internal tables
+            # like sqlite_sequence, sqlite_stat1, etc.)
             cur.execute(
-                "SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name"
+                "SELECT name, sql FROM sqlite_master "
+                "WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
             )
             rows = cur.fetchall()
 

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -60,6 +61,7 @@ _BLOCKED_FIRST_KEYWORDS = frozenset({
     "insert", "update", "delete", "drop",
     "create", "alter", "truncate", "replace",
     "attach", "detach",  # DuckDB attach could be used to escape read-only mode
+    "copy",  # COPY TO can export data to disk, bypassing read-only intent
 })
 
 
@@ -269,7 +271,9 @@ def _run_duckdb(query: str, csv_paths: list, max_rows: int) -> dict:
             # everything into memory — DuckDB will push predicates down to
             # the CSV scan layer.
             for csv_path in csv_paths:
-                table_name = Path(csv_path).stem
+                # Sanitize filename stem → valid SQL identifier.
+                # E.g., "my-data (2).csv" → "my_data__2_"
+                table_name = re.sub(r'[^a-zA-Z0-9_]', '_', Path(csv_path).stem)
                 resolved = Path(csv_path).resolve()
                 # We use single quotes around the path and escape any
                 # embedded single quotes for safety.

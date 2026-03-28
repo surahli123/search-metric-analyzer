@@ -91,19 +91,20 @@ def stage_dispatch(
     # Track what context was given to each investigator (IC9 #3)
     context_construction_log = []
 
-    # --- Resolve prompt builders once (not per-hypothesis) ---
-    # We hoist this call above the hypothesis loop so that for N hypotheses
-    # we pay one get_prompts() call, not N calls. This matters if domain.get_prompts()
-    # does any non-trivial work (e.g., YAML loading, routing logic).
-    # Backward-compatible: if domain is None, fall back to SearchMetricsDomain.
-    if domain is None:
-        from domains.search_metrics import SearchMetricsDomain
-        domain = SearchMetricsDomain()
-    dispatch_prompts = domain.get_prompts("dispatch")
-
     # --- Investigate each hypothesis ---
     findings = []
     agents = config.get("agents")
+
+    # Resolve prompt builders lazily — only needed for the LLM path.
+    # Hoisted above the loop so we pay one get_prompts() call, not N.
+    # Skipped entirely when agents are provided (custom domains may
+    # not have dispatch prompts at all).
+    dispatch_prompts = None
+    if not agents:
+        if domain is None:
+            from domains.search_metrics import SearchMetricsDomain
+            domain = SearchMetricsDomain()
+        dispatch_prompts = domain.get_prompts("dispatch")
 
     for hyp in hypotheses:
         hyp_id = hyp.get("hypothesis_id", "unknown")

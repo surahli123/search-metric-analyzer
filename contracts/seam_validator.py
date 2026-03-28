@@ -551,8 +551,16 @@ def validate_seam(
     checks = {}
 
     for rule in rules:
-        rule_name = rule.__name__
-        violation = rule(result, **kwargs)
+        # Domain rules from get_quality_rules() arrive as dicts
+        # {name, stage, check} — extract the callable and name.
+        # Built-in rules are plain functions with __name__.
+        if isinstance(rule, dict):
+            rule_name = rule["name"]
+            rule_fn = rule["check"]
+        else:
+            rule_name = rule.__name__
+            rule_fn = rule
+        violation = rule_fn(result, **kwargs)
         if violation:
             violations.append(violation)
             checks[rule_name] = False
