@@ -108,7 +108,9 @@ def stage_synthesize(
 
     # Save the first attempt so we can fall back to it if retry also fails.
     # (I1 fix: explicit save prevents stale variable bugs in the retry path.)
-    first_attempt_report = report
+    # Shallow copy so normalize_synthesis_report mutations on retry don't
+    # corrupt this fallback.
+    first_attempt_report = dict(report)
 
     # --- RETRY(1) then SOFT validation gate ---
     # validate_seam raises SeamViolation for "retry" tier.

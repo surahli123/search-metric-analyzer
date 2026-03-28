@@ -1336,3 +1336,72 @@ class TestRemediationMessages:
         assert "add" in violation.lower(), (
             f"Expected 'add' verb in violation: {violation}"
         )
+
+
+# ===========================================================================
+# Dict-based domain rules (regression test for fed5152 P1-1 fix)
+# ===========================================================================
+
+class TestDictBasedDomainRules:
+    """validate_seam must handle domain rules as dicts {name, stage, check}.
+
+    Before the fix, passing domain rules from domain.get_quality_rules()
+    would crash with AttributeError: 'dict' object has no attribute '__name__'.
+    """
+
+    def test_dict_rule_that_passes(self):
+        """A dict rule whose check returns None should register as passed."""
+        dict_rule = {
+            "name": "custom_check_passes",
+            "stage": "UNDERSTAND",
+            "check": lambda result, **kw: None,  # no violation
+        }
+        result = validate_seam(
+            stage="UNDERSTAND",
+            result={"metric_direction": "down", "data_quality_status": "pass"},
+            domain_rules=[dict_rule],
+        )
+        assert result["passed"] is True
+        assert result["checks"]["custom_check_passes"] is True
+
+    def test_dict_rule_that_fails(self):
+        """A dict rule whose check returns a string should register as a violation.
+
+        UNDERSTAND is a hard gate — violations raise SeamViolation.
+        We use HYPOTHESIZE (soft gate) so violations are returned, not raised.
+        """
+        dict_rule = {
+            "name": "custom_check_fails",
+            "stage": "HYPOTHESIZE",
+            "check": lambda result, **kw: "Custom violation: fix this",
+        }
+        # Provide a valid HYPOTHESIZE result so built-in rules pass
+        result = validate_seam(
+            stage="HYPOTHESIZE",
+            result={"hypotheses": [
+                {"hypothesis_id": "h1", "confirms_if": "x", "is_contrarian": True,
+                 "expected_magnitude": "2-5%"},
+                {"hypothesis_id": "h2", "confirms_if": "y", "expected_magnitude": "1%"},
+                {"hypothesis_id": "h3", "confirms_if": "z", "expected_magnitude": "3%"},
+            ]},
+            domain_rules=[dict_rule],
+        )
+        assert result["checks"]["custom_check_fails"] is False
+        assert any("Custom violation" in v for v in result["violations"])
+
+    def test_mixed_function_and_dict_rules(self):
+        """validate_seam should handle both plain functions and dict rules in one call."""
+        dict_rule = {
+            "name": "dict_rule_ok",
+            "stage": "UNDERSTAND",
+            "check": lambda result, **kw: None,
+        }
+        # Pass a valid UNDERSTAND result so built-in rules also pass
+        result = validate_seam(
+            stage="UNDERSTAND",
+            result={"metric_direction": "down", "data_quality_status": "pass"},
+            domain_rules=[dict_rule],
+        )
+        # Both built-in rules and the dict rule should appear in checks
+        assert "dict_rule_ok" in result["checks"]
+        assert result["checks"]["dict_rule_ok"] is True

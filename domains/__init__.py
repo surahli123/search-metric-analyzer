@@ -1,20 +1,22 @@
 """Domain registry — maps domain names to DomainInterface implementations.
 
 HOW IT WORKS:
-Each domain module (search_metrics, data_analysis) registers itself when imported.
-The orchestrator calls get_domain("search_metrics") to get the right implementation.
+Registration is explicit — the caller must import the domain module and call
+register_domain() before get_domain() will find it. Domains do NOT auto-register
+on import (auto-registration is planned for a future wave).
 
-This is a simple service locator pattern. We use it instead of dependency injection
-because the orchestrator needs to pick a domain dynamically (based on question type
-or configuration), not at import time.
+Currently the orchestrator and stages instantiate SearchMetricsDomain() directly
+rather than going through the registry. The registry exists for future multi-domain
+support (e.g., selecting between search_metrics and data_analysis at runtime).
 
 USAGE:
     from domains import get_domain, register_domain, list_domains
+    from domains.search_metrics import SearchMetricsDomain
 
-    # Registration (done by domain module's __init__.py):
+    # Explicit registration (caller's responsibility):
     register_domain(SearchMetricsDomain())
 
-    # Lookup (done by orchestrator):
+    # Lookup:
     domain = get_domain("search_metrics")
     knowledge = domain.get_knowledge("co_movement_patterns", stage="hypothesize")
 """
