@@ -5,6 +5,36 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Session: KDD v8 Iteration — 36/50 completed, 18/50 accurate (2026-03-28)
+
+### Added
+- `kdd/canary.py` — 10-task canary suite for rapid iteration validation
+- `kdd/autorefine.py` — Mutation runner with 5 pre-defined prompt variations
+- Parameterized prompts in `domains/data_analysis/prompts.py` (PROMPT_CONFIG + set/reset)
+
+### Fixed
+- JSON files loaded as DuckDB tables (was only shown in schema, not queryable)
+- SQLite column types preserved (INTEGER/REAL/DATE, was all VARCHAR causing type errors)
+- Row cap at 100K prevents OOM/hangs on large tables (task_257 was hanging 26+ min)
+- Scoping bug: `_MAX_LOAD_ROWS` moved to function scope (was inside SQLite loop)
+- `temperature=0` for deterministic LLM output (was temperature=1.0, causing 88% accuracy flakiness)
+- Crash bug: `_extract_best_sql` handles list response from LLM
+- SQL retry on error (feeds error back to LLM for correction)
+- Fuzzy evaluator with contains-match + partial credit scoring
+- Header stripping heuristic for non-numeric predicted headers
+
+### KDD Iteration Results (8 cycles)
+- v1: 15/50 completed (30%), 5/50 accurate (10%) — baseline
+- v5: 24/50 completed (48%), 12/50 accurate (24%) — JSON loading breakthrough
+- v8: 36/50 completed (72%), 18/50 accurate (36%) — type fix + temperature=0
+- Key insight: code fixes >> prompt tuning (AutoRefine: 0/5 mutations beat baseline)
+
+### Stats
+- 8 iteration cycles, 400 LLM evaluations, ~$1.60 API spend
+- 12 commits on main since PR #29
+
+---
+
 ## Session: Domain Plugin + KDD Runner + Baseline (2026-03-27)
 
 ### Added — Wave 7A/7B (PR #28)
