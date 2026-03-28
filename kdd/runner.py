@@ -594,16 +594,29 @@ def _execute_unified(
                 )
                 for (table_name,) in cursor.fetchall():
                     # Get column types via PRAGMA — preserves INTEGER, REAL, DATE, etc.
-                    # WHY not VARCHAR for everything: DuckDB is strict about types.
-                    # Loading INTEGER columns as VARCHAR causes "Cannot compare
-                    # VARCHAR and INTEGER_LITERAL" errors on WHERE/JOIN conditions.
                     cursor.execute(f"PRAGMA table_info([{table_name}])")
                     col_info = cursor.fetchall()  # (cid, name, type, notnull, dflt, pk)
                     col_names = [c[1] for c in col_info]
                     col_types = [_sqlite_to_duckdb_type(c[2]) for c in col_info]
 
-                    # Read all data from the SQLite table
-                    cursor.execute(f"SELECT * FROM [{table_name}]")
+                    # Check row count first — cap at 100K to prevent OOM/hangs
+                    # on large tables (task_250: 1.5M rows, task_257: 2M rows).
+                    # 100K rows is enough for any KDD query — the LLM's SQL
+                    # uses WHERE/JOIN/GROUP BY that reduces output anyway.
+                    _MAX_SQLITE_ROWS = 100_000
+                    cursor.execute(f"SELECT COUNT(*) FROM [{table_name}]")
+                    row_count = cursor.fetchone()[0]
+
+                    if row_count > _MAX_SQLITE_ROWS:
+                        logging.info(
+                            f"Table {table_name} has {row_count} rows — "
+                            f"loading first {_MAX_SQLITE_ROWS} only"
+                        )
+                        cursor.execute(
+                            f"SELECT * FROM [{table_name}] LIMIT {_MAX_SQLITE_ROWS}"
+                        )
+                    else:
+                        cursor.execute(f"SELECT * FROM [{table_name}]")
                     rows = cursor.fetchall()
 
                     safe_name = re.sub(r'[^a-zA-Z0-9_]', '_', table_name)
@@ -662,11 +675,17 @@ def _execute_unified(
                     continue
 
                 if records and isinstance(records[0], dict):
+                    # Cap JSON records at 100K to prevent OOM on large files
+                    if len(records) > _MAX_SQLITE_ROWS:
+                        logging.info(
+                            f"JSON {table_name} has {len(records)} records — "
+                            f"loading first {_MAX_SQLITE_ROWS} only"
+                        )
+                        records = records[:_MAX_SQLITE_ROWS]
                     col_names = list(records[0].keys())
                     col_defs = ", ".join(f'"{c}" VARCHAR' for c in col_names)
                     conn.execute(f'CREATE TABLE "{table_name}" ({col_defs})')
                     placeholders = ", ".join(["?"] * len(col_names))
-                    # Insert in batches to avoid huge single statements
                     batch = [tuple(str(r.get(c, "")) for c in col_names) for r in records]
                     conn.executemany(
                         f'INSERT INTO "{table_name}" VALUES ({placeholders})', batch
