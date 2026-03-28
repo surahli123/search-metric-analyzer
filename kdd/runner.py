@@ -510,6 +510,32 @@ def _execute_sql_for_task(task: Dict[str, Any], sql_query: str, max_rows: int = 
         }
 
 
+def _sqlite_to_duckdb_type(sqlite_type: str) -> str:
+    """Map SQLite column type to DuckDB type.
+
+    SQLite types are flexible (any string is valid), but DuckDB needs
+    concrete types. We map the common ones and default to VARCHAR for
+    anything unknown. This preserves numeric operations on INTEGER/REAL
+    columns and date operations on DATE/DATETIME columns.
+    """
+    t = sqlite_type.upper().strip()
+    if t in ("INTEGER", "INT", "BIGINT", "SMALLINT", "TINYINT"):
+        return "BIGINT"
+    elif t in ("REAL", "FLOAT", "DOUBLE", "NUMERIC", "DECIMAL"):
+        return "DOUBLE"
+    elif t in ("DATE",):
+        return "DATE"
+    elif t in ("DATETIME", "TIMESTAMP"):
+        return "TIMESTAMP"
+    elif t in ("BOOLEAN", "BOOL"):
+        return "BOOLEAN"
+    elif t in ("BLOB",):
+        return "BLOB"
+    else:
+        # TEXT, VARCHAR, CHAR, CLOB, and anything else → VARCHAR
+        return "VARCHAR"
+
+
 def _apply_limit_if_missing(query: str, max_rows: int) -> str:
     """Append LIMIT to a query if it doesn't already have one.
 
@@ -567,22 +593,29 @@ def _execute_unified(
                     "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
                 )
                 for (table_name,) in cursor.fetchall():
+                    # Get column types via PRAGMA — preserves INTEGER, REAL, DATE, etc.
+                    # WHY not VARCHAR for everything: DuckDB is strict about types.
+                    # Loading INTEGER columns as VARCHAR causes "Cannot compare
+                    # VARCHAR and INTEGER_LITERAL" errors on WHERE/JOIN conditions.
+                    cursor.execute(f"PRAGMA table_info([{table_name}])")
+                    col_info = cursor.fetchall()  # (cid, name, type, notnull, dflt, pk)
+                    col_names = [c[1] for c in col_info]
+                    col_types = [_sqlite_to_duckdb_type(c[2]) for c in col_info]
+
                     # Read all data from the SQLite table
                     cursor.execute(f"SELECT * FROM [{table_name}]")
                     rows = cursor.fetchall()
-                    col_names = [desc[0] for desc in cursor.description]
-                    # Create the table in DuckDB
+
                     safe_name = re.sub(r'[^a-zA-Z0-9_]', '_', table_name)
+                    col_defs = ", ".join(
+                        f'"{name}" {dtype}' for name, dtype in zip(col_names, col_types)
+                    )
+                    conn.execute(f'CREATE TABLE "{safe_name}" ({col_defs})')
                     if rows:
                         placeholders = ", ".join(["?"] * len(col_names))
-                        col_defs = ", ".join(f'"{c}" VARCHAR' for c in col_names)
-                        conn.execute(f'CREATE TABLE "{safe_name}" ({col_defs})')
                         conn.executemany(
                             f'INSERT INTO "{safe_name}" VALUES ({placeholders})', rows
                         )
-                    else:
-                        col_defs = ", ".join(f'"{c}" VARCHAR' for c in col_names)
-                        conn.execute(f'CREATE TABLE "{safe_name}" ({col_defs})')
             except Exception as e:
                 logging.warning(f"Failed to load SQLite {db_path}: {e}")
             finally:
