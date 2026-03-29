@@ -999,7 +999,10 @@ def _make_cli_llm(model: str = ""):
                 api_key=novita_key,
                 base_url="https://api.novita.ai/v3/openai",
             )
-            model_name = model or "deepseek/deepseek-v3-0324"
+            # MiniMax M2.7 outperformed DeepSeek V3.2 in A/B testing:
+            # 88% completion + 35% accuracy vs 90% + 10% on canary tasks.
+            # Higher accuracy at comparable cost (~$0.007/task vs $0.004).
+            model_name = model or "minimax/minimax-m2.7"
 
             def novita_llm(prompt: str, system: str, max_tokens: int) -> str:
                 response = client.chat.completions.create(

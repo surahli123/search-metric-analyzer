@@ -395,7 +395,7 @@ def make_anthropic_llm(
 
 def make_openai_llm(
     base_url: str = "https://api.novita.ai/openai/v1",
-    model: str = "deepseek/deepseek-v3.2",
+    model: str = "minimax/minimax-m2.7",
     api_key: str | None = None,
     timeout: float = 120.0,
     max_retries: int = 3,
