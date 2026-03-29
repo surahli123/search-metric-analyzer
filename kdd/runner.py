@@ -209,9 +209,10 @@ def run_task(
             # Simple result — format directly as CSV, skip SYNTHESIZE LLM call.
             # WHY: avoids LLM corruption (rounding, dropping rows, reshaping).
             # The SQL result IS the answer for most KDD tasks.
+            # No header row — the evaluator strips headers anyway, and omitting
+            # them avoids mismatches with gold's SQL-expression headers
+            # (e.g., "COUNT(DISTINCT T1.ID)" vs our "count"). Per Codex analysis.
             lines = []
-            if columns:
-                lines.append(",".join(str(c) for c in columns))
             for row in rows:
                 vals = [str(row.get(c, "")) for c in columns]
                 lines.append(",".join(vals))
