@@ -173,14 +173,15 @@ def run_task(
                 f"Your SQL query failed with this error:\n"
                 f"  {sql_result['error']}\n\n"
                 f"Original SQL:\n  {sql_query}\n\n"
+                f"AVAILABLE SCHEMA:\n{schema_info}\n\n"
                 f"Fix the SQL query. Common issues:\n"
-                f"- Wrong table name (check AVAILABLE TABLES in the schema)\n"
+                f"- Wrong table name (use ONLY the tables listed above)\n"
                 f"- Type mismatch (use CAST(col AS INTEGER) for comparisons)\n"
                 f"- Apostrophe escaping (use '' not \\')\n\n"
                 f"Return the same JSON format as before with the corrected SQL."
             )
             try:
-                retry_response = llm_callable(retry_prompt, hyp_system, 2000)
+                retry_response = llm_callable(retry_prompt, system_prompt, 2000)
                 retry_result = extract_json(retry_response)
                 retry_sql = _extract_best_sql(retry_result)
                 if retry_sql:
@@ -294,22 +295,40 @@ def run_batch(
 # ---------------------------------------------------------------------------
 
 def _read_knowledge(task: Dict[str, Any]) -> str:
-    """Read the knowledge.md file for a task.
+    """Read knowledge.md AND other markdown docs for a task.
 
-    Returns the text content, or empty string if the file doesn't exist.
-    Uses file_reader to handle encoding and errors consistently.
+    KDD tasks often include domain-specific markdown files (League.md,
+    molecule.md, superhero.md, races.md) alongside knowledge.md. These
+    contain entity descriptions and context the LLM needs to write
+    correct SQL. Codex analysis found 4 tasks (330, 379, 396, 408)
+    failing because these docs were invisible to the LLM.
+
+    Returns concatenated text from all markdown files.
     """
+    sections = []
+
+    # Primary: knowledge.md (always first)
     knowledge_path = task.get("knowledge_path", "")
-    if not knowledge_path or not os.path.exists(knowledge_path):
-        return ""
+    if knowledge_path and os.path.exists(knowledge_path):
+        result = read_file(knowledge_path)
+        if result.get("error") is None:
+            sections.append(result["content"].get("text", ""))
 
-    result = read_file(knowledge_path)
-    if result["error"]:
-        logger.warning("Failed to read knowledge.md: %s", result["error"])
-        return ""
+    # Additional: other .md files in context (League.md, molecule.md, etc.)
+    # Cap each at 3000 chars to avoid blowing the prompt budget.
+    for md_path in task.get("context_files", {}).get("md", []):
+        if md_path == knowledge_path:
+            continue  # already included above
+        if os.path.exists(md_path):
+            result = read_file(md_path, max_chars=3000)
+            if result.get("error") is None:
+                text = result["content"].get("text", "")
+                if text:
+                    sections.append(
+                        f"\n--- {Path(md_path).name} ---\n{text}"
+                    )
 
-    # For markdown files, content is {"text": str, "line_count": int}
-    return result["content"].get("text", "")
+    return "\n".join(sections)
 
 
 def _build_schema_context(task: Dict[str, Any]) -> str:
@@ -385,9 +404,28 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
         table_name = Path(json_path).stem
         data = content.get("data", {})
 
-        # Show structure: for objects, list top-level keys; for arrays, show first item
-        if json_type == "object" and isinstance(data, dict):
-            keys = list(data.keys())[:20]  # cap at 20 keys for prompt budget
+        # KDD JSON files have the pattern: {"table": "name", "records": [{...}]}
+        # We need to show the RECORD columns, not the outer keys (table, records).
+        # Codex analysis found this was causing 9 tasks to fail — the LLM never
+        # saw actual column names like "state", "event_name", "publisher_name".
+        if json_type == "object" and isinstance(data, dict) and "records" in data:
+            # KDD format — extract the real table name and record columns
+            real_name = data.get("table", table_name)
+            records = data.get("records", [])
+            if records and isinstance(records[0], dict):
+                col_names = list(records[0].keys())[:20]
+                sections.append(
+                    f"-- JSON Table: {real_name} ({len(records)} rows)\n"
+                    f"-- Columns: {', '.join(col_names)}"
+                )
+                # Add sample row so LLM can see data types
+                if records:
+                    sample = ", ".join(str(records[0].get(c, ""))[:30] for c in col_names[:8])
+                    sections.append(f"-- Sample: {sample}")
+            else:
+                sections.append(f"-- JSON: {real_name} ({len(records)} records)")
+        elif json_type == "object" and isinstance(data, dict):
+            keys = list(data.keys())[:20]
             sections.append(
                 f"-- JSON: {table_name} (object, {len(data)} keys)\n"
                 f"-- Keys: {', '.join(keys)}"
@@ -416,8 +454,14 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
         stem = Path(csv_path).stem
         table_names.append(f"  - {stem} (from {Path(csv_path).name})")
     for json_path in context_files.get("json", []):
-        stem = Path(json_path).stem
-        table_names.append(f"  - {stem} (from {Path(json_path).name}, JSON)")
+        # Use the real table name from KDD JSON format if available
+        try:
+            with open(json_path, encoding="utf-8") as _jf:
+                _jdata = json.load(_jf)
+            real_name = _jdata.get("table", Path(json_path).stem) if isinstance(_jdata, dict) else Path(json_path).stem
+        except Exception:
+            real_name = Path(json_path).stem
+        table_names.append(f"  - {real_name} (from {Path(json_path).name}, JSON)")
 
     header = "=== AVAILABLE TABLES (use ONLY these names in your SQL) ===\n"
     if table_names:
