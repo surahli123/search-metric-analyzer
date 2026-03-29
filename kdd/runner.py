@@ -710,46 +710,42 @@ def _execute_unified(
             )
 
         # --- Load JSON files as DuckDB tables ---
-        # KDD JSON files follow the pattern: {"table": "name", "records": [{...}, ...]}
-        # We extract the records array and create a table from it.
+        # KDD JSON files follow {"table": "name", "records": [{...}, ...]}
+        # WHY DuckDB-native: Python json.load → executemany was taking 30+ min
+        # for 159MB files (task_250). DuckDB's read_json_auto does it in ~2s.
         for json_path in (json_files or []):
             resolved = Path(json_path).resolve()
             if not resolved.exists():
                 continue
             try:
+                # First, peek at the file to get the real table name from KDD format
                 with open(resolved, encoding="utf-8") as fh:
-                    data = json.load(fh)
-
-                # Extract table name and records from the KDD JSON format
-                if isinstance(data, dict) and "records" in data:
+                    # Only read first 200 bytes to extract "table" key
+                    peek = fh.read(200)
+                if '"table"' in peek and '"records"' in peek:
+                    # KDD format — extract table name without loading entire file
+                    import re as _re
+                    match = _re.search(r'"table"\s*:\s*"([^"]+)"', peek)
                     table_name = re.sub(r'[^a-zA-Z0-9_]', '_',
-                                        data.get("table", Path(json_path).stem))
-                    records = data["records"]
-                elif isinstance(data, dict) and "table" not in data:
-                    # Plain dict — use filename as table, wrap as single record
-                    table_name = re.sub(r'[^a-zA-Z0-9_]', '_', Path(json_path).stem)
-                    records = [data]
-                elif isinstance(data, list):
-                    table_name = re.sub(r'[^a-zA-Z0-9_]', '_', Path(json_path).stem)
-                    records = data
+                                        match.group(1) if match else Path(json_path).stem)
+                    # Use DuckDB to read the records array directly — 100x faster
+                    # than Python json.load → executemany. The KDD JSON has
+                    # {"table": "name", "records": [{...}, ...]} — we unnest
+                    # the records array into rows. max_object_size raised for
+                    # large files like task_250 (159MB JSON).
+                    safe_path = str(resolved).replace("'", "''")
+                    conn.execute(
+                        f'CREATE TABLE "{table_name}" AS '
+                        f"SELECT * FROM read_json_auto('{safe_path}', "
+                        f"maximum_object_size=536870912) t, unnest(t.records)"
+                    )
                 else:
-                    continue
-
-                if records and isinstance(records[0], dict):
-                    # Cap JSON records at 100K to prevent OOM on large files
-                    if len(records) > _MAX_LOAD_ROWS:
-                        logging.info(
-                            f"JSON {table_name} has {len(records)} records — "
-                            f"loading first {_MAX_LOAD_ROWS} only"
-                        )
-                        records = records[:_MAX_LOAD_ROWS]
-                    col_names = list(records[0].keys())
-                    col_defs = ", ".join(f'"{c}" VARCHAR' for c in col_names)
-                    conn.execute(f'CREATE TABLE "{table_name}" ({col_defs})')
-                    placeholders = ", ".join(["?"] * len(col_names))
-                    batch = [tuple(str(r.get(c, "")) for c in col_names) for r in records]
-                    conn.executemany(
-                        f'INSERT INTO "{table_name}" VALUES ({placeholders})', batch
+                    # Non-KDD format — try direct read
+                    table_name = re.sub(r'[^a-zA-Z0-9_]', '_', Path(json_path).stem)
+                    safe_path = str(resolved).replace("'", "''")
+                    conn.execute(
+                        f'CREATE TABLE "{table_name}" AS '
+                        f"SELECT * FROM read_json_auto('{safe_path}')"
                     )
             except Exception as e:
                 logging.warning(f"Failed to load JSON {json_path}: {e}")
