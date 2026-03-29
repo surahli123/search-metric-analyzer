@@ -196,22 +196,37 @@ def run_task(
                 trace=trace if verbose else None,
             )
 
-        # --- Step 6: LLM call #2 — SYNTHESIZE (format answer) ---
-        # Format the raw SQL results as a human-readable string for the LLM
-        query_result_text = _format_sql_result(sql_result)
+        # --- Step 6: Format answer ---
+        # Codex analysis found that SYNTHESIZE LLM corrupts correct SQL results:
+        # it drops rows, rounds numbers, reformats strings, and reshapes output.
+        # For small/simple results, bypass SYNTHESIZE entirely and format directly.
+        # Only use SYNTHESIZE for complex results that need interpretation.
 
-        syn_prompts = domain.get_prompts("synthesize")
-        syn_system = syn_prompts["system_prompt"]()
-        syn_user = syn_prompts["user_prompt"](
-            question=question,
-            query_result=query_result_text,
-        )
+        rows = sql_result.get("rows", [])
+        columns = sql_result.get("columns", [])
 
-        raw_syn_response = llm_callable(syn_user, syn_system, 1000)
-
-        # The SYNTHESIZE response is raw CSV text, not JSON.
-        # Strip any markdown fences the LLM might wrap around it.
-        answer = _clean_csv_response(raw_syn_response)
+        if len(rows) <= 20 and len(columns) <= 5:
+            # Simple result — format directly as CSV, skip SYNTHESIZE LLM call.
+            # WHY: avoids LLM corruption (rounding, dropping rows, reshaping).
+            # The SQL result IS the answer for most KDD tasks.
+            lines = []
+            if columns:
+                lines.append(",".join(str(c) for c in columns))
+            for row in rows:
+                vals = [str(row.get(c, "")) for c in columns]
+                lines.append(",".join(vals))
+            answer = "\n".join(lines)
+        else:
+            # Complex result — use SYNTHESIZE LLM to interpret and format
+            query_result_text = _format_sql_result(sql_result)
+            syn_prompts = domain.get_prompts("synthesize")
+            syn_system = syn_prompts["system_prompt"]()
+            syn_user = syn_prompts["user_prompt"](
+                question=question,
+                query_result=query_result_text,
+            )
+            raw_syn_response = llm_callable(syn_user, syn_system, 1000)
+            answer = _clean_csv_response(raw_syn_response)
 
         return {
             "task_id": task_id,

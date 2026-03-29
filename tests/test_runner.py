@@ -316,9 +316,10 @@ class TestRunBatch:
 
         def batch_mock_llm(prompt: str, system: str, max_tokens: int) -> str:
             call_count["n"] += 1
-            # Odd calls = HYPOTHESIZE, even calls = SYNTHESIZE
-            if call_count["n"] % 2 == 1:
-                # Return SQL appropriate for whichever task is running
+            # With SYNTHESIZE bypass for simple results, most tasks only
+            # make 1 LLM call (HYPOTHESIZE). Detect which stage by content.
+            if "plan" in system.lower() or "sql" in system.lower() or "approach" in system.lower():
+                # HYPOTHESIZE call — return SQL
                 if "revenue" in prompt.lower() or "amount" in prompt.lower():
                     return make_valid_hypothesize_response(
                         "SELECT SUM(amount) AS total FROM revenue"
@@ -327,6 +328,7 @@ class TestRunBatch:
                     "SELECT COUNT(*) AS total FROM event"
                 )
             else:
+                # SYNTHESIZE call (only for complex results)
                 return "total\n3"
 
         # No gold_dir for this test — just check completion
