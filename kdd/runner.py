@@ -734,10 +734,12 @@ def _execute_unified(
                     # the records array into rows. max_object_size raised for
                     # large files like task_250 (159MB JSON).
                     safe_path = str(resolved).replace("'", "''")
+                    # recursive := true flattens struct fields into columns
+                    # (without it, unnest produces a single struct column)
                     conn.execute(
                         f'CREATE TABLE "{table_name}" AS '
-                        f"SELECT * FROM read_json_auto('{safe_path}', "
-                        f"maximum_object_size=536870912) t, unnest(t.records)"
+                        f"SELECT unnest(records, recursive := true) FROM "
+                        f"read_json_auto('{safe_path}', maximum_object_size=536870912)"
                     )
                 else:
                     # Non-KDD format — try direct read
