@@ -5,6 +5,46 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Session: KDD v10 — 43/50 completed, 23/50 accurate (2026-03-28, continued)
+
+### Added
+- 8-model A/B comparison on canary tasks (MiniMax M2.7 won)
+- DuckDB-native JSON loading via read_json_auto + recursive unnest
+- Scalar/rowset equivalence in evaluator (gold=[1,1,1,1] matches predicted=[4])
+- CSV writer for proper escaping (commas in values no longer split columns)
+- Codex parallel analysis workflow (3 rounds of bug-finding)
+- AutoRefine infrastructure (canary suite, mutation runner, parameterized prompts)
+
+### Changed
+- Default model switched from DeepSeek V3.2 to MiniMax M2.7
+- SYNTHESIZE LLM bypassed for simple results (≤20 rows) — direct CSV output
+- JSON schema context now shows actual record columns, not outer keys
+
+### Fixed
+- JSON files loaded as queryable DuckDB tables (was only in schema, not queryable)
+- SQLite column types preserved (INTEGER/REAL/DATE, was all VARCHAR)
+- Row cap at 100K prevents OOM/hangs on large files
+- SQL retry variable bug (was referencing undefined `hyp_system`)
+- Non-knowledge.md markdown files included in HYPOTHESIZE context
+- DuckDB recursive unnest for struct flattening
+- None → empty string in direct CSV output
+- Scoping bug: _MAX_LOAD_ROWS moved to function scope
+- temperature=0 for deterministic LLM output
+
+### KDD Results (10 iterations)
+- v1: 15/50 (30%), 5/50 (10%) — baseline
+- v5: 24/50 (48%), 12/50 (24%) — JSON loading breakthrough
+- v8: 36/50 (72%), 18/50 (36%) — type fix + temperature=0
+- v10: 43/50 (86%), 23/50 (46%) — MiniMax M2.7 + DuckDB-native JSON + all fixes
+- Key insight: code fixes >> prompt tuning, Codex parallel analysis >> manual iteration
+
+### Stats
+- 10 iteration cycles, 500+ LLM evaluations, ~$3 API spend
+- 8-model A/B test (MiniMax M2.7 won: 10/10 completion, 7/10 accuracy on canary)
+- 20+ commits on main
+
+---
+
 ## Session: KDD v8 Iteration — 36/50 completed, 18/50 accurate (2026-03-28)
 
 ### Added
