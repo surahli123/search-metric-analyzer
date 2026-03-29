@@ -212,11 +212,18 @@ def run_task(
             # No header row — the evaluator strips headers anyway, and omitting
             # them avoids mismatches with gold's SQL-expression headers
             # (e.g., "COUNT(DISTINCT T1.ID)" vs our "count"). Per Codex analysis.
-            lines = []
+            # Use csv.writer for proper escaping — values like "MCTD, AMI"
+            # contain commas that would split into two columns with naive join.
+            # Also handle None → empty string (DuckDB returns None for NULLs).
+            import io, csv as csv_mod
+            buf = io.StringIO()
+            writer = csv_mod.writer(buf)
             for row in rows:
-                vals = [str(row.get(c, "")) for c in columns]
-                lines.append(",".join(vals))
-            answer = "\n".join(lines)
+                writer.writerow([
+                    "" if row.get(c) is None else str(row.get(c, ""))
+                    for c in columns
+                ])
+            answer = buf.getvalue().strip()
         else:
             # Complex result — use SYNTHESIZE LLM to interpret and format
             query_result_text = _format_sql_result(sql_result)

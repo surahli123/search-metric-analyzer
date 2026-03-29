@@ -182,6 +182,26 @@ def evaluate(predicted: str, gold_path: str) -> dict:
                 "details": "All values match (positional)",
             }
 
+    # --- Scalar/rowset equivalence ---
+    # Codex found this is the #1 false-negative source:
+    # gold = [1, 1, 1, 1] (4 rows), predicted = [4] (one scalar count).
+    # These are semantically equivalent — the LLM used COUNT(*) instead of
+    # listing individual rows. Check: if all gold values are the same number
+    # and predicted is a single number equal to count(gold_values).
+    if len(pred_values) == 1 and len(gold_values) > 1:
+        try:
+            pred_num = float(pred_values[0].strip())
+            gold_nums = [float(gv.strip()) for gv in gold_values]
+            # All gold values the same AND predicted == count of gold rows
+            if len(set(gold_nums)) == 1 and abs(pred_num - len(gold_values)) < 0.01:
+                return {
+                    "match": True, "score": 1.0,
+                    "predicted_values": pred_values, "gold_values": gold_values,
+                    "details": f"Scalar/rowset equivalence: {pred_values[0]} == count of {len(gold_values)} rows",
+                }
+        except (ValueError, OverflowError):
+            pass
+
     # --- Contains-match fallback ---
     # Check if every gold value appears somewhere in the predicted values.
     # WHY: LLM often returns correct values with extra context (column names,
