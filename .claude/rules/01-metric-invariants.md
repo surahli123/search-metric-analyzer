@@ -74,4 +74,4 @@ Always compare to segment-specific baseline, not global average. A 0.220 Click Q
 
 ## Before Modifying Metric Logic
 
-Read `data/knowledge/metric_definitions.yaml` for full formulas, baselines, alert thresholds, and co-movement table before changing any metric calculation.
+Read `domains/search_metrics/knowledge/metric_definitions.yaml` for full formulas, baselines, alert thresholds, and co-movement table before changing any metric calculation.

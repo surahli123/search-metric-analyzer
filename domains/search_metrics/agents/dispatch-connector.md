@@ -10,7 +10,7 @@ outputs:
 depends_on: [hypothesize]
 pipeline_step: 3
 knowledge_context:
-  - data/knowledge/search_pipeline_knowledge.yaml#connector_section
+  - domains/search_metrics/knowledge/search_pipeline_knowledge.yaml#connector_section
 critical: false
 CONTRACT_END -->
 

@@ -46,7 +46,7 @@ QUESTION_PARSE → UNDERSTAND → HYPOTHESIZE → DISPATCH → SYNTHESIZE
 | `trace/` | Investigation tracing (spans, collector) | Stable |
 | `harness/` | Orchestrator, parser, selector, DAG executor, registry, prompts, manifest.yaml | Active development |
 | `agents/` | Declarative agent .md files + registry.yaml (loaded by harness/) | Active development |
-| `data/knowledge/` | Domain knowledge (metric defs, patterns) | Source of truth — read before modifying |
+| `domains/search_metrics/knowledge/` | Domain knowledge (metric defs, patterns) | Source of truth — read before modifying |
 | `eval/` | Evaluation scenarios + graders | Active development |
 
 ## Before Modifying Architecture

@@ -9,8 +9,8 @@ outputs:
 depends_on: [understand]
 pipeline_step: 2
 knowledge_context:
-  - data/knowledge/metric_definitions.yaml#co_movement_diagnostic_table
-  - data/knowledge/corrections.yaml
+  - domains/search_metrics/knowledge/metric_definitions.yaml#co_movement_diagnostic_table
+  - domains/search_metrics/knowledge/corrections.yaml
 critical: true
 CONTRACT_END -->
 

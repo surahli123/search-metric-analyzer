@@ -40,11 +40,11 @@ and returns the answer.
 ## Knowledge Sources
 
 Routes to the most relevant knowledge file based on keywords:
-- Metric definitions → `data/knowledge/metric_definitions.yaml`
-- Pipeline components → `data/knowledge/search_pipeline_knowledge.yaml`
-- Historical patterns → `data/knowledge/historical_patterns.yaml`
-- Cost tradeoffs → `data/knowledge/architecture_tradeoffs.yaml`
-- Past corrections → `data/knowledge/corrections.yaml`
+- Metric definitions → `domains/search_metrics/knowledge/metric_definitions.yaml`
+- Pipeline components → `domains/search_metrics/knowledge/search_pipeline_knowledge.yaml`
+- Historical patterns → `domains/search_metrics/knowledge/historical_patterns.yaml`
+- Cost tradeoffs → `domains/search_metrics/knowledge/architecture_tradeoffs.yaml`
+- Past corrections → `domains/search_metrics/knowledge/corrections.yaml`
 
 ## Quality Expectations
 

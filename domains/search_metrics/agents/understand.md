@@ -10,8 +10,8 @@ outputs:
 depends_on: []
 pipeline_step: 1
 knowledge_context:
-  - data/knowledge/metric_definitions.yaml
-  - data/knowledge/historical_patterns.yaml
+  - domains/search_metrics/knowledge/metric_definitions.yaml
+  - domains/search_metrics/knowledge/historical_patterns.yaml
 critical: true
 CONTRACT_END -->
 

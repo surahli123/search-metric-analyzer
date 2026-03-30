@@ -57,6 +57,6 @@ Canary suite: `python -m kdd.canary` (10 tasks, ~7 min)
 
 ## Known Issues
 - `temperature=0` in `harness/llm.py` affects search metrics too — verify before using for investigations
-- 30+ stale `data/knowledge/` path references in agent .md files and .claude/rules/ — needs `/document-release`
+- Knowledge YAML paths updated to `domains/search_metrics/knowledge/` (was `data/knowledge/`)
 - `_execute_unified` has 4 loading paths but limited test coverage for JSON-native path
 - 100K row cap may produce wrong answers for tasks needing full-table aggregates
