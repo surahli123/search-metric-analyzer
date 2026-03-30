@@ -156,6 +156,11 @@ def build_hypothesize_system_prompt() -> str:
         f"- {cfg['sql_dialect_hints']}\n"
         f"- {cfg['approach_strategy']}\n"
         "- If the question requires aggregation, use appropriate GROUP BY\n"
+        "- Read the question carefully for implicit operations:\n"
+        "  * 'average monthly X' may need SUM(X)/12 or GROUP BY month\n"
+        "  * 'how many times more' means a ratio (A/B), not a difference\n"
+        "  * 'percentage' needs CAST(... AS REAL) * 100 / total\n"
+        "  * 'lowest cost' needs ORDER BY cost ASC LIMIT 1, not MIN()\n"
         f"- Generate at least 1 SQL approach, up to {max_n}"
     )
 

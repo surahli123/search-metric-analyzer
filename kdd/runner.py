@@ -150,8 +150,13 @@ def run_task(
                 trace=trace if verbose else None,
             )
 
-        # --- Step 4: Extract the best SQL approach ---
+        # --- Step 4: Extract SQL approaches ---
+        # Get the best approach first, but keep all approaches available
+        # for fallback. v12 analysis: 15 tasks consistently wrong because
+        # best_approach_index picks a plausible-but-wrong SQL. The LLM
+        # often generates a correct alternative at index 1 or 2.
         sql_query = _extract_best_sql(hyp_result)
+        all_sql_approaches = _extract_all_sql(hyp_result)
         if sql_query is None:
             return _error_result(
                 task_id=task_id,
@@ -246,6 +251,23 @@ def run_task(
                         _current_sql = empty_sql
             except Exception:
                 pass  # Empty retry failed — use original (empty) result
+
+        # --- Step 5d: Try alternative SQL approaches ---
+        # WHY: The LLM generates 1-3 SQL approaches but we only try the "best"
+        # one. v12 analysis found 15 tasks where the best approach was wrong but
+        # an alternative would have been correct. This costs only SQL execution
+        # time (no extra LLM calls) — cheap insurance.
+        # Only triggers when: SQL failed entirely OR returned 0 rows.
+        rows = sql_result.get("rows", [])
+        if (sql_result.get("error") or len(rows) == 0) and len(all_sql_approaches) > 1:
+            for alt_sql in all_sql_approaches[1:]:  # Skip index 0 (already tried)
+                logger.info("Trying alternative SQL approach: %s...", alt_sql[:80])
+                alt_result = _execute_sql_for_task(task, alt_sql)
+                if not alt_result.get("error") and len(alt_result.get("rows", [])) > 0:
+                    sql_result = alt_result
+                    _current_sql = alt_sql
+                    logger.info("Alternative approach succeeded with %d rows", len(alt_result["rows"]))
+                    break  # Use first alternative that returns data
 
         # --- Step 6: Format answer ---
         # Codex analysis found that SYNTHESIZE LLM corrupts correct SQL results:
@@ -584,6 +606,41 @@ def _extract_best_sql(hyp_result) -> Optional[str]:
 
     sql = approaches[best_idx].get("sql", "")
     return sql.strip() if sql and sql.strip() else None
+
+
+def _extract_all_sql(hyp_result) -> list[str]:
+    """Extract ALL SQL queries from HYPOTHESIZE result, ordered by preference.
+
+    Returns the best approach first, then remaining approaches in order.
+    WHY: v12 analysis found 15 tasks where best_approach_index picks wrong SQL
+    but an alternative approach (index 1 or 2) would have been correct.
+    Trying alternatives costs only SQL execution time (no extra LLM calls).
+    """
+    if isinstance(hyp_result, list):
+        hyp_result = {"approaches": hyp_result, "best_approach_index": 0}
+    if not isinstance(hyp_result, dict):
+        return []
+
+    approaches = hyp_result.get("approaches", [])
+    if not approaches:
+        return []
+
+    best_idx = hyp_result.get("best_approach_index", 0)
+    if not isinstance(best_idx, int) or best_idx < 0 or best_idx >= len(approaches):
+        best_idx = 0
+
+    # Best approach first, then the rest in order
+    result = []
+    for i, approach in enumerate(approaches):
+        sql = approach.get("sql", "")
+        if sql and sql.strip():
+            # Put best_idx first by ordering: best, then others
+            if i == best_idx:
+                result.insert(0, sql.strip())
+            else:
+                result.append(sql.strip())
+
+    return result
 
 
 def _execute_sql_for_task(task: Dict[str, Any], sql_query: str, max_rows: int = 1000) -> dict:
