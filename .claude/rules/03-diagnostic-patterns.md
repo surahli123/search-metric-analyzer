@@ -40,4 +40,4 @@ Use this to narrow hypotheses BEFORE running decomposition.
 
 ## Before Diagnosing an Incident
 
-Read `data/knowledge/historical_patterns.yaml` for full known incidents, data signatures, and seasonal baselines.
+Read `domains/search_metrics/knowledge/historical_patterns.yaml` for full known incidents, data signatures, and seasonal baselines.

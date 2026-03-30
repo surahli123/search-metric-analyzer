@@ -10,7 +10,7 @@ outputs:
 depends_on: [hypothesize]
 pipeline_step: 3
 knowledge_context:
-  - data/knowledge/architecture_tradeoffs.yaml
+  - domains/search_metrics/knowledge/architecture_tradeoffs.yaml
 critical: false
 CONTRACT_END -->
 

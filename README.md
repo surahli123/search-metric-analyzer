@@ -65,10 +65,14 @@ python3 core/formatter.py --input diagnosis.json
 ```
 Search_Metric_Analyzer/
 ├── data/
-│   ├── knowledge/
-│   │   ├── metric_definitions.yaml    # Metric formulas, noise profiles, co-movement patterns
-│   │   └── historical_patterns.yaml   # Known incident patterns, seasonal effects
 │   └── synthetic/                     # Generated test data (gitignored, regenerable)
+├── domains/
+│   ├── search_metrics/
+│   │   ├── knowledge/
+│   │   │   ├── metric_definitions.yaml    # Metric formulas, noise profiles, co-movement patterns
+│   │   │   └── historical_patterns.yaml   # Known incident patterns, seasonal effects
+│   │   └── agents/                        # Declarative agent .md files with CONTRACT blocks
+│   └── data_analysis/                     # DataAnalysisDomain for KDD pipeline
 ├── core/
 │   ├── decompose.py                   # Kitagawa-Oaxaca decomposition + mix-shift
 │   ├── anomaly.py                     # Step-change detection, co-movement matching
