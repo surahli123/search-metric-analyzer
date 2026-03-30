@@ -401,6 +401,7 @@ def make_openai_llm(
     max_retries: int = 3,
     base_delay: float = 1.0,
     max_delay: float = 10.0,
+    temperature: float = 0.0,
 ) -> Callable[[str, str, int], str]:
     """Factory that returns a callable wrapping any OpenAI-compatible API.
 
@@ -502,7 +503,7 @@ def make_openai_llm(
                 model=model,
                 messages=messages,
                 max_tokens=max_tokens,
-                temperature=0.0,  # Deterministic output — same input → same SQL
+                temperature=temperature,  # 0.0 for KDD (deterministic SQL), higher for search metrics (hypothesis diversity)
             )
 
             # Extract text from the first choice.

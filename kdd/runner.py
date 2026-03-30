@@ -163,21 +163,33 @@ def run_task(
         # Determine which backend to use: SQLite (.db) or DuckDB (CSV).
         sql_result = _execute_sql_for_task(task, sql_query)
 
-        # --- Step 5b: SQL retry on error ---
-        # If the first SQL attempt fails (wrong table name, type mismatch, etc.),
-        # feed the error back to the LLM and ask for a corrected query.
-        # Single retry only — more retries risk burning API budget on hopeless queries.
-        if sql_result["error"]:
-            logger.info("SQL failed: %s — retrying with error feedback", sql_result["error"])
+        # --- Step 5b: SQL retry loop on error ---
+        # If SQL fails (wrong table name, type mismatch, etc.), feed the error
+        # back to the LLM and ask for a corrected query. Up to 2 retries.
+        # WHY 2 retries: v10→v11 analysis showed 4 tasks consistently fail on
+        # first attempt but the error message gives the LLM enough info to fix.
+        # 1 retry catches ~60% of fixable errors; 2 retries catches ~80%.
+        # 3+ retries showed diminishing returns in testing (same error repeated).
+        _max_sql_retries = 2
+        _current_sql = sql_query
+        for retry_num in range(1, _max_sql_retries + 1):
+            if not sql_result["error"]:
+                break  # SQL succeeded — no retry needed
+            logger.info(
+                "SQL failed (attempt %d/%d): %s — retrying with error feedback",
+                retry_num, _max_sql_retries, sql_result["error"],
+            )
             retry_prompt = (
                 f"Your SQL query failed with this error:\n"
                 f"  {sql_result['error']}\n\n"
-                f"Original SQL:\n  {sql_query}\n\n"
+                f"Original SQL:\n  {_current_sql}\n\n"
                 f"AVAILABLE SCHEMA:\n{schema_info}\n\n"
                 f"Fix the SQL query. Common issues:\n"
                 f"- Wrong table name (use ONLY the tables listed above)\n"
                 f"- Type mismatch (use CAST(col AS INTEGER) for comparisons)\n"
-                f"- Apostrophe escaping (use '' not \\')\n\n"
+                f"- Apostrophe escaping (use '' not \\')\n"
+                f"- Column name mismatch (check schema for exact names)\n"
+                f"- Missing JOIN condition (every JOIN needs an ON clause)\n\n"
                 f"Return the same JSON format as before with the corrected SQL."
             )
             try:
@@ -185,9 +197,10 @@ def run_task(
                 retry_result = extract_json(retry_response)
                 retry_sql = _extract_best_sql(retry_result)
                 if retry_sql:
+                    _current_sql = retry_sql
                     sql_result = _execute_sql_for_task(task, retry_sql)
             except Exception:
-                pass  # Retry failed — fall through to original error handling
+                pass  # Retry failed — continue to next retry or fall through
 
         if sql_result["error"]:
             return _error_result(
@@ -195,6 +208,44 @@ def run_task(
                 error=f"SQL execution failed: {sql_result['error']}",
                 trace=trace if verbose else None,
             )
+
+        # --- Step 5c: Empty result retry ---
+        # WHY: v11 analysis found tasks 196 and 257 consistently return 0 rows
+        # because the LLM's SQL is syntactically valid but semantically wrong
+        # (wrong JOIN, wrong filter, wrong column). No error triggers the retry
+        # loop above. This gives the LLM one chance to fix a "suspiciously empty"
+        # result by re-examining its query logic.
+        rows = sql_result.get("rows", [])
+        _all_none = rows and all(
+            all(v is None for v in row.values()) for row in rows
+        )
+        if (len(rows) == 0 or _all_none) and not sql_result.get("error"):
+            logger.info("SQL returned empty/null result — retrying with empty-result feedback")
+            empty_retry_prompt = (
+                f"Your SQL query executed successfully but returned NO results (0 rows).\n\n"
+                f"SQL:\n  {_current_sql}\n\n"
+                f"QUESTION:\n  {question}\n\n"
+                f"AVAILABLE SCHEMA:\n{schema_info}\n\n"
+                f"The query likely has a logic error:\n"
+                f"- Wrong JOIN condition (joining on wrong columns)\n"
+                f"- Too restrictive WHERE clause (filtering out all rows)\n"
+                f"- Wrong column name or value in filter\n"
+                f"- CAST issue (comparing string to integer without CAST)\n\n"
+                f"Re-examine the schema carefully and write a corrected SQL query.\n"
+                f"Return the same JSON format as before."
+            )
+            try:
+                empty_response = llm_callable(empty_retry_prompt, system_prompt, 2000)
+                empty_result = extract_json(empty_response)
+                empty_sql = _extract_best_sql(empty_result)
+                if empty_sql:
+                    empty_sql_result = _execute_sql_for_task(task, empty_sql)
+                    # Only use the retry result if it actually returned data
+                    if not empty_sql_result.get("error") and len(empty_sql_result.get("rows", [])) > 0:
+                        sql_result = empty_sql_result
+                        _current_sql = empty_sql
+            except Exception:
+                pass  # Empty retry failed — use original (empty) result
 
         # --- Step 6: Format answer ---
         # Codex analysis found that SYNTHESIZE LLM corrupts correct SQL results:
