@@ -269,6 +269,13 @@ def run_task(
                     logger.info("Alternative approach succeeded with %d rows", len(alt_result["rows"]))
                     break  # Use first alternative that returns data
 
+        # --- Step 5e: Result sanity check — TRIED AND REVERTED ---
+        # v14 experiment: asked LLM to verify single-value numeric results.
+        # Result: LLM correctly detects wrong answers but can't write correct SQL.
+        # task_169: detected 82M was wrong, corrected SQL gave 89M (still wrong).
+        # task_396: detected 100% was wrong, corrected to 4% (worse, gold=54.8%).
+        # Verdict: adds complexity + LLM cost without improving accuracy. Removed.
+
         # --- Step 6: Format answer ---
         # Codex analysis found that SYNTHESIZE LLM corrupts correct SQL results:
         # it drops rows, rounds numbers, reformats strings, and reshapes output.
