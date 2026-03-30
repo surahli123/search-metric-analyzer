@@ -490,21 +490,24 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
     # JSON files — structure and keys give the LLM context for tasks
     # that use JSON as a data source (e.g., task_11: Patient.json)
     for json_path in context_files.get("json", []):
-        result = read_file(json_path, max_chars=2000)
-        if result["error"]:
-            sections.append(f"-- Error reading {json_path}: {result['error']}")
-            continue
-
-        content = result["content"]
-        json_type = content.get("type", "unknown")
+        # WHY json.load() instead of read_file(): read_file(max_chars=2000)
+        # truncates large JSON files before the "records" key is visible,
+        # so the schema context shows only {"table": "name"} with no columns.
+        # This caused 9+ tasks to fail — the LLM never saw column names.
+        # json.load() reads the full structure so we can extract record keys.
         table_name = Path(json_path).stem
-        data = content.get("data", {})
+        try:
+            with open(json_path, encoding="utf-8") as _jf:
+                data = json.load(_jf)
+        except Exception as exc:
+            sections.append(f"-- Error reading {json_path}: {exc}")
+            continue
 
         # KDD JSON files have the pattern: {"table": "name", "records": [{...}]}
         # We need to show the RECORD columns, not the outer keys (table, records).
         # Codex analysis found this was causing 9 tasks to fail — the LLM never
         # saw actual column names like "state", "event_name", "publisher_name".
-        if json_type == "object" and isinstance(data, dict) and "records" in data:
+        if isinstance(data, dict) and "records" in data:
             # KDD format — extract the real table name and record columns
             real_name = data.get("table", table_name)
             records = data.get("records", [])
@@ -520,13 +523,13 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
                     sections.append(f"-- Sample: {sample}")
             else:
                 sections.append(f"-- JSON: {real_name} ({len(records)} records)")
-        elif json_type == "object" and isinstance(data, dict):
+        elif isinstance(data, dict):
             keys = list(data.keys())[:20]
             sections.append(
                 f"-- JSON: {table_name} (object, {len(data)} keys)\n"
                 f"-- Keys: {', '.join(keys)}"
             )
-        elif json_type == "array" and isinstance(data, list):
+        elif isinstance(data, list):
             sections.append(
                 f"-- JSON: {table_name} (array, {len(data)} items)"
             )
