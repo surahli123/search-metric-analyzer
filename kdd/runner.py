@@ -150,8 +150,13 @@ def run_task(
                 trace=trace if verbose else None,
             )
 
-        # --- Step 4: Extract the best SQL approach ---
+        # --- Step 4: Extract SQL approaches ---
+        # Get the best approach first, but keep all approaches available
+        # for fallback. v12 analysis: 15 tasks consistently wrong because
+        # best_approach_index picks a plausible-but-wrong SQL. The LLM
+        # often generates a correct alternative at index 1 or 2.
         sql_query = _extract_best_sql(hyp_result)
+        all_sql_approaches = _extract_all_sql(hyp_result)
         if sql_query is None:
             return _error_result(
                 task_id=task_id,
@@ -246,6 +251,96 @@ def run_task(
                         _current_sql = empty_sql
             except Exception:
                 pass  # Empty retry failed — use original (empty) result
+
+        # --- Step 5d: Try alternative SQL approaches ---
+        # WHY: The LLM generates 1-3 SQL approaches but we only try the "best"
+        # one. v12 analysis found 15 tasks where the best approach was wrong but
+        # an alternative would have been correct. This costs only SQL execution
+        # time (no extra LLM calls) — cheap insurance.
+        # Only triggers when: SQL failed entirely OR returned 0 rows.
+        rows = sql_result.get("rows", [])
+        if (sql_result.get("error") or len(rows) == 0) and len(all_sql_approaches) > 1:
+            for alt_sql in all_sql_approaches[1:]:  # Skip index 0 (already tried)
+                logger.info("Trying alternative SQL approach: %s...", alt_sql[:80])
+                alt_result = _execute_sql_for_task(task, alt_sql)
+                if not alt_result.get("error") and len(alt_result.get("rows", [])) > 0:
+                    sql_result = alt_result
+                    _current_sql = alt_sql
+                    logger.info("Alternative approach succeeded with %d rows", len(alt_result["rows"]))
+                    break  # Use first alternative that returns data
+
+        # --- Step 5e: Iterative reasoning loop (inspired by Meta Analytics Agent) ---
+        # WHY: Our earlier sanity check (v14) failed because it asked the LLM to
+        # rewrite the query without new information. Meta's agent succeeds because
+        # it runs ADDITIONAL queries to investigate (check table metadata, verify
+        # value ranges, try different approaches). The key difference: give the LLM
+        # the result + schema + question and let it decide if it needs to dig deeper.
+        #
+        # Only triggers for single-value results (most KDD tasks) where the answer
+        # might be an order of magnitude off (e.g., 82M for "average monthly X").
+        # Max 2 iterations to keep cost bounded (~$0.014 extra per task at most).
+        rows = sql_result.get("rows", [])
+        columns = sql_result.get("columns", [])
+        if (
+            not sql_result.get("error")
+            and 0 < len(rows) <= 5
+            and len(columns) <= 3
+        ):
+            _iter_max = 2
+            for _iter in range(_iter_max):
+                # Format current result for the LLM
+                result_preview = ", ".join(
+                    f"{c}={rows[0].get(c)}" for c in columns
+                ) if rows else "(empty)"
+
+                inspect_prompt = (
+                    f"You executed this SQL to answer a question. Inspect the result.\n\n"
+                    f"QUESTION: {question}\n\n"
+                    f"SQL: {_current_sql}\n\n"
+                    f"RESULT ({len(rows)} row{'s' if len(rows)>1 else ''}): {result_preview}\n\n"
+                    f"SCHEMA:\n{schema_info}\n\n"
+                    f"Does this result correctly answer the question?\n"
+                    f"Think step by step:\n"
+                    f"1. What does the question actually ask for?\n"
+                    f"2. Does your SQL compute exactly that?\n"
+                    f"3. Is the magnitude reasonable?\n\n"
+                    f"If CORRECT: return {{\"done\": true}}\n"
+                    f"If WRONG: return {{\"done\": false, \"reason\": \"what's wrong\", "
+                    f"\"sql\": \"corrected SQL query\"}}\n\n"
+                    f"Common mistakes to check:\n"
+                    f"- 'average monthly' needs /12 or GROUP BY month, not just AVG()\n"
+                    f"- 'percentage' needs CAST(... AS REAL) * 100 / total_count\n"
+                    f"- 'how many times more' is a ratio (A/B), not a count\n"
+                    f"- Wrong table for the entity being asked about\n"
+                    f"- Missing or wrong JOIN condition\n"
+                    f"Return ONLY the JSON object."
+                )
+                try:
+                    inspect_response = llm_callable(inspect_prompt, system_prompt, 1000)
+                    inspect_result = extract_json(inspect_response)
+                    if not isinstance(inspect_result, dict):
+                        break  # Unparseable — keep current result
+                    if inspect_result.get("done", True):
+                        break  # LLM says result is correct — keep it
+                    # LLM says result is wrong — try corrected SQL
+                    corrected_sql = inspect_result.get("sql", "")
+                    if not corrected_sql:
+                        break  # No corrected SQL provided
+                    logger.info(
+                        "Iterative loop %d/%d: %s — trying corrected SQL",
+                        _iter + 1, _iter_max,
+                        inspect_result.get("reason", "unknown")[:80],
+                    )
+                    corrected_result = _execute_sql_for_task(task, corrected_sql)
+                    if not corrected_result.get("error") and corrected_result.get("rows"):
+                        sql_result = corrected_result
+                        rows = sql_result.get("rows", [])
+                        columns = sql_result.get("columns", [])
+                        _current_sql = corrected_sql
+                    else:
+                        break  # Corrected SQL failed — keep previous result
+                except Exception:
+                    break  # Inspection failed — keep current result
 
         # --- Step 6: Format answer ---
         # Codex analysis found that SYNTHESIZE LLM corrupts correct SQL results:
@@ -468,21 +563,24 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
     # JSON files — structure and keys give the LLM context for tasks
     # that use JSON as a data source (e.g., task_11: Patient.json)
     for json_path in context_files.get("json", []):
-        result = read_file(json_path, max_chars=2000)
-        if result["error"]:
-            sections.append(f"-- Error reading {json_path}: {result['error']}")
-            continue
-
-        content = result["content"]
-        json_type = content.get("type", "unknown")
+        # WHY json.load() instead of read_file(): read_file(max_chars=2000)
+        # truncates large JSON files before the "records" key is visible,
+        # so the schema context shows only {"table": "name"} with no columns.
+        # This caused 9+ tasks to fail — the LLM never saw column names.
+        # json.load() reads the full structure so we can extract record keys.
         table_name = Path(json_path).stem
-        data = content.get("data", {})
+        try:
+            with open(json_path, encoding="utf-8") as _jf:
+                data = json.load(_jf)
+        except Exception as exc:
+            sections.append(f"-- Error reading {json_path}: {exc}")
+            continue
 
         # KDD JSON files have the pattern: {"table": "name", "records": [{...}]}
         # We need to show the RECORD columns, not the outer keys (table, records).
         # Codex analysis found this was causing 9 tasks to fail — the LLM never
         # saw actual column names like "state", "event_name", "publisher_name".
-        if json_type == "object" and isinstance(data, dict) and "records" in data:
+        if isinstance(data, dict) and "records" in data:
             # KDD format — extract the real table name and record columns
             real_name = data.get("table", table_name)
             records = data.get("records", [])
@@ -498,13 +596,13 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
                     sections.append(f"-- Sample: {sample}")
             else:
                 sections.append(f"-- JSON: {real_name} ({len(records)} records)")
-        elif json_type == "object" and isinstance(data, dict):
+        elif isinstance(data, dict):
             keys = list(data.keys())[:20]
             sections.append(
                 f"-- JSON: {table_name} (object, {len(data)} keys)\n"
                 f"-- Keys: {', '.join(keys)}"
             )
-        elif json_type == "array" and isinstance(data, list):
+        elif isinstance(data, list):
             sections.append(
                 f"-- JSON: {table_name} (array, {len(data)} items)"
             )
@@ -584,6 +682,41 @@ def _extract_best_sql(hyp_result) -> Optional[str]:
 
     sql = approaches[best_idx].get("sql", "")
     return sql.strip() if sql and sql.strip() else None
+
+
+def _extract_all_sql(hyp_result) -> list[str]:
+    """Extract ALL SQL queries from HYPOTHESIZE result, ordered by preference.
+
+    Returns the best approach first, then remaining approaches in order.
+    WHY: v12 analysis found 15 tasks where best_approach_index picks wrong SQL
+    but an alternative approach (index 1 or 2) would have been correct.
+    Trying alternatives costs only SQL execution time (no extra LLM calls).
+    """
+    if isinstance(hyp_result, list):
+        hyp_result = {"approaches": hyp_result, "best_approach_index": 0}
+    if not isinstance(hyp_result, dict):
+        return []
+
+    approaches = hyp_result.get("approaches", [])
+    if not approaches:
+        return []
+
+    best_idx = hyp_result.get("best_approach_index", 0)
+    if not isinstance(best_idx, int) or best_idx < 0 or best_idx >= len(approaches):
+        best_idx = 0
+
+    # Best approach first, then the rest in order
+    result = []
+    for i, approach in enumerate(approaches):
+        sql = approach.get("sql", "")
+        if sql and sql.strip():
+            # Put best_idx first by ordering: best, then others
+            if i == best_idx:
+                result.insert(0, sql.strip())
+            else:
+                result.append(sql.strip())
+
+    return result
 
 
 def _execute_sql_for_task(task: Dict[str, Any], sql_query: str, max_rows: int = 1000) -> dict:
