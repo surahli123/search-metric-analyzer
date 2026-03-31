@@ -44,6 +44,31 @@ def _parse_csv_string(text: str) -> list[list[str]]:
     return [row for row in reader]
 
 
+def _normalize_cell(s: str) -> str:
+    """Normalize a cell value for comparison.
+
+    Strips common formatting differences that cause false negatives:
+    - Whitespace (leading/trailing)
+    - Percentage signs (LLM outputs "54.8%" vs gold "54.8")
+    - Thousands separators ("1,234" vs "1234")
+    - Surrounding quotes
+
+    WHY: Codex analysis found the evaluator was too cell-centric, causing
+    false negatives on correct answers with minor formatting differences.
+    """
+    s = s.strip()
+    # Remove surrounding quotes (single or double)
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in ('"', "'"):
+        s = s[1:-1].strip()
+    # Remove trailing % sign
+    s = s.rstrip('%').strip()
+    # Remove thousands separators (but not decimal points)
+    # Only remove commas that separate digit groups (e.g., "1,234" but not "Smith, John")
+    if s.replace(',', '').replace('.', '').replace('-', '').isdigit():
+        s = s.replace(',', '')
+    return s
+
+
 def _values_match(predicted: str, gold: str) -> bool:
     """Compare two cell values — numeric first, then case-insensitive string.
 
@@ -53,9 +78,9 @@ def _values_match(predicted: str, gold: str) -> bool:
     Why case-insensitive: String answers like city names or categories
     shouldn't fail due to capitalization differences.
     """
-    # Strip whitespace from both sides — common source of spurious mismatches
-    pred = predicted.strip()
-    gold_val = gold.strip()
+    # Normalize both values before comparison
+    pred = _normalize_cell(predicted)
+    gold_val = _normalize_cell(gold)
 
     # Try numeric comparison first
     try:
