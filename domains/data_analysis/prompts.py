@@ -52,10 +52,12 @@ _DEFAULT_PROMPT_CONFIG: dict = {
         "'Women''s Soccer' (NOT backslash). "
         "Always qualify column names with table aliases in JOINs."
     ),
-    # Strategy for query complexity. Mutation idea: "attempt JOINs first if
-    # the question spans multiple entities" (aggressive) vs current (conservative).
+    # Strategy for query complexity. Codex analysis found "prefer simple queries"
+    # biased the LLM away from necessary JOINs, causing task_349/355/396 failures.
     "approach_strategy": (
-        "Prefer simple queries (single table) before attempting JOINs."
+        "Use the smallest table set that covers the question. "
+        "If requested fields, filters, or names live in different tables, "
+        "JOIN immediately — do not try single-table queries first."
     ),
     # How many SQL approaches to generate. Mutation idea: 1 (faster, less
     # diverse) vs 5 (slower, more coverage). 3 is the current sweet spot.

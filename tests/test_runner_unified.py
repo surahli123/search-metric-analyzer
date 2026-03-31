@@ -158,34 +158,30 @@ class TestRecursiveUnnestColumnNames:
 
 
 # ---------------------------------------------------------------------------
-# Test 3: Large table capped at _MAX_LOAD_ROWS (100,000)
+# Test 3: Large SQLite table — full access via sqlite_scanner
 # ---------------------------------------------------------------------------
 
 class TestMaxLoadRowsCap:
-    """Verify that _execute_unified caps table loading at 100,000 rows.
+    """Verify that _execute_unified loads full SQLite tables via sqlite_scanner.
 
-    WHY: Some KDD tasks have massive tables (task_250: 1.5M rows, task_257:
-    2M rows). Loading all rows into DuckDB causes OOM or multi-minute hangs.
-    The _MAX_LOAD_ROWS cap prevents this by only loading the first 100K rows
-    from SQLite tables.
+    WHY: The old approach capped SQLite loading at 100K rows via Python
+    materialization, producing silently wrong aggregates on large tables.
+    sqlite_scanner attaches the .db file directly — DuckDB queries the full
+    table without Python-side row caps. Codex analysis identified the cap as
+    the #1 accuracy bug.
 
-    NOTE: This cap is enforced on SQLite tables (where we control the load
-    query). JSON loading uses DuckDB's read_json_auto natively and doesn't
-    have a row cap — DuckDB handles large JSON files efficiently (~2s for
-    159MB). The query result is separately capped by max_rows parameter.
+    NOTE: JSON loading uses DuckDB's read_json_auto natively and also has
+    no row cap. The query result is separately capped by max_rows parameter.
     """
 
-    def test_sqlite_table_capped_at_100k_rows(self, tmp_path):
-        """Create a SQLite DB with >100K rows, verify only 100K are loaded."""
+    def test_sqlite_table_full_access(self, tmp_path):
+        """Create a SQLite DB with >100K rows, verify ALL rows are accessible."""
         db_path = tmp_path / "large.db"
 
-        # Create a SQLite table with 100,050 rows — just over the cap.
-        # WHY 100,050 not 200K: keeps test fast (~1s) while still proving
-        # the cap works. We just need to be over the boundary.
+        # Create a SQLite table with 100,050 rows.
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE big_table (id INTEGER, val TEXT)")
 
-        # Batch insert for speed — 100,050 rows in ~50 batches
         total_rows = 100_050
         batch_size = 5000
         for start in range(0, total_rows, batch_size):
@@ -194,12 +190,11 @@ class TestMaxLoadRowsCap:
             conn.executemany("INSERT INTO big_table VALUES (?, ?)", rows)
         conn.commit()
 
-        # Verify SQLite actually has all rows (sanity check)
         cursor = conn.execute("SELECT COUNT(*) FROM big_table")
         assert cursor.fetchone()[0] == total_rows
         conn.close()
 
-        # Now load through _execute_unified — should cap at 100,000
+        # With sqlite_scanner, we should get ALL rows — no 100K cap.
         result = _execute_unified(
             query="SELECT COUNT(*) AS cnt FROM big_table",
             db_files=[str(db_path)],
@@ -208,12 +203,12 @@ class TestMaxLoadRowsCap:
 
         assert result["error"] is None, f"Unexpected error: {result['error']}"
 
-        # The COUNT should be exactly 100,000 (the cap), not 100,050 (the full table).
-        # This proves _MAX_LOAD_ROWS is enforced during loading.
+        # COUNT should be the full 100,050 — sqlite_scanner queries
+        # the SQLite file directly without Python materialization.
         count = result["rows"][0]["cnt"]
-        assert count == 100_000, (
-            f"Expected 100,000 rows (capped), got {count}. "
-            f"_MAX_LOAD_ROWS cap not applied during SQLite loading."
+        assert count == total_rows, (
+            f"Expected {total_rows} rows (full table), got {count}. "
+            f"sqlite_scanner should provide full access without row caps."
         )
 
 

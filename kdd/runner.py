@@ -866,59 +866,60 @@ def _execute_unified(
     try:
         conn = duckdb.connect()
 
-        # --- Load SQLite tables into DuckDB ---
+        # --- Attach SQLite databases via sqlite_scanner ---
+        # WHY sqlite_scanner instead of Python materialization:
+        # The old approach (sqlite3 → fetchall → INSERT) capped at 100K rows,
+        # producing silently wrong answers for aggregates on large tables.
+        # sqlite_scanner attaches the .db file directly — DuckDB queries
+        # the full SQLite table without materializing it in Python memory.
+        # Codex analysis identified this as the #1 accuracy bug.
         for db_path in db_files:
             resolved = Path(db_path).resolve()
             if not resolved.exists():
                 continue
-            sqlite_conn = None
             try:
-                sqlite_conn = sqlite3.connect(f"file:{resolved}?mode=ro", uri=True)
-                cursor = sqlite_conn.cursor()
-                # Get all user tables
-                cursor.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-                )
-                for (table_name,) in cursor.fetchall():
-                    # Get column types via PRAGMA — preserves INTEGER, REAL, DATE, etc.
-                    cursor.execute(f"PRAGMA table_info([{table_name}])")
-                    col_info = cursor.fetchall()  # (cid, name, type, notnull, dflt, pk)
-                    col_names = [c[1] for c in col_info]
-                    col_types = [_sqlite_to_duckdb_type(c[2]) for c in col_info]
-
-                    # Check row count first — cap to prevent OOM/hangs on
-                    # large tables (task_250: 1.5M rows, task_257: 2M rows).
-                    cursor.execute(f"SELECT COUNT(*) FROM [{table_name}]")
-                    row_count = cursor.fetchone()[0]
-
-                    if row_count > _MAX_LOAD_ROWS:
-                        logging.info(
-                            f"Table {table_name} has {row_count} rows — "
-                            f"loading first {_MAX_LOAD_ROWS} only"
-                        )
-                        cursor.execute(
-                            f"SELECT * FROM [{table_name}] LIMIT {_MAX_LOAD_ROWS}"
-                        )
-                    else:
-                        cursor.execute(f"SELECT * FROM [{table_name}]")
-                    rows = cursor.fetchall()
-
-                    safe_name = re.sub(r'[^a-zA-Z0-9_]', '_', table_name)
-                    col_defs = ", ".join(
-                        f'"{name}" {dtype}' for name, dtype in zip(col_names, col_types)
-                    )
-                    conn.execute(f'CREATE TABLE "{safe_name}" ({col_defs})')
-                    if rows:
-                        placeholders = ", ".join(["?"] * len(col_names))
-                        conn.executemany(
-                            f'INSERT INTO "{safe_name}" VALUES ({placeholders})', rows
-                        )
+                conn.execute("INSTALL sqlite_scanner")
+                conn.execute("LOAD sqlite_scanner")
+                safe_path = str(resolved).replace("'", "''")
+                conn.execute(f"CALL sqlite_attach('{safe_path}')")
             except Exception as e:
-                logging.warning(f"Failed to load SQLite {db_path}: {e}")
-            finally:
-                # Always close SQLite connection to prevent resource leak
-                if sqlite_conn is not None:
-                    sqlite_conn.close()
+                # Fallback: if sqlite_scanner fails (e.g., extension not available),
+                # use the old Python materialization approach with the row cap.
+                logging.warning(f"sqlite_scanner failed for {db_path}: {e} — falling back to Python load")
+                sqlite_conn = None
+                try:
+                    sqlite_conn = sqlite3.connect(f"file:{resolved}?mode=ro", uri=True)
+                    cursor = sqlite_conn.cursor()
+                    cursor.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                    )
+                    for (table_name,) in cursor.fetchall():
+                        cursor.execute(f"PRAGMA table_info([{table_name}])")
+                        col_info = cursor.fetchall()
+                        col_names = [c[1] for c in col_info]
+                        col_types = [_sqlite_to_duckdb_type(c[2]) for c in col_info]
+                        cursor.execute(f"SELECT COUNT(*) FROM [{table_name}]")
+                        row_count = cursor.fetchone()[0]
+                        if row_count > _MAX_LOAD_ROWS:
+                            cursor.execute(f"SELECT * FROM [{table_name}] LIMIT {_MAX_LOAD_ROWS}")
+                        else:
+                            cursor.execute(f"SELECT * FROM [{table_name}]")
+                        rows = cursor.fetchall()
+                        safe_name = re.sub(r'[^a-zA-Z0-9_]', '_', table_name)
+                        col_defs = ", ".join(
+                            f'"{name}" {dtype}' for name, dtype in zip(col_names, col_types)
+                        )
+                        conn.execute(f'CREATE TABLE "{safe_name}" ({col_defs})')
+                        if rows:
+                            placeholders = ", ".join(["?"] * len(col_names))
+                            conn.executemany(
+                                f'INSERT INTO "{safe_name}" VALUES ({placeholders})', rows
+                            )
+                except Exception as e2:
+                    logging.warning(f"Fallback also failed for {db_path}: {e2}")
+                finally:
+                    if sqlite_conn is not None:
+                        sqlite_conn.close()
 
         # --- Register CSVs as DuckDB tables ---
         for csv_path in csv_files:
