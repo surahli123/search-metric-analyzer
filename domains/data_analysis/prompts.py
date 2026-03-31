@@ -157,7 +157,7 @@ def build_hypothesize_system_prompt() -> str:
         f"- {cfg['approach_strategy']}\n"
         "- If the question requires aggregation, use appropriate GROUP BY\n"
         "- Read the question carefully for implicit operations:\n"
-        "  * 'average monthly X' may need SUM(X)/12 or GROUP BY month\n"
+        "  * 'average monthly X' means AVG(X)/12, NOT SUM(X)/12\n"
         "  * 'how many times more' means a ratio (A/B), not a difference\n"
         "  * 'percentage' needs CAST(... AS REAL) * 100 / total\n"
         "  * 'lowest cost' needs ORDER BY cost ASC LIMIT 1, not MIN()\n"
@@ -183,10 +183,11 @@ def _match_sql_patterns(question: str) -> list[str]:
     # Average per entity (not SUM of all entities)
     if "average" in q and ("monthly" in q or "per month" in q):
         patterns.append(
-            "For 'average monthly consumption per customer': "
-            "AVG(Consumption) across all matching rows, NOT SUM()/12. "
-            "SUM()/12 gives total divided by months, not per-customer average. "
-            "Example: SELECT AVG(ym.Consumption) FROM yearmonth ym WHERE ..."
+            "CRITICAL for 'average monthly X': Your FIRST approach MUST use "
+            "AVG(X) / 12. Do NOT use SUM(X) / 12 — that gives the total "
+            "(often millions), not the average (usually hundreds/thousands). "
+            "Correct: SELECT AVG(column) / 12 FROM table WHERE ... "
+            "Wrong: SELECT SUM(column) / 12 FROM table WHERE ..."
         )
 
     # Percentage calculations
