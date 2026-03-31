@@ -269,12 +269,78 @@ def run_task(
                     logger.info("Alternative approach succeeded with %d rows", len(alt_result["rows"]))
                     break  # Use first alternative that returns data
 
-        # --- Step 5e: Result sanity check — TRIED AND REVERTED ---
-        # v14 experiment: asked LLM to verify single-value numeric results.
-        # Result: LLM correctly detects wrong answers but can't write correct SQL.
-        # task_169: detected 82M was wrong, corrected SQL gave 89M (still wrong).
-        # task_396: detected 100% was wrong, corrected to 4% (worse, gold=54.8%).
-        # Verdict: adds complexity + LLM cost without improving accuracy. Removed.
+        # --- Step 5e: Iterative reasoning loop (inspired by Meta Analytics Agent) ---
+        # WHY: Our earlier sanity check (v14) failed because it asked the LLM to
+        # rewrite the query without new information. Meta's agent succeeds because
+        # it runs ADDITIONAL queries to investigate (check table metadata, verify
+        # value ranges, try different approaches). The key difference: give the LLM
+        # the result + schema + question and let it decide if it needs to dig deeper.
+        #
+        # Only triggers for single-value results (most KDD tasks) where the answer
+        # might be an order of magnitude off (e.g., 82M for "average monthly X").
+        # Max 2 iterations to keep cost bounded (~$0.014 extra per task at most).
+        rows = sql_result.get("rows", [])
+        columns = sql_result.get("columns", [])
+        if (
+            not sql_result.get("error")
+            and 0 < len(rows) <= 5
+            and len(columns) <= 3
+        ):
+            _iter_max = 2
+            for _iter in range(_iter_max):
+                # Format current result for the LLM
+                result_preview = ", ".join(
+                    f"{c}={rows[0].get(c)}" for c in columns
+                ) if rows else "(empty)"
+
+                inspect_prompt = (
+                    f"You executed this SQL to answer a question. Inspect the result.\n\n"
+                    f"QUESTION: {question}\n\n"
+                    f"SQL: {_current_sql}\n\n"
+                    f"RESULT ({len(rows)} row{'s' if len(rows)>1 else ''}): {result_preview}\n\n"
+                    f"SCHEMA:\n{schema_info}\n\n"
+                    f"Does this result correctly answer the question?\n"
+                    f"Think step by step:\n"
+                    f"1. What does the question actually ask for?\n"
+                    f"2. Does your SQL compute exactly that?\n"
+                    f"3. Is the magnitude reasonable?\n\n"
+                    f"If CORRECT: return {{\"done\": true}}\n"
+                    f"If WRONG: return {{\"done\": false, \"reason\": \"what's wrong\", "
+                    f"\"sql\": \"corrected SQL query\"}}\n\n"
+                    f"Common mistakes to check:\n"
+                    f"- 'average monthly' needs /12 or GROUP BY month, not just AVG()\n"
+                    f"- 'percentage' needs CAST(... AS REAL) * 100 / total_count\n"
+                    f"- 'how many times more' is a ratio (A/B), not a count\n"
+                    f"- Wrong table for the entity being asked about\n"
+                    f"- Missing or wrong JOIN condition\n"
+                    f"Return ONLY the JSON object."
+                )
+                try:
+                    inspect_response = llm_callable(inspect_prompt, system_prompt, 1000)
+                    inspect_result = extract_json(inspect_response)
+                    if not isinstance(inspect_result, dict):
+                        break  # Unparseable — keep current result
+                    if inspect_result.get("done", True):
+                        break  # LLM says result is correct — keep it
+                    # LLM says result is wrong — try corrected SQL
+                    corrected_sql = inspect_result.get("sql", "")
+                    if not corrected_sql:
+                        break  # No corrected SQL provided
+                    logger.info(
+                        "Iterative loop %d/%d: %s — trying corrected SQL",
+                        _iter + 1, _iter_max,
+                        inspect_result.get("reason", "unknown")[:80],
+                    )
+                    corrected_result = _execute_sql_for_task(task, corrected_sql)
+                    if not corrected_result.get("error") and corrected_result.get("rows"):
+                        sql_result = corrected_result
+                        rows = sql_result.get("rows", [])
+                        columns = sql_result.get("columns", [])
+                        _current_sql = corrected_sql
+                    else:
+                        break  # Corrected SQL failed — keep previous result
+                except Exception:
+                    break  # Inspection failed — keep current result
 
         # --- Step 6: Format answer ---
         # Codex analysis found that SYNTHESIZE LLM corrupts correct SQL results:
