@@ -198,7 +198,23 @@ Claude Sonnet or GPT-4o.
 | v15 | 48/50 (96%) | 25/50 (50%) | Iterative reasoning loop |
 | v16 | 49/50 (98%) | 26/50 (52%) | SQL pattern memory |
 
-## Commits on Branch (8 total)
+## Multi-Model Comparison on 6 Hardest Tasks
+
+Tested 6 models on the 6 consistently wrong tasks. **0/6 correct across ALL models.**
+
+| Task | Gold | MiniMax M2.7 | DeepSeek V3.2 | Qwen3 Coder 480B | Qwen3.5 397B | GLM-5 |
+|------|------|-------------|---------------|-----------------|-------------|-------|
+| task_169 | 460 | 82M | 5,095 | 82M | 5,519 | FAILED |
+| task_344 | 4 | 0 | 61 | 280 | 280 | FAILED |
+| task_396 | 54.8% | 100% | 4% | FAILED | — | 4% |
+| task_352 | 2.73 | FAILED | headers | FAILED | — | IDs |
+| task_25 | Nov Speaker | Feb Speaker | Sep Speaker | Nov (close!) | Oct | Mar |
+| task_75 | Fisichella | Räikkönen | Räikkönen | Räikkönen | — | Räikkönen |
+
+**Conclusion:** These tasks are beyond current open-source model capability.
+Need frontier models (Claude Sonnet/Opus, GPT-4o) or question decomposition.
+
+## Commits (PRs #30 + #31, merged)
 ```
 6887bfd feat: SQL retry loop (2 retries) + empty result retry + configurable temperature
 644b7d1 docs: fix 30+ stale data/knowledge/ paths
