@@ -514,7 +514,7 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
     context_files = task.get("context_files", {})
     sections = []
 
-    # SQLite databases — schema is the most useful context
+    # SQLite databases — schema + sample rows for better column understanding
     for db_path in context_files.get("db", []):
         result = read_file(db_path)
         if result["error"]:
@@ -527,6 +527,38 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
                 f"-- Table: {table['name']} ({table['row_count']} rows)\n"
                 f"{table['schema']}"
             )
+
+        # Add sample rows for each table so the LLM can see actual data values.
+        # WHY: The CREATE TABLE schema shows column names/types but not what
+        # values look like. The LLM needs to see real values to write correct
+        # WHERE clauses (e.g., knowing Segment='SME' not Segment='sme').
+        # v16 model comparison: all models fail on filter/aggregation tasks
+        # partly because they guess at value formats.
+        try:
+            resolved = Path(db_path).resolve()
+            sample_conn = sqlite3.connect(f"file:{resolved}?mode=ro", uri=True)
+            sample_cur = sample_conn.cursor()
+            for table in tables:
+                tname = table['name']
+                try:
+                    sample_cur.execute(f"SELECT * FROM [{tname}] LIMIT 2")
+                    sample_rows = sample_cur.fetchall()
+                    col_names = [desc[0] for desc in sample_cur.description]
+                    if sample_rows:
+                        samples = []
+                        for row in sample_rows:
+                            vals = ", ".join(str(v)[:30] for v in row)
+                            samples.append(f"-- {vals}")
+                        sections.append(
+                            f"-- Sample data ({tname}):\n"
+                            f"-- ({', '.join(col_names)})\n"
+                            + "\n".join(samples)
+                        )
+                except Exception:
+                    pass  # Skip sample for tables that error
+            sample_conn.close()
+        except Exception:
+            pass  # Skip samples if DB can't be opened
 
     # CSV files — column headers + a few sample rows give the LLM
     # enough context to write correct column references
