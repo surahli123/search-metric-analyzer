@@ -289,9 +289,21 @@ def _strip_header_if_present(
         # gives the exact gold data count — strip it even if header text
         # doesn't match (LLM may use different column names)
         return pred_rows[1:]
-    else:
-        # No header detected or row count matches data count — keep all rows
-        return pred_rows
+    elif first_row_is_non_numeric and len(pred_rows) > 1:
+        # First row is non-numeric but row count doesn't match gold.
+        # WHY: LLM often returns extra columns (task_38: 7 cols vs gold's 1 col)
+        # or different row count. If the first row has NO numeric values and
+        # subsequent rows DO, it's almost certainly a header.
+        # Check: at least one subsequent row has a numeric value.
+        has_numeric_data = any(
+            any(_is_numeric(cell) for cell in row)
+            for row in pred_rows[1:3]  # Check first 2 data rows only
+        )
+        if has_numeric_data:
+            return pred_rows[1:]
+        # Fall through — all rows are non-numeric, keep as-is
+    # No header detected or row count matches data count — keep all rows
+    return pred_rows
 
 
 def _is_numeric(s: str) -> bool:
