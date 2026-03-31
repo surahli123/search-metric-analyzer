@@ -1,4 +1,4 @@
-# Handover: KDD v14 — 49/50 completed, 25-26/50 accurate
+# Handover: KDD v16 — 49/50 completed, 25-26/50 accurate
 
 ## Project
 **Search Metric Analyzer** — `/Users/surahli/Documents/projects/Search_Metric_Analyzer`
@@ -152,6 +152,62 @@ Ran best-of-3 ensemble on batches 1 and 2 (20 tasks × 3 = 60 LLM calls).
 ## API Cost
 - Estimated ~$3-4 total this session (v11-v14 batches + canary runs + debug tests)
 - MiniMax M2.7 via Novita API: ~$0.007/task single-run, ~$0.021/task ensemble
+
+## v15-v16 Additions (Meta Analytics Agent inspired)
+
+### v15: Iterative reasoning loop + header fix
+- **Iterative loop** (step 5e): After SQL returns, shows LLM the result + schema and asks
+  "does this correctly answer the question?" If LLM says no, tries corrected SQL. Max 2 iterations.
+- **Header detection fix**: Evaluator now strips headers when first row is non-numeric and
+  data rows contain numbers, regardless of column count mismatch.
+- **Result**: 48/50 completed, 25/50 accurate. Loop is net-neutral — helps some, hurts others.
+  The model correctly identifies wrong results but can't write correct replacement SQL.
+
+### v16: SQL pattern memory
+- **Pattern matching** (`_match_sql_patterns`): Injects known-good SQL patterns into HYPOTHESIZE
+  prompt based on question keywords. 6 patterns: avg-monthly (AVG not SUM/12), percentage
+  (CAST AS REAL), ratio (A/B), lowest/highest (ORDER BY LIMIT 1), abnormal levels, JOIN-for-names.
+- **Result**: 49/50 completed, 26/50 accurate. Batch 2 hit 8/10 (best ever).
+
+### Meta Analytics Agent — Key Design Lessons
+See `docs/research/2026-03-30-meta-analytics-agent-learnings.md` for full analysis.
+
+Mapping to SMA:
+| Meta Concept | SMA Equivalent | Status |
+|---|---|---|
+| Iterative Reasoning Loop | Step 5e (inspect + correct) | Implemented (net-neutral with MiniMax) |
+| Reference Experts / Shared Memory | SQL pattern memory | Implemented (6 patterns) |
+| Cookbook / Recipe / Ingredient | Domain / Prompt / Knowledge | Already existed |
+| Custom Validators | Seam validator | Already existed (search metrics only) |
+| Show Your Work | Trace module | Already existed |
+
+**Key insight**: Meta's approach works because they use a strong model (likely internal LLaMA 3+)
+that can reason about query results and self-correct. MiniMax M2.7 correctly identifies problems
+but can't write correct replacement SQL. The iterative loop would likely work much better with
+Claude Sonnet or GPT-4o.
+
+## Results Progression (Complete)
+
+| Version | Completed | Accurate | Key Change |
+|---------|-----------|----------|------------|
+| v10 | 43/50 (86%) | 23/50 (46%) | Baseline |
+| v11 | 41/50 (82%) | 23/50 (46%) | CSV/None/scalar fixes |
+| v12 | 45/50 (90%) | 26/50 (52%) | 2 SQL retries + empty retry |
+| v13 | 48/50 (96%) | 26/50 (52%) | Alternative approach fallback |
+| v14 | 49/50 (98%) | 25/50 (50%) | JSON schema context fix |
+| v15 | 48/50 (96%) | 25/50 (50%) | Iterative reasoning loop |
+| v16 | 49/50 (98%) | 26/50 (52%) | SQL pattern memory |
+
+## Commits on Branch (8 total)
+```
+6887bfd feat: SQL retry loop (2 retries) + empty result retry + configurable temperature
+644b7d1 docs: fix 30+ stale data/knowledge/ paths
+c8f2bf2 feat: alternative SQL approach fallback + aggregation prompt hints
+f586a77 fix: JSON schema context now shows record columns instead of outer keys
+8cf8ff7 chore: document sanity check experiment (tried + reverted) + v14 handover
+c980586 fix: improve header detection for multi-column predicted output
+c374839 feat: iterative reasoning loop + SQL pattern memory (Meta Analytics Agent)
+```
 
 ## PR
 https://github.com/surahli123/search-metric-analyzer/pull/30
