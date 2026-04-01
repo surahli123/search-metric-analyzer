@@ -197,6 +197,12 @@ Claude Sonnet or GPT-4o.
 | v14 | 49/50 (98%) | 25/50 (50%) | JSON schema context fix |
 | v15 | 48/50 (96%) | 25/50 (50%) | Iterative reasoning loop |
 | v16 | 49/50 (98%) | 26/50 (52%) | SQL pattern memory |
+| v17 | 48/50 (96%) | 26/50 (52%) | SQLite sample rows in schema |
+| v18 | 46/50 (92%) | **27/50 (54%)** | **sqlite_scanner (no row cap) + JOIN-first strategy** |
+| v19 | 49/50 (98%) | 26/50 (52%) | Evaluator cell normalization (strip %, quotes) |
+
+**Best-of-3 ceiling:** 31/50 (62%) — theoretical max with current pipeline + MiniMax M2.7.
+**Single-run band:** 25-27/50 (50-54%) — oscillates due to 9 nondeterministic tasks.
 
 ## Multi-Model Comparison on 6 Hardest Tasks
 
