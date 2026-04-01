@@ -26,9 +26,13 @@ import os
 import sys
 
 # Tolerance for floating-point comparison.
-# 1e-6 is tight enough to catch real errors but loose enough
-# to handle representation differences (e.g., "1" vs "1.000000").
+# Absolute tolerance: handles representation differences (e.g., "1" vs "1.000000").
+# Relative tolerance: handles precision differences from different SQL backends
+# (e.g., DuckDB REAL vs DOUBLE, SQLite vs DuckDB type casting). 0.1% relative
+# tolerance catches floating-point representation issues without accepting
+# fundamentally wrong answers.
 FLOAT_TOLERANCE = 1e-6
+RELATIVE_TOLERANCE = 0.001  # 0.1%
 
 
 def _parse_csv_string(text: str) -> list[list[str]]:
@@ -82,11 +86,20 @@ def _values_match(predicted: str, gold: str) -> bool:
     pred = _normalize_cell(predicted)
     gold_val = _normalize_cell(gold)
 
-    # Try numeric comparison first
+    # Try numeric comparison first — absolute then relative tolerance
     try:
         pred_float = float(pred)
         gold_float = float(gold_val)
-        return abs(pred_float - gold_float) <= FLOAT_TOLERANCE
+        # Absolute tolerance for small numbers (handles "1" vs "1.000000")
+        if abs(pred_float - gold_float) <= FLOAT_TOLERANCE:
+            return True
+        # Relative tolerance for larger numbers (handles DuckDB REAL vs DOUBLE
+        # precision differences, e.g., 459.956264287... vs 459.956264287...)
+        if gold_float != 0:
+            rel_diff = abs(pred_float - gold_float) / abs(gold_float)
+            if rel_diff <= RELATIVE_TOLERANCE:
+                return True
+        return False
     except (ValueError, OverflowError):
         pass
 

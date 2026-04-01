@@ -127,6 +127,13 @@ def run_task(
             context_files=task.get("context_files"),
         )
 
+        # --- Step 2.5: Data Exploration — TRIED AND REVERTED ---
+        # Attempted question decomposition with exploratory queries (v22).
+        # Issues: 1) LLM wraps exploration JSON in markdown fences → parse failure
+        # 2) Exploration results bloat the prompt → HYPOTHESIZE response truncated
+        # 3) Even with successful exploration, LLM still writes same wrong SQL
+        # The _explore_data() function is preserved for future use with stronger models.
+
         # --- Step 3: LLM call #1 — HYPOTHESIZE (plan SQL) ---
         # Get the prompt builders from the domain, then call the LLM.
         hyp_prompts = domain.get_prompts("hypothesize")
@@ -136,8 +143,9 @@ def run_task(
             knowledge=knowledge,
             schema_info=schema_info,
         )
+        # (exploration context injection removed — see Step 2.5 comment)
 
-        raw_hyp_response = llm_callable(user_prompt, system_prompt, 2000)
+        raw_hyp_response = llm_callable(user_prompt, system_prompt, 3000)
 
         # Parse the JSON plan from the LLM response
         try:
@@ -738,6 +746,90 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 # Internal helpers — SQL extraction and execution
 # ---------------------------------------------------------------------------
+
+def _explore_data(
+    question: str,
+    schema_info: str,
+    knowledge: str,
+    llm_callable,
+    task: dict,
+) -> str:
+    """Run exploratory queries to understand the data before planning SQL.
+
+    WHY: The LLM writes wrong SQL because it doesn't understand the data.
+    For example, task_169 uses SUM instead of AVG because it doesn't know
+    that Consumption values are per-customer-per-month (~500), not totals.
+    By running exploratory queries first (row counts, sample values, value
+    ranges), the LLM gets concrete data context that helps it write correct SQL.
+
+    Only triggers for complex questions (aggregation, percentage, comparison).
+    Simple lookups skip exploration to avoid unnecessary LLM calls.
+
+    Returns a string with exploration results to inject into the HYPOTHESIZE
+    prompt. Returns empty string if exploration is skipped or fails.
+    """
+    q = question.lower()
+
+    # Only explore for complex questions — simple lookups don't need it
+    needs_exploration = any(kw in q for kw in [
+        "average", "percentage", "percent", "%", "ratio", "how many times",
+        "total", "sum", "count", "more than", "less than", "between",
+        "compare", "difference", "highest", "lowest", "most", "least",
+    ])
+    if not needs_exploration:
+        return ""
+
+    # Ask the LLM to plan 2-3 exploratory queries
+    explore_prompt = (
+        f"Before answering this question, I need to understand the data.\n\n"
+        f"QUESTION: {question}\n\n"
+        f"SCHEMA:\n{schema_info}\n\n"
+        f"Write 2-3 short exploratory SQL queries to understand:\n"
+        f"1. How many rows match the key filters in the question?\n"
+        f"2. What do sample values look like for the key columns?\n"
+        f"3. What is the range (MIN/MAX) of any numeric column being aggregated?\n\n"
+        f"Keep queries simple — SELECT COUNT(*), MIN/MAX, or LIMIT 3.\n"
+        f"Return JSON: {{\"queries\": [\"SQL1\", \"SQL2\", \"SQL3\"]}}"
+    )
+
+    try:
+        response = llm_callable(
+            explore_prompt,
+            "You are a data analyst. Write short exploratory SQL queries. Return only JSON.",
+            800,
+        )
+        explore_plan = extract_json(response)
+        queries = explore_plan.get("queries", [])[:3]
+    except Exception:
+        return ""  # Exploration failed — proceed without it
+
+    # Execute exploratory queries and collect results
+    results = []
+    for sql in queries:
+        if not sql or not sql.strip():
+            continue
+        try:
+            result = _execute_sql_for_task(task, sql)
+            if not result.get("error") and result.get("rows"):
+                rows = result["rows"]
+                cols = result.get("columns", [])
+                # Format compactly: SQL → result preview
+                preview = ", ".join(
+                    f"{c}={rows[0].get(c)}" for c in cols
+                ) if rows else "(empty)"
+                row_count = len(rows)
+                results.append(
+                    f"Q: {sql[:120]}\n"
+                    f"  → {row_count} row(s): {preview}"
+                )
+        except Exception:
+            pass  # Skip failed queries
+
+    if not results:
+        return ""
+
+    return "\n".join(results)
+
 
 def _detect_join_hints(table_columns: dict[str, list[str]]) -> list[str]:
     """Detect shared column names across tables for JOIN hint generation.
