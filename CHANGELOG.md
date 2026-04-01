@@ -5,6 +5,41 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Session: KDD v10→v22 — 49/50 completed, 25-27/50 accurate (2026-03-29 to 2026-03-31)
+
+### Added
+- SQL retry loop (1→2 retries) with richer error hints (column mismatch, missing JOIN)
+- Empty result retry — when SQL returns 0 rows, retries with logic-error guidance
+- Alternative SQL approach fallback — tries all HYPOTHESIZE approaches, not just best
+- All-approaches chooser — LLM picks best result when multiple approaches succeed
+- Iterative reasoning loop (Meta Analytics Agent inspired) — inspect result + correct
+- SQL pattern memory — 6 known-good patterns injected based on question keywords
+- SQLite sample rows in schema context — shows actual data values alongside CREATE TABLE
+- JOIN hints from shared column names across tables (auto-detected)
+- Data exploration function (question decomposition) — preserved but disabled for current models
+- Evaluator cell normalization (strip %, quotes, thousands separators)
+- Evaluator relative numeric tolerance (0.1%) for float precision differences
+- Improved header detection for multi-column predicted output
+- 7 new tests in test_runner_unified.py (JSON-only, unnest, CSV escaping, None, scalar/rowset)
+- Meta Analytics Agent research doc with architecture mapping
+- Multi-model comparison: 6 models × 6 hardest tasks = 0/36 correct
+- Best-of-3 ensemble runner for theoretical ceiling measurement
+
+### Changed
+- sqlite_scanner replaces Python materialization for SQLite loading (no more 100K row cap)
+- JSON schema context now reads full file via json.load() instead of truncated read_file()
+- Prompt strategy: "JOIN immediately when needed" replaces "prefer simple queries"
+- make_openai_llm() now accepts configurable temperature parameter (default 0.0)
+- Corrected AVG/SUM pattern hint (AVG(X)/12 not SUM(X)/12)
+- 30+ stale data/knowledge/ paths updated to domains/search_metrics/knowledge/
+
+### Fixed
+- JSON schema showing only outer keys ("table") instead of record columns
+- Header-as-data false negatives when predicted has more columns than gold
+- .DS_Store picked up as task file in batch runner
+
+---
+
 ## Session: KDD v10 — 43/50 completed, 23/50 accurate (2026-03-28, continued)
 
 ### Added
