@@ -556,6 +556,8 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
     """
     context_files = task.get("context_files", {})
     sections = []
+    # Track columns per table for JOIN hint detection
+    all_table_columns: dict[str, list[str]] = {}
 
     # SQLite databases — schema + sample rows for better column understanding
     for db_path in context_files.get("db", []):
@@ -587,6 +589,7 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
                     sample_cur.execute(f"SELECT * FROM [{tname}] LIMIT 2")
                     sample_rows = sample_cur.fetchall()
                     col_names = [desc[0] for desc in sample_cur.description]
+                    all_table_columns[tname] = col_names
                     if sample_rows:
                         samples = []
                         for row in sample_rows:
@@ -618,6 +621,8 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
         rows = content.get("rows", [])
         total_rows = content.get("total_rows", 0)
 
+        # Track columns for JOIN hints
+        all_table_columns[table_name] = columns
         # Format as a pseudo-schema so the LLM understands the structure
         col_list = ", ".join(columns)
         sections.append(
@@ -661,6 +666,7 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
             records = data.get("records", [])
             if records and isinstance(records[0], dict):
                 col_names = list(records[0].keys())[:20]
+                all_table_columns[real_name] = col_names
                 sections.append(
                     f"-- JSON Table: {real_name} ({len(records)} rows)\n"
                     f"-- Columns: {', '.join(col_names)}"
@@ -716,12 +722,57 @@ def _build_schema_context(task: Dict[str, Any]) -> str:
     else:
         header += "  (none)"
 
+    # --- JOIN hints from shared column names ---
+    # WHY: Codex analysis found the LLM often writes wrong JOINs because it
+    # doesn't know which columns to join on. Detecting shared column names
+    # across tables and showing them as JOIN hints gives the LLM the right
+    # join keys without requiring foreign key constraints in the schema.
+    join_hints = _detect_join_hints(all_table_columns)
+    if join_hints:
+        header += "\n\n=== JOIN HINTS (shared columns across tables) ===\n"
+        header += "\n".join(f"  - {h}" for h in join_hints)
+
     return header + "\n\n=== DETAILED SCHEMAS ===\n\n" + "\n\n".join(sections)
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers — SQL extraction and execution
 # ---------------------------------------------------------------------------
+
+def _detect_join_hints(table_columns: dict[str, list[str]]) -> list[str]:
+    """Detect shared column names across tables for JOIN hint generation.
+
+    Compares column names across all tables. When two or more tables share
+    a column name (case-insensitive), it's likely a JOIN key.
+
+    WHY: Codex analysis found the LLM writes wrong JOINs because it doesn't
+    know which columns to join on. Showing shared columns as hints gives
+    the LLM the right join keys without requiring FK constraints.
+    """
+    if len(table_columns) < 2:
+        return []
+
+    hints = []
+    # Build lowercase column → table mapping
+    col_to_tables: dict[str, list[str]] = {}
+    for table_name, cols in table_columns.items():
+        for col in cols:
+            key = col.lower()
+            if key not in col_to_tables:
+                col_to_tables[key] = []
+            col_to_tables[key].append(table_name)
+
+    # Find columns shared by 2+ tables
+    for col_lower, tables in sorted(col_to_tables.items()):
+        if len(tables) >= 2:
+            # Skip generic columns unlikely to be join keys
+            if col_lower in ("id", "date", "name", "type", "status", "description"):
+                continue
+            table_list = " & ".join(tables[:3])
+            hints.append(f"JOIN {table_list} ON {col_lower}")
+
+    return hints[:5]  # Cap at 5 hints to avoid prompt bloat
+
 
 def _extract_best_sql(hyp_result) -> Optional[str]:
     """Extract the best SQL query from the HYPOTHESIZE result.
