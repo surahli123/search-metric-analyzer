@@ -252,22 +252,65 @@ def run_task(
             except Exception:
                 pass  # Empty retry failed — use original (empty) result
 
-        # --- Step 5d: Try alternative SQL approaches ---
-        # WHY: The LLM generates 1-3 SQL approaches but we only try the "best"
-        # one. v12 analysis found 15 tasks where the best approach was wrong but
-        # an alternative would have been correct. This costs only SQL execution
-        # time (no extra LLM calls) — cheap insurance.
-        # Only triggers when: SQL failed entirely OR returned 0 rows.
+        # --- Step 5d: Execute ALL SQL approaches and pick the best ---
+        # WHY: Codex analysis found the LLM often generates a correct SQL at
+        # index 1 or 2 but best_approach_index picks the wrong one. Instead of
+        # only trying alternatives on failure, we now execute ALL approaches and
+        # use a chooser LLM call to pick the best result when multiple succeed.
+        # Cost: extra SQL executions (cheap, ~0ms each) + 1 LLM call for chooser
+        # (only when 2+ approaches return different results).
         rows = sql_result.get("rows", [])
-        if (sql_result.get("error") or len(rows) == 0) and len(all_sql_approaches) > 1:
-            for alt_sql in all_sql_approaches[1:]:  # Skip index 0 (already tried)
-                logger.info("Trying alternative SQL approach: %s...", alt_sql[:80])
+        if len(all_sql_approaches) > 1:
+            # Collect all successful results
+            candidates = []
+            if not sql_result.get("error") and len(rows) > 0:
+                candidates.append({"sql": _current_sql, "result": sql_result})
+            for alt_sql in all_sql_approaches[1:]:
                 alt_result = _execute_sql_for_task(task, alt_sql)
                 if not alt_result.get("error") and len(alt_result.get("rows", [])) > 0:
-                    sql_result = alt_result
-                    _current_sql = alt_sql
-                    logger.info("Alternative approach succeeded with %d rows", len(alt_result["rows"]))
-                    break  # Use first alternative that returns data
+                    candidates.append({"sql": alt_sql, "result": alt_result})
+
+            if len(candidates) == 0:
+                pass  # All approaches failed — keep original (error) result
+            elif len(candidates) == 1:
+                # Only one succeeded — use it
+                sql_result = candidates[0]["result"]
+                _current_sql = candidates[0]["sql"]
+            else:
+                # Multiple approaches returned results — ask LLM to pick best
+                chooser_parts = [f"QUESTION: {question}\n"]
+                for i, cand in enumerate(candidates):
+                    cand_rows = cand["result"].get("rows", [])
+                    cand_cols = cand["result"].get("columns", [])
+                    preview = ""
+                    if cand_rows:
+                        preview = ", ".join(
+                            f"{c}={cand_rows[0].get(c)}" for c in cand_cols
+                        )
+                    chooser_parts.append(
+                        f"APPROACH {i}: SQL: {cand['sql'][:150]}\n"
+                        f"  Result ({len(cand_rows)} rows): {preview}\n"
+                    )
+                chooser_parts.append(
+                    "Which approach best answers the question? "
+                    "Return JSON: {\"best\": 0} or {\"best\": 1} etc."
+                )
+                try:
+                    chooser_response = llm_callable(
+                        "\n".join(chooser_parts),
+                        "You are a data analyst. Pick the approach whose result best answers the question.",
+                        200,
+                    )
+                    chooser_result = extract_json(chooser_response)
+                    best_idx = chooser_result.get("best", 0)
+                    if isinstance(best_idx, int) and 0 <= best_idx < len(candidates):
+                        sql_result = candidates[best_idx]["result"]
+                        _current_sql = candidates[best_idx]["sql"]
+                        logger.info("Chooser picked approach %d of %d", best_idx, len(candidates))
+                except Exception:
+                    # Chooser failed — use first candidate (best_approach_index)
+                    sql_result = candidates[0]["result"]
+                    _current_sql = candidates[0]["sql"]
 
         # --- Step 5e: Iterative reasoning loop (inspired by Meta Analytics Agent) ---
         # WHY: Our earlier sanity check (v14) failed because it asked the LLM to
