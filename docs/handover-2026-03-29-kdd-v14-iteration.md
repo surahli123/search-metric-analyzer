@@ -201,8 +201,19 @@ Claude Sonnet or GPT-4o.
 | v18 | 46/50 (92%) | **27/50 (54%)** | **sqlite_scanner (no row cap) + JOIN-first strategy** |
 | v19 | 49/50 (98%) | 26/50 (52%) | Evaluator cell normalization (strip %, quotes) |
 
-**Best-of-3 ceiling:** 31/50 (62%) — theoretical max with current pipeline + MiniMax M2.7.
+| v20 | 47/50 (94%) | 26/50 (52%) | All-approaches chooser |
+| v21 | 48/50 (96%) | 26/50 (52%) | JOIN hints from shared columns |
+
+**Best single run: 27/50 (54%) — v18**
 **Single-run band:** 25-27/50 (50-54%) — oscillates due to 9 nondeterministic tasks.
+**Best-of-3 ceiling:** 31/50 (62%) — theoretical max with current pipeline + MiniMax M2.7.
+
+### Codex-Inspired Improvements (v18-v21)
+1. **sqlite_scanner** — eliminated 100K row cap, queries full SQLite files directly (v18)
+2. **JOIN-first prompt** — removed "prefer simple queries" bias against necessary JOINs (v18)
+3. **All-approaches chooser** — executes all 2-3 SQL approaches, LLM picks best result (v20)
+4. **JOIN hints** — auto-detects shared column names across tables for JOIN guidance (v21)
+5. **Evaluator normalization** — strips %, quotes, thousands separators before matching (v19)
 
 ## Multi-Model Comparison on 6 Hardest Tasks
 
