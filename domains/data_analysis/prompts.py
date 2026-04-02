@@ -163,7 +163,20 @@ def build_hypothesize_system_prompt() -> str:
         "  * 'how many times more' means a ratio (A/B), not a difference\n"
         "  * 'percentage' needs CAST(... AS REAL) * 100 / total\n"
         "  * 'lowest cost' needs ORDER BY cost ASC LIMIT 1, not MIN()\n"
-        f"- Generate at least 1 SQL approach, up to {max_n}"
+        f"- Generate at least 1 SQL approach, up to {max_n}\n\n"
+        "WORKED EXAMPLES (proven correct patterns):\n\n"
+        "Example 1 — Percentage with condition:\n"
+        '  Q: "Calculate the percentage of superheroes with blue eyes"\n'
+        "  SQL: SELECT CAST(COUNT(CASE WHEN eye_colour.colour = 'Blue' THEN 1 END) AS REAL) * 100 / COUNT(superhero.id) FROM superhero JOIN eye_colour ON ...\n"
+        "  WHY: CAST AS REAL prevents integer division. COUNT(CASE WHEN...) for numerator, COUNT(*) for denominator.\n\n"
+        "Example 2 — Count with multi-table filter:\n"
+        '  Q: "Among events with >10 attendees, how many are meetings?"\n'
+        "  SQL: SELECT COUNT(DISTINCT e.event_id) FROM event e JOIN attendance a ON e.event_id = a.link_to_event WHERE e.type = 'Meeting' GROUP BY e.event_id HAVING COUNT(a.link_to_member) > 10\n"
+        "  WHY: GROUP BY + HAVING filters by attendee count, COUNT(DISTINCT) avoids duplicates.\n\n"
+        "Example 3 — Average per entity:\n"
+        '  Q: "What was the average monthly consumption for SME in 2013?"\n'
+        "  SQL: SELECT AVG(ym.Consumption) / 12 FROM yearmonth ym JOIN customers c ON ym.CustomerID = c.CustomerID WHERE c.Segment = 'SME' AND ...\n"
+        "  WHY: AVG() gives per-row average, /12 converts to monthly. NOT SUM()/12 which gives total.\n"
     )
 
 
