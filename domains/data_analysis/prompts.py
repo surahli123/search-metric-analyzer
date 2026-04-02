@@ -23,6 +23,7 @@ then calls reset_prompt_config() to restore defaults before the next mutation.
 
 from __future__ import annotations
 import copy
+from pathlib import Path
 
 
 # =============================================================================
@@ -180,6 +181,53 @@ def build_hypothesize_system_prompt() -> str:
     )
 
 
+def _load_learnings(question: str) -> list[str]:
+    """Load relevant learnings from kdd/learnings.json based on question keywords.
+
+    AutoKaggle pattern: persistent LEARNINGS.md accumulates generalizable rules
+    across campaigns. We do the same with learnings.json — each learning is a
+    question pattern with correct SQL, common errors, and tips.
+
+    Returns a list of relevant learning strings to inject into the prompt.
+    """
+    import json as _json
+    learnings_path = Path(__file__).parent.parent.parent / "kdd" / "learnings.json"
+    if not learnings_path.exists():
+        return []
+
+    try:
+        with open(learnings_path) as f:
+            data = _json.load(f)
+    except Exception:
+        return []
+
+    q = question.lower()
+    results = []
+    patterns = data.get("patterns", {})
+
+    # Match question keywords to learning patterns
+    keyword_map = {
+        "percentage_of_X_with_condition": ["percentage", "percent", "%"],
+        "average_monthly_X": ["average monthly", "avg monthly", "average per month"],
+        "count_with_group_filter": ["how many", "count", "more than", "at least"],
+        "ratio_how_many_times": ["how many times", "times more", "times as", "ratio"],
+        "lowest_highest_with_name": ["lowest", "highest", "least", "most", "cheapest", "fastest"],
+        "join_for_human_readable_names": ["name", "list", "give", "what is the name"],
+    }
+
+    for pattern_key, keywords in keyword_map.items():
+        if pattern_key in patterns and any(kw in q for kw in keywords):
+            p = patterns[pattern_key]
+            results.append(
+                f"LEARNING ({pattern_key}): "
+                f"Correct: {p['correct']}. "
+                f"Common error: {p['wrong'][0] if p.get('wrong') else 'N/A'}. "
+                f"Tip: {p.get('tip', '')}"
+            )
+
+    return results[:3]  # Cap at 3 to avoid prompt bloat
+
+
 def _match_sql_patterns(question: str) -> list[str]:
     """Match question keywords to known-good SQL patterns.
 
@@ -292,7 +340,18 @@ def build_hypothesize_user_prompt(
             + "\n".join(f"- {p}" for p in patterns)
         )
 
-    # Section 5: Instruction reminder
+    # Section 5: Persistent learnings (AutoKaggle pattern)
+    # WHY: AutoKaggle accumulates LEARNINGS.md across campaigns. We load
+    # relevant learnings from kdd/learnings.json — correct SQL patterns,
+    # common errors, and tips from past runs.
+    learnings = _load_learnings(question)
+    if learnings:
+        sections.append(
+            "PAST LEARNINGS (from previous runs — avoid these mistakes):\n"
+            + "\n".join(f"- {l}" for l in learnings)
+        )
+
+    # Section 6: Instruction reminder
     sections.append(
         "Plan 1-3 SQL approaches to answer the question. "
         "Use only tables and columns from the schema above."

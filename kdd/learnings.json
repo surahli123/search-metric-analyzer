@@ -1,0 +1,36 @@
+{
+  "_description": "Persistent learnings from KDD pipeline runs. Updated after each batch.",
+  "_format": "question_pattern → {correct_sql_pattern, common_errors, tips}",
+  "patterns": {
+    "percentage_of_X_with_condition": {
+      "correct": "CAST(COUNT(CASE WHEN condition THEN 1 END) AS REAL) * 100 / COUNT(*)",
+      "wrong": ["COUNT(*) without CAST (integer division = 0)", "Wrong denominator table"],
+      "tip": "Both numerator and denominator COUNT must use the same base table or JOIN"
+    },
+    "average_monthly_X": {
+      "correct": "AVG(column) / 12",
+      "wrong": ["SUM(column) / 12 (gives total, not average)", "AVG without /12"],
+      "tip": "AVG() computes per-row mean. SUM() computes total across all rows."
+    },
+    "count_with_group_filter": {
+      "correct": "SELECT COUNT(DISTINCT id) FROM ... GROUP BY ... HAVING COUNT(*) > N",
+      "wrong": ["WHERE COUNT(*) > N (can't use aggregate in WHERE)"],
+      "tip": "Use HAVING for aggregate conditions, WHERE for row conditions"
+    },
+    "ratio_how_many_times": {
+      "correct": "SUM(CASE WHEN A THEN amount END) / SUM(CASE WHEN B THEN amount END)",
+      "wrong": ["COUNT(A) - COUNT(B) (difference, not ratio)"],
+      "tip": "Ratio = A/B. Difference = A-B. Read the question carefully."
+    },
+    "lowest_highest_with_name": {
+      "correct": "SELECT name FROM table ORDER BY value ASC|DESC LIMIT 1",
+      "wrong": ["SELECT MIN(value) (returns value, not the associated name)"],
+      "tip": "MIN/MAX returns the value. To get the associated row, use ORDER BY + LIMIT 1."
+    },
+    "join_for_human_readable_names": {
+      "correct": "JOIN the reference table to get names instead of IDs",
+      "wrong": ["Returning raw IDs like 'rec4BLdZHS2Blfp4v' instead of names"],
+      "tip": "If the question asks for names/descriptions, JOIN to get them."
+    }
+  }
+}

@@ -344,27 +344,29 @@ def run_task(
                     f"{c}={rows[0].get(c)}" for c in columns
                 ) if rows else "(empty)"
 
+                # AutoKaggle-inspired structured 6-point review checklist.
+                # More rigorous than generic "is this correct?" — each point
+                # targets a specific failure mode from our v10-v23 analysis.
                 inspect_prompt = (
-                    f"You executed this SQL to answer a question. Inspect the result.\n\n"
-                    f"QUESTION: {question}\n\n"
-                    f"SQL: {_current_sql}\n\n"
+                    f"REVIEW this SQL result using the 6-point checklist.\n\n"
+                    f"QUESTION: {question}\n"
+                    f"SQL: {_current_sql}\n"
                     f"RESULT ({len(rows)} row{'s' if len(rows)>1 else ''}): {result_preview}\n\n"
-                    f"SCHEMA:\n{schema_info}\n\n"
-                    f"Does this result correctly answer the question?\n"
-                    f"Think step by step:\n"
-                    f"1. What does the question actually ask for?\n"
-                    f"2. Does your SQL compute exactly that?\n"
-                    f"3. Is the magnitude reasonable?\n\n"
-                    f"If CORRECT: return {{\"done\": true}}\n"
-                    f"If WRONG: return {{\"done\": false, \"reason\": \"what's wrong\", "
-                    f"\"sql\": \"corrected SQL query\"}}\n\n"
-                    f"Common mistakes to check:\n"
-                    f"- 'average monthly' needs /12 or GROUP BY month, not just AVG()\n"
-                    f"- 'percentage' needs CAST(... AS REAL) * 100 / total_count\n"
-                    f"- 'how many times more' is a ratio (A/B), not a count\n"
-                    f"- Wrong table for the entity being asked about\n"
-                    f"- Missing or wrong JOIN condition\n"
-                    f"Return ONLY the JSON object."
+                    f"CHECKLIST (answer each):\n"
+                    f"1. AGGREGATION: Does the SQL use the right function? "
+                    f"(AVG vs SUM, COUNT vs SUM, percentage needs CAST AS REAL)\n"
+                    f"2. FILTERS: Do WHERE clauses match ALL conditions in the question? "
+                    f"(missing filter = wrong subset)\n"
+                    f"3. JOINS: Are all tables needed by the question included? "
+                    f"(returning IDs instead of names = missing JOIN)\n"
+                    f"4. MAGNITUDE: Is {result_preview} a reasonable answer? "
+                    f"(e.g., 82 million for 'average consumption' is wrong)\n"
+                    f"5. COLUMNS: Does the output contain the fields the question asks for?\n"
+                    f"6. DIRECTION: For 'lowest/highest', is ORDER BY ASC/DESC correct?\n\n"
+                    f"If ALL checks pass: return {{\"done\": true}}\n"
+                    f"If ANY check fails: return {{\"done\": false, \"failed_check\": 1-6, "
+                    f"\"reason\": \"...\", \"sql\": \"corrected SQL\"}}\n"
+                    f"Return ONLY JSON."
                 )
                 try:
                     inspect_response = llm_callable(inspect_prompt, system_prompt, 1000)
