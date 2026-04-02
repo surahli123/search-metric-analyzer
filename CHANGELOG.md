@@ -5,6 +5,31 @@ Format: version, date, summary, then categorized changes.
 
 ---
 
+## Session: KDD v23→v28 — 30/50 accurate (60% record) (2026-04-01 to 2026-04-02)
+
+### Added
+- Few-shot SQL examples in HYPOTHESIZE prompt (3 worked examples: percentage, count, average)
+- AutoKaggle-inspired persistent learnings (kdd/learnings.json) injected into prompts
+- Structured 6-point SQL reviewer (replaces generic "is this correct?" check)
+- Experiment registry (kdd/state.py) with per-task SQL attempt tracking
+- Negative example injection (past failed SQL shown as "do NOT repeat these")
+- Batch retrospective analysis after each run (AutoKaggle pattern)
+- File locking + atomic writes for parallel-safe experiment registry
+- Token-efficient agent teams design doc
+- AutoKaggle architecture analysis + mapping to SMA
+- Multi-model comparison (6 models × 6 hardest tasks)
+
+### Changed
+- Prompt strategy: "JOIN immediately when needed" (was "prefer simple queries")
+- HYPOTHESIZE max_tokens increased from 2000 to 3000
+- Data exploration function preserved but disabled (needs stronger model)
+
+### Fixed
+- Race condition in experiment registry (5 parallel processes corrupted JSON)
+- Duplicate code in record_attempt after refactor to locked pattern
+
+---
+
 ## Session: KDD v10→v22 — 49/50 completed, 25-27/50 accurate (2026-03-29 to 2026-03-31)
 
 ### Added
