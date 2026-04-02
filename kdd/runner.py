@@ -59,6 +59,7 @@ except ImportError:
 
 from kdd.task_loader import load_task
 from kdd.evaluator import evaluate
+from kdd.state import record_attempt, get_failed_sql_for_task
 from core.file_reader import read_file
 from core.sql_executor import execute_sql
 from domains.data_analysis import DataAnalysisDomain
@@ -144,6 +145,16 @@ def run_task(
             schema_info=schema_info,
         )
         # (exploration context injection removed — see Step 2.5 comment)
+
+        # Inject failed SQL from past runs as negative examples (AutoKaggle pattern)
+        # WHY: AutoKaggle's experiment registry tracks what was tried and failed.
+        # We inject past failures so the LLM avoids repeating the same mistakes.
+        failed_sql = get_failed_sql_for_task(task_id)
+        if failed_sql:
+            neg_examples = "\n".join(f"  - {s[:120]}" for s in failed_sql[-3:])
+            user_prompt += (
+                f"\n\nPREVIOUS FAILED ATTEMPTS (do NOT repeat these):\n{neg_examples}"
+            )
 
         raw_hyp_response = llm_callable(user_prompt, system_prompt, 3000)
 
@@ -434,6 +445,18 @@ def run_task(
             )
             raw_syn_response = llm_callable(syn_user, syn_system, 1000)
             answer = _clean_csv_response(raw_syn_response)
+
+        # Record this attempt for the experiment registry (AutoKaggle pattern).
+        # Future runs can see what SQL was tried and whether it worked.
+        try:
+            record_attempt(
+                task_id=task_id,
+                sql=_current_sql[:200] if _current_sql else "",
+                result_preview=answer[:100] if answer else "",
+                match=False,  # We don't know match here — batch_run.py updates later
+            )
+        except Exception:
+            pass  # Don't let recording failures kill the pipeline
 
         return {
             "task_id": task_id,
