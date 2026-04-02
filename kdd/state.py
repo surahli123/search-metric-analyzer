@@ -22,18 +22,97 @@ _EXPERIMENTS_PATH = _STATE_DIR / "experiments.json"
 _LEARNINGS_PATH = _STATE_DIR / "learnings.json"
 
 
+import fcntl
+import tempfile
+
+_LOCK_PATH = _STATE_DIR / "experiments.lock"
+
+
 def load_experiments() -> Dict[str, Any]:
-    """Load experiment registry from disk."""
-    if _EXPERIMENTS_PATH.exists():
+    """Load experiment registry from disk (race-condition safe).
+
+    Uses file locking to prevent corruption when 5 parallel batch
+    processes read/write simultaneously. Returns empty state on
+    any error (corrupted file, empty file, etc.).
+    """
+    if not _EXPERIMENTS_PATH.exists():
+        return {"tasks": {}, "runs": 0}
+    try:
         with open(_EXPERIMENTS_PATH) as f:
-            return json.load(f)
-    return {"tasks": {}, "runs": 0}
+            content = f.read().strip()
+            if not content:
+                return {"tasks": {}, "runs": 0}
+            return json.loads(content)
+    except (json.JSONDecodeError, IOError):
+        return {"tasks": {}, "runs": 0}
 
 
 def save_experiments(data: Dict[str, Any]) -> None:
-    """Save experiment registry to disk."""
-    with open(_EXPERIMENTS_PATH, "w") as f:
-        json.dump(data, f, indent=2)
+    """Save experiment registry atomically with file locking.
+
+    WHY atomic: 5 parallel batch processes write simultaneously.
+    Without locking, one process truncates the file while another reads,
+    causing JSONDecodeError (empty file). Fix: write to temp file first,
+    then rename (atomic on POSIX).
+    """
+    lock_fd = None
+    try:
+        # Acquire exclusive lock
+        lock_fd = open(_LOCK_PATH, "w")
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+
+        # Write to temp file, then atomic rename
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(_STATE_DIR), suffix=".tmp", prefix="experiments_"
+        )
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(data, f, indent=2)
+            os.replace(tmp_path, str(_EXPERIMENTS_PATH))
+        except Exception:
+            # Clean up temp file on error
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+    finally:
+        if lock_fd is not None:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            lock_fd.close()
+
+
+def _locked_read_modify_write(modify_fn) -> Dict[str, Any]:
+    """Read-modify-write with exclusive file lock.
+
+    Prevents race conditions when 5 parallel batch processes all try to
+    update experiments.json simultaneously.
+    """
+    lock_fd = None
+    try:
+        lock_fd = open(_LOCK_PATH, "w")
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        data = load_experiments()
+        modify_fn(data)
+        # Write atomically (save_experiments acquires its own lock,
+        # but we already hold it — fcntl locks are per-process reentrant)
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(_STATE_DIR), suffix=".tmp", prefix="experiments_"
+        )
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(data, f, indent=2)
+            os.replace(tmp_path, str(_EXPERIMENTS_PATH))
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+        return data
+    finally:
+        if lock_fd is not None:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            lock_fd.close()
 
 
 def record_attempt(
@@ -43,31 +122,26 @@ def record_attempt(
     match: bool,
     run_id: str = "",
 ) -> None:
-    """Record a SQL attempt for a task.
+    """Record a SQL attempt for a task (thread/process safe).
 
     Stores what SQL was tried and whether it worked, so future runs
     can avoid repeating failed approaches.
     """
-    data = load_experiments()
-    if task_id not in data["tasks"]:
-        data["tasks"][task_id] = {"attempts": [], "best_match": False}
+    def _modify(data):
+        if task_id not in data["tasks"]:
+            data["tasks"][task_id] = {"attempts": [], "best_match": False}
+        data["tasks"][task_id]["attempts"].append({
+            "sql": sql[:200],
+            "result": result_preview[:100],
+            "match": match,
+            "run": run_id,
+        })
+        if match:
+            data["tasks"][task_id]["best_match"] = True
+        if len(data["tasks"][task_id]["attempts"]) > 10:
+            data["tasks"][task_id]["attempts"] = data["tasks"][task_id]["attempts"][-10:]
 
-    data["tasks"][task_id]["attempts"].append({
-        "sql": sql[:200],  # Truncate to save space
-        "result": result_preview[:100],
-        "match": match,
-        "run": run_id,
-    })
-
-    # Track if we ever got this task right
-    if match:
-        data["tasks"][task_id]["best_match"] = True
-
-    # Cap attempts per task to prevent file bloat
-    if len(data["tasks"][task_id]["attempts"]) > 10:
-        data["tasks"][task_id]["attempts"] = data["tasks"][task_id]["attempts"][-10:]
-
-    save_experiments(data)
+    _locked_read_modify_write(_modify)
 
 
 def get_past_attempts(task_id: str) -> list[dict]:
@@ -91,11 +165,13 @@ def get_failed_sql_for_task(task_id: str) -> list[str]:
 
 
 def increment_run_count() -> int:
-    """Increment and return the run counter."""
-    data = load_experiments()
-    data["runs"] = data.get("runs", 0) + 1
-    save_experiments(data)
-    return data["runs"]
+    """Increment and return the run counter (process safe)."""
+    result = [0]
+    def _modify(data):
+        data["runs"] = data.get("runs", 0) + 1
+        result[0] = data["runs"]
+    _locked_read_modify_write(_modify)
+    return result[0]
 
 
 def batch_retrospective(results: list[dict]) -> str:
