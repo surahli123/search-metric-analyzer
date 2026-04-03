@@ -164,6 +164,12 @@ def get_failed_sql_for_task(task_id: str) -> list[str]:
     return [a["sql"] for a in attempts if not a.get("match", False)]
 
 
+def get_run_count() -> int:
+    """Read the current run counter without incrementing."""
+    data = load_experiments()
+    return data.get("runs", 0)
+
+
 def increment_run_count() -> int:
     """Increment and return the run counter (process safe)."""
     result = [0]
@@ -203,5 +209,15 @@ def batch_retrospective(results: list[dict]) -> str:
         past = data.get("tasks", {}).get(tid, {})
         if past and past.get("best_match", False):
             insights.append(f"REGRESSION: {tid} — was correct before, now wrong")
+
+    # Discard autopsy (CC learning #3): categorize failures so we know
+    # which are addressable vs which are model ceiling.
+    autopsy_tasks = [r for r in results if r.get("autopsy")]
+    if autopsy_tasks:
+        insights.append("AUTOPSY:")
+        for r in autopsy_tasks:
+            tid = r.get("task_id", "")
+            cat = r.get("autopsy", "unknown")
+            insights.append(f"  {tid}: {cat}")
 
     return "\n".join(insights)

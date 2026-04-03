@@ -78,6 +78,7 @@ def run_task(
     task_dir: str,
     llm_callable,
     verbose: bool = False,
+    prior_attempt: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run a single KDD task through the 2-LLM-call pipeline.
 
@@ -89,6 +90,9 @@ def run_task(
         llm_callable: Function with signature (prompt: str, system: str, max_tokens: int) -> str.
         verbose: If True, include the full trace dict in the result.
             If False, trace is None (saves memory in batch runs).
+        prior_attempt: If provided, the answer from a previous failed attempt.
+            Injected into the HYPOTHESIZE prompt so the LLM tries a fundamentally
+            different SQL approach. Used by the batch runner for multi-round retry.
 
     Returns:
         Dict with keys:
@@ -151,9 +155,28 @@ def run_task(
         # We inject past failures so the LLM avoids repeating the same mistakes.
         failed_sql = get_failed_sql_for_task(task_id)
         if failed_sql:
-            neg_examples = "\n".join(f"  - {s[:120]}" for s in failed_sql[-3:])
+            # Cap at 1 most recent failure (was 3). v28 showed too many negative
+            # examples confuse the LLM — accuracy dropped 30→26 as registry grew.
+            neg_examples = "\n".join(f"  - {s[:120]}" for s in failed_sql[-1:])
             user_prompt += (
                 f"\n\nPREVIOUS FAILED ATTEMPTS (do NOT repeat these):\n{neg_examples}"
+            )
+
+        # Multi-round retry: if a prior attempt produced a wrong answer,
+        # tell the LLM to try a fundamentally different SQL strategy.
+        # WHY: ~10 tasks flip nondeterministically. Giving the LLM its
+        # previous (wrong) output and asking for a different approach
+        # increases the chance of hitting the correct SQL path.
+        if prior_attempt:
+            user_prompt += (
+                f"\n\nYOUR PREVIOUS ATTEMPT PRODUCED THIS (WRONG) ANSWER:\n"
+                f"  {prior_attempt[:200]}\n"
+                f"This answer did not match the expected result. "
+                f"Try a FUNDAMENTALLY DIFFERENT SQL approach:\n"
+                f"- Different JOINs or JOIN order\n"
+                f"- Different aggregation strategy (e.g., subquery vs GROUP BY)\n"
+                f"- Different filtering logic\n"
+                f"- Re-read the question carefully for missed conditions"
             )
 
         raw_hyp_response = llm_callable(user_prompt, system_prompt, 3000)
