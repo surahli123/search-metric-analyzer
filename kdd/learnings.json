@@ -41,6 +41,21 @@
       "correct": "Join ALL tables needed to satisfy ALL conditions. E.g., 'members from Illinois' needs member → zip_code JOIN to access state column",
       "wrong": ["Assuming a filter column exists in the main table when it's in a reference table", "Missing a JOIN and getting 0 results or wrong results"],
       "tip": "Before writing SQL, list every condition in the question and verify which table has each column. If a condition's column is in a different table, you MUST JOIN."
+    },
+    "airtable_style_foreign_keys": {
+      "correct": "Columns named 'link_to_X' are foreign keys to table X's primary key (usually X_id or member_id). JOIN on link_to_X = X.primary_key",
+      "wrong": ["Ignoring link_to_* columns and trying to filter without JOINing", "Treating opaque string IDs like 'rec4BLdZHS2Blfp4v' as displayable values instead of FK references"],
+      "tip": "When you see a column named 'link_to_budget', 'link_to_member', 'link_to_event' etc., it is a foreign key. JOIN to that table to access its columns."
+    },
+    "date_time_filtering": {
+      "correct": "For 'June 2013': Date LIKE '2013-06%' or strftime('%Y-%m', Date) = '2013-06'. For year+name: JOIN to reference table with year and name columns",
+      "wrong": ["Using wrong date format (MM/YYYY vs YYYY-MM-DD)", "Comparing time strings lexicographically ('1:26' < '9:05' is wrong numerically)"],
+      "tip": "Always check the actual date format in sample data before writing WHERE clauses. For time comparisons, CAST to numeric or use MIN/MAX with ORDER BY."
+    },
+    "multi_row_matching": {
+      "correct": "When the question mentions multiple items (water + veggie tray + supplies), match across MULTIPLE rows per group using separate LIKE conditions ORed together, then GROUP BY + HAVING COUNT(DISTINCT matched_item) >= N",
+      "wrong": ["Trying to match all items in a single row with AND (fails when items are in separate rows)"],
+      "tip": "If items can be in separate rows, use OR to match any, then GROUP BY the entity and HAVING to ensure all items were found."
     }
   }
 }

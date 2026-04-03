@@ -911,7 +911,25 @@ def _detect_join_hints(table_columns: dict[str, list[str]]) -> list[str]:
             table_list = " & ".join(tables[:3])
             hints.append(f"JOIN {table_list} ON {col_lower}")
 
-    return hints[:5]  # Cap at 5 hints to avoid prompt bloat
+    # Detect Airtable-style foreign keys: columns named "link_to_X" are
+    # FKs to table X. These don't share a name with the target table's PK,
+    # so the shared-column detection above misses them.
+    # WHY: 3 consistently_wrong tasks (19, 27, 163) fail because the LLM
+    # ignores link_to_* columns or treats the opaque string IDs as values.
+    table_names_lower = {t.lower(): t for t in table_columns.keys()}
+    for table_name, cols in table_columns.items():
+        for col in cols:
+            if col.lower().startswith("link_to_"):
+                target = col.lower().replace("link_to_", "")
+                # Check if a table with that name exists
+                if target in table_names_lower:
+                    real_target = table_names_lower[target]
+                    hints.append(
+                        f"FK: {table_name}.{col} → {real_target} "
+                        f"(Airtable-style foreign key, JOIN to get {real_target} columns)"
+                    )
+
+    return hints[:8]  # Cap at 8 hints (was 5, expanded for FK hints)
 
 
 def _extract_best_sql(hyp_result) -> Optional[str]:
