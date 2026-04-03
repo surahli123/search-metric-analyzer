@@ -31,6 +31,16 @@
       "correct": "JOIN the reference table to get names instead of IDs",
       "wrong": ["Returning raw IDs like 'rec4BLdZHS2Blfp4v' instead of names"],
       "tip": "If the question asks for names/descriptions, JOIN to get them."
+    },
+    "filter_with_domain_knowledge": {
+      "correct": "Read knowledge.md to map question terms to exact column values. E.g., 'severe thrombosis' = Thrombosis=2, 'abnormal creatinine' needs the specific threshold from knowledge.md",
+      "wrong": ["Guessing filter values without reading knowledge.md", "Using wrong column for a condition (e.g., filtering on Patient table when the value is in Examination table)"],
+      "tip": "When the question uses domain terms (severe, abnormal, normal), ALWAYS check knowledge.md for the exact mapping to column values and which table contains the column."
+    },
+    "multi_table_filter_chain": {
+      "correct": "Join ALL tables needed to satisfy ALL conditions. E.g., 'members from Illinois' needs member → zip_code JOIN to access state column",
+      "wrong": ["Assuming a filter column exists in the main table when it's in a reference table", "Missing a JOIN and getting 0 results or wrong results"],
+      "tip": "Before writing SQL, list every condition in the question and verify which table has each column. If a condition's column is in a different table, you MUST JOIN."
     }
   }
 }
